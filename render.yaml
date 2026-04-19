@@ -6,7 +6,7 @@ services:
     region: frankfurt
     plan: starter
     branch: main
-    buildCommand: npm install --legacy-peer-deps && npx prisma generate && npx prisma db push && npm run build
+    buildCommand: npm install --include=dev --legacy-peer-deps && npx prisma generate && npx prisma db push && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:
