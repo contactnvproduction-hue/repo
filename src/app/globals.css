@@ -1,0 +1,120 @@
+@import "tailwindcss";
+
+@theme {
+  /* Couleurs principales - thème gris foncé New Vision */
+  --color-nv-black: #0e0e0e;
+  --color-nv-dark: #161616;
+  --color-nv-card: #1f1f1f;
+  --color-nv-border: #2a2a2a;
+  --color-nv-border-light: #363636;
+  --color-nv-text: #f0ece6;
+  --color-nv-text-muted: #a0a0a0;
+  --color-nv-text-faint: #585858;
+
+  /* Or — couleur primaire NV (point du logo) */
+  --color-primary: #e8b84b;
+  --color-primary-hover: #d4a33a;
+  --color-primary-light: #f0cc72;
+  --color-primary-glow: rgba(232, 184, 75, 0.15);
+
+  /* Or accent (alias) */
+  --color-gold: #e8b84b;
+  --color-gold-muted: rgba(232, 184, 75, 0.12);
+
+  /* Couleurs état */
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-info: #3b82f6;
+
+  /* Sidebar */
+  --sidebar-width: 260px;
+
+  /* Typographie */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* Base styles */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--color-nv-black);
+  color: var(--color-nv-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar custom */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-nv-dark);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-nv-border-light);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-nv-text-faint);
+}
+
+/* Sélection */
+::selection {
+  background: rgba(232, 184, 75, 0.25);
+  color: white;
+}
+
+/* Animation utilitaires */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(232, 184, 75, 0.3); }
+  50% { box-shadow: 0 0 0 8px rgba(232, 184, 75, 0); }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}
+
+.animate-slide-in {
+  animation: slide-in-right 0.3s ease-out;
+}
+
+/* Gradient texte */
+.text-gradient {
+  background: linear-gradient(135deg, #e8b84b, #f0cc72, #f0ece6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Cards avec glassmorphism subtle */
+.card-glass {
+  background: rgba(31, 31, 31, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(42, 42, 42, 0.8);
+}
+
+/* Focus ring personnalisé */
+*:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}

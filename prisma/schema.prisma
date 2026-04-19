@@ -1,0 +1,799 @@
+// Schema Prisma - New Vision Production Dashboard
+// Base de données PostgreSQL pour déploiement sur Render
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── UTILISATEURS & AUTH ──────────────────────────────────────────────────────
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  MONTEUR
+  VIDÉASTE
+  PHOTOGRAPHE
+  COMMERCIAL
+}
+
+model User {
+  id           String    @id @default(cuid())
+  name         String
+  email        String    @unique
+  password     String
+  role         UserRole  @default(COMMERCIAL)
+  avatar       String?
+  specialty    String?
+  disponible   Boolean   @default(true)
+  phone        String?
+  hasLogin     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // Relations
+  assignedProjects  ProjectMember[]
+  assignedTasks     Task[]             @relation("AssignedTasks")
+  createdTasks      Task[]             @relation("CreatedTasks")
+  objectives        Objective[]
+  notifications     Notification[]
+  uploadedDocuments Document[]
+  authoredNotes     ClientNote[]       @relation("AuthoredNotes")
+  projectComments   ProjectComment[]   @relation("ProjectCommentAuthor")
+  availability      TeamAvailability[]
+
+  @@map("users")
+}
+
+// ─── CLIENTS (CRM) ───────────────────────────────────────────────────────────
+
+enum ClientType {
+  PARTICULIER
+  ENTREPRISE
+  AGENCE
+}
+
+enum ClientStatus {
+  PROSPECT
+  ACTIF
+  EN_PAUSE
+  ARCHIVÉ
+}
+
+enum ClientSource {
+  INSTAGRAM
+  YOUTUBE
+  BOUCHE_A_OREILLE
+  GOOGLE
+  SITE_WEB
+  RECOMMANDATION
+  LINKEDIN
+  AUTRE
+}
+
+model Client {
+  id          String       @id @default(cuid())
+  name        String
+  company     String?
+  siret       String?
+  address     String?
+  email       String?
+  phone       String?
+  avatar      String?
+  type        ClientType   @default(PARTICULIER)
+  status      ClientStatus @default(PROSPECT)
+  source      ClientSource @default(AUTRE)
+  relanceDate DateTime?
+  notes               String?
+  onboardingChecklist Json?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  // Relations
+  projects        Project[]
+  quotes          Quote[]
+  invoices        Invoice[]
+  documents       Document[]
+  interactions    ClientInteraction[]
+  prestas         Presta[]
+  clientNotes     ClientNote[]
+  socialKpis      SocialKPI[]
+
+  @@map("clients")
+}
+
+model ClientInteraction {
+  id        String   @id @default(cuid())
+  clientId  String
+  type      String
+  content   String
+  date      DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("client_interactions")
+}
+
+// ─── PROJETS ─────────────────────────────────────────────────────────────────
+
+// ─── CATÉGORIES PROJETS (dynamiques, modifiables) ────────────────────────────
+
+model ProjectCategory {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  color     String    @default("#7c3aed")
+  icon      String?
+  order     Int       @default(0)
+  createdAt DateTime  @default(now())
+
+  projects  Project[]
+
+  @@map("project_categories")
+}
+
+enum ProjectType {
+  VIDEO_CORPORATE
+  CLIP
+  REPORTAGE
+  SHOOTING_PHOTO
+  MARIAGE
+  ÉVÉNEMENT
+  AUTRE
+}
+
+enum ProjectStatus {
+  BRIEF_REÇU
+  EN_PRODUCTION
+  EN_POST_PRODUCTION
+  EN_VALIDATION
+  LIVRÉ
+  ARCHIVÉ
+}
+
+model Project {
+  id            String        @id @default(cuid())
+  clientId      String
+  categoryId    String?
+  title         String
+  type          ProjectType   @default(VIDEO_CORPORATE)
+  status        ProjectStatus @default(BRIEF_REÇU)
+  description   String?
+  startDate     DateTime?
+  deadline      DateTime?
+  budget        Float?
+  revisionsMax    Int           @default(2)
+  revisionsUsed   Int           @default(0)
+  deliveryLink    String?
+  productionStep  Int           @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relations
+  client          Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  category        ProjectCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  members         ProjectMember[]
+  tasks           Task[]
+  quotes          Quote[]
+  invoices        Invoice[]
+  documents       Document[]
+  onboardingSteps OnboardingStep[]
+  comments        ProjectComment[]
+  deliverables    Deliverable[]
+
+  @@map("projects")
+}
+
+model ProjectMember {
+  id        String  @id @default(cuid())
+  projectId String
+  userId    String
+  role      String
+
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@map("project_members")
+}
+
+model ProjectComment {
+  id         String   @id @default(cuid())
+  projectId  String
+  authorId   String?
+  content    String
+  authorName String
+  mentions   String[]
+  createdAt  DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  author  User?   @relation("ProjectCommentAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@map("project_comments")
+}
+
+// ─── ONBOARDING ──────────────────────────────────────────────────────────────
+
+model OnboardingStep {
+  id          String    @id @default(cuid())
+  projectId   String
+  label       String
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+  order       Int       @default(0)
+
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("onboarding_steps")
+}
+
+// ─── TÂCHES ───────────────────────────────────────────────────────────────────
+
+enum TaskPriority {
+  URGENTE
+  HAUTE
+  NORMALE
+  BASSE
+}
+
+enum TaskStatus {
+  A_FAIRE
+  EN_COURS
+  EN_RÉVISION
+  TERMINÉE
+}
+
+model TaskCategory {
+  id      String   @id @default(cuid())
+  name    String
+  color   String   @default("#6366f1")
+  options String[]
+  order   Int      @default(0)
+  tasks   Task[]
+
+  @@map("task_categories")
+}
+
+model Task {
+  id             String       @id @default(cuid())
+  projectId      String?
+  assignedToId   String?
+  createdById    String?
+  title          String
+  description    String?
+  priority       TaskPriority @default(NORMALE)
+  status         TaskStatus   @default(A_FAIRE)
+  categoryId     String?
+  categoryValue  String?
+  dueDate        DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  project    Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  assignedTo User?         @relation("AssignedTasks", fields: [assignedToId], references: [id], onDelete: SetNull)
+  createdBy  User?         @relation("CreatedTasks", fields: [createdById], references: [id], onDelete: SetNull)
+  category   TaskCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@map("tasks")
+}
+
+// ─── OBJECTIFS ────────────────────────────────────────────────────────────────
+
+enum ObjectivePeriod {
+  MENSUEL
+  TRIMESTRIEL
+  ANNUEL
+}
+
+enum ObjectiveStatus {
+  EN_COURS
+  ATTEINT
+  ÉCHOUÉ
+  EN_PAUSE
+}
+
+model Objective {
+  id           String            @id @default(cuid())
+  userId       String?
+  title        String
+  description  String?
+  category     String            @default("CA")
+  period       ObjectivePeriod   @default(MENSUEL)
+  targetValue  Float
+  currentValue Float             @default(0)
+  unit         String            @default("€")
+  startDate    DateTime
+  endDate      DateTime
+  deadline     DateTime?
+  status       ObjectiveStatus   @default(EN_COURS)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  user      User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+  snapshots ObjectiveSnapshot[]
+
+  @@map("objectives")
+}
+
+model ObjectiveSnapshot {
+  id          String    @id @default(cuid())
+  objectiveId String
+  value       Float
+  note        String?
+  date        DateTime
+  createdAt   DateTime  @default(now())
+
+  objective Objective @relation(fields: [objectiveId], references: [id], onDelete: Cascade)
+
+  @@map("objective_snapshots")
+}
+
+// ─── DEVIS ────────────────────────────────────────────────────────────────────
+
+enum QuoteStatus {
+  BROUILLON
+  ENVOYÉ
+  ACCEPTÉ
+  REFUSÉ
+  EXPIRÉ
+}
+
+model Quote {
+  id         String      @id @default(cuid())
+  clientId   String
+  projectId  String?
+  number     String      @unique
+  status     QuoteStatus @default(BROUILLON)
+  validated  Boolean     @default(false)
+  issueDate  DateTime    @default(now())
+  expiryDate DateTime?
+  totalHT    Float       @default(0)
+  totalTVA   Float       @default(0)
+  totalTTC   Float       @default(0)
+  discount   Float       @default(0)
+  notes      String?
+  cgv        String?
+  pdfUrl     String?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  client   Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  project  Project?    @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  lines    QuoteLine[]
+  invoices Invoice[]
+
+  @@map("quotes")
+}
+
+model QuoteLine {
+  id          String @id @default(cuid())
+  quoteId     String
+  description String
+  quantity    Float  @default(1)
+  unitPrice   Float  @default(0)
+  vatRate     Float  @default(20)
+  total       Float  @default(0)
+  order       Int    @default(0)
+
+  quote Quote @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@map("quote_lines")
+}
+
+// ─── FACTURES ─────────────────────────────────────────────────────────────────
+
+enum InvoiceStatus {
+  EN_ATTENTE
+  PARTIELLEMENT_PAYÉE
+  PAYÉE
+  EN_RETARD
+  ANNULÉE
+}
+
+enum InvoiceType {
+  ACOMPTE
+  SOLDE
+  TOTALE
+}
+
+model Invoice {
+  id         String        @id @default(cuid())
+  clientId   String
+  projectId  String?
+  quoteId    String?
+  number     String        @unique
+  type       InvoiceType   @default(TOTALE)
+  status     InvoiceStatus @default(EN_ATTENTE)
+  paid       Boolean       @default(false)
+  issueDate  DateTime      @default(now())
+  dueDate    DateTime?
+  totalHT    Float         @default(0)
+  totalTVA   Float         @default(0)
+  totalTTC   Float         @default(0)
+  amountPaid Float         @default(0)
+  notes      String?
+  cgv        String?
+  pdfUrl     String?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  client   Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  project  Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  quote    Quote?        @relation(fields: [quoteId], references: [id], onDelete: SetNull)
+  lines    InvoiceLine[]
+  payments Payment[]
+
+  @@map("invoices")
+}
+
+model InvoiceLine {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  description String
+  quantity    Float   @default(1)
+  unitPrice   Float   @default(0)
+  vatRate     Float   @default(20)
+  total       Float   @default(0)
+  order       Int     @default(0)
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@map("invoice_lines")
+}
+
+// ─── PAIEMENTS ────────────────────────────────────────────────────────────────
+
+enum PaymentMethod {
+  VIREMENT
+  CB
+  ESPÈCES
+  CHÈQUE
+  AUTRE
+}
+
+model Payment {
+  id        String        @id @default(cuid())
+  invoiceId String
+  amount    Float
+  date      DateTime      @default(now())
+  method    PaymentMethod @default(VIREMENT)
+  reference String?
+  confirmed Boolean       @default(false)
+  notes     String?
+  createdAt DateTime      @default(now())
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+// ─── DÉPENSES ─────────────────────────────────────────────────────────────────
+
+enum ExpenseCategory {
+  LOYER
+  LOGICIELS
+  MATÉRIEL
+  SALAIRES
+  FREELANCES
+  DÉPLACEMENTS
+  MARKETING
+  FORMATION
+  ASSURANCE
+  AUTRE
+}
+
+model Expense {
+  id          String          @id @default(cuid())
+  category    ExpenseCategory @default(AUTRE)
+  amount      Float
+  date        DateTime        @default(now())
+  description String
+  receipt     String?
+  isRecurring Boolean         @default(false)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@map("expenses")
+}
+
+// ─── DOCUMENTS ────────────────────────────────────────────────────────────────
+
+enum DocumentType {
+  CONTRAT
+  BON_DE_COMMANDE
+  BRIEF
+  CHARTE_GRAPHIQUE
+  LIVRABLE
+  FACTURE
+  DEVIS
+  AUTRE
+}
+
+model Document {
+  id           String       @id @default(cuid())
+  clientId     String?
+  projectId    String?
+  uploadedById String?
+  name         String
+  type         DocumentType @default(AUTRE)
+  url          String
+  size         Int?
+  mimeType     String?
+  shareToken   String?      @unique
+  shareExpiry  DateTime?
+  version      Int          @default(1)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  client     Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  project    Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  uploadedBy User?    @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@map("documents")
+}
+
+// ─── NOTIFICATIONS ────────────────────────────────────────────────────────────
+
+enum NotificationType {
+  FACTURE_EN_RETARD
+  DEADLINE_APPROCHE
+  DEVIS_ACCEPTÉ
+  TÂCHE_ASSIGNÉE
+  ONBOARDING_INCOMPLET
+  PAIEMENT_REÇU
+  PROJET_MIS_A_JOUR
+  GÉNÉRAL
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType @default(GÉNÉRAL)
+  title     String
+  message   String
+  link      String?
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+// ─── PARAMÈTRES AGENCE ────────────────────────────────────────────────────────
+
+model AgencySetting {
+  id             String   @id @default(cuid())
+  name           String   @default("New Vision Production")
+  email          String   @default("contact@newvision.fr")
+  phone          String?
+  address        String?
+  siret          String?
+  tvaNumber      String?
+  logo           String?
+  defaultVatRate Float    @default(20)
+  cgv            String?
+  invoicePrefix  String   @default("FAC")
+  quotePrefix    String   @default("DEV")
+  invoiceCounter Int      @default(1)
+  quoteCounter   Int      @default(1)
+  bankDetails    String?
+  youtubeApiKey  String?
+  updatedAt      DateTime @updatedAt
+
+  @@map("agency_settings")
+}
+
+// ─── PRESTATIONS ─────────────────────────────────────────────────────────────
+
+enum PrestaStatus {
+  EN_ATTENTE
+  EN_COURS
+  TERMINÉE
+  ANNULÉE
+}
+
+model Presta {
+  id               String       @id @default(cuid())
+  clientId         String
+  title            String
+  description      String?
+  contractedAmount Float        @default(0)
+  collectedAmount  Float        @default(0)
+  status           PrestaStatus @default(EN_COURS)
+  signedQuoteFile  String?
+  invoiceFile      String?
+  startDate        DateTime?
+  endDate          DateTime?
+  notes            String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("prestas")
+}
+
+// ─── NOTES INTERNES CLIENT ────────────────────────────────────────────────────
+
+model ClientNote {
+  id        String   @id @default(cuid())
+  clientId  String
+  authorId  String?
+  content   String
+  mentions  String[]
+  createdAt DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  author User?  @relation("AuthoredNotes", fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@map("client_notes")
+}
+
+// ─── TRÉSORERIE / PRÉVISIONNEL ────────────────────────────────────────────────
+
+enum CashEntryType {
+  REVENU
+  CHARGE
+  SALAIRE
+  TVA_COLLECTEE
+  TVA_DEDUCTIBLE
+  IMPOT
+  AUTRE
+}
+
+model CashEntry {
+  id          String        @id @default(cuid())
+  type        CashEntryType @default(REVENU)
+  category    String?
+  amount      Float
+  description String?
+  date        DateTime
+  recurring   Boolean       @default(false)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@map("cash_entries")
+}
+
+// ─── DISPONIBILITÉ ÉQUIPE ─────────────────────────────────────────────────────
+
+model TeamAvailability {
+  id        String   @id @default(cuid())
+  userId    String
+  weekStart DateTime
+  hours     Float    @default(0)
+  notes     String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, weekStart])
+  @@map("team_availability")
+}
+
+// ─── KPI SOCIAUX ──────────────────────────────────────────────────────────────
+
+enum SocialPlatform {
+  INSTAGRAM
+  YOUTUBE
+  TIKTOK
+  LINKEDIN
+  FACEBOOK
+}
+
+// ─── LIVRABLES PROJETS ───────────────────────────────────────────────────────
+
+model DeliverableCategory {
+  id          String        @id @default(cuid())
+  name        String
+  color       String        @default("#6366f1")
+  order       Int           @default(0)
+  createdAt   DateTime      @default(now())
+
+  deliverables Deliverable[]
+
+  @@map("deliverable_categories")
+}
+
+model Deliverable {
+  id           String    @id @default(cuid())
+  projectId    String
+  categoryId   String?
+  title        String
+  description  String?
+  quantity     Int       @default(1)
+  month        DateTime?
+  status       String    @default("EN_COURS")
+  taskId       String?
+  assignedTo   String[]
+  completedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  project  Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  category DeliverableCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@map("deliverables")
+}
+
+// ─── ACQUISITION / LEADS ─────────────────────────────────────────────────────
+
+model LeadStatus {
+  id        String   @id @default(cuid())
+  name      String
+  color     String   @default("#6366f1")
+  order     Int      @default(0)
+  isClosed  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  leads     Lead[]
+
+  @@map("lead_statuses")
+}
+
+model Lead {
+  id                String    @id @default(cuid())
+  statusId          String?
+  name              String
+  company           String?
+  email             String?
+  phone             String?
+  source            String?
+  budget            Float?
+  notes             String?
+  followUpDate      DateTime?
+  convertedClientId String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  status LeadStatus? @relation(fields: [statusId], references: [id], onDelete: SetNull)
+  calls  LeadCall[]
+
+  @@map("leads")
+}
+
+model LeadCall {
+  id        String   @id @default(cuid())
+  leadId    String
+  date      DateTime
+  duration  Int?
+  showedUp  Boolean  @default(false)
+  qualified Boolean  @default(false)
+  notes     String?
+  createdAt DateTime @default(now())
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@map("lead_calls")
+}
+
+// ─── KPI SOCIAUX ──────────────────────────────────────────────────────────────
+
+model SocialKPI {
+  id             String         @id @default(cuid())
+  clientId       String
+  platform       SocialPlatform
+  handle         String?
+  channelUrl     String?
+  month          DateTime
+  followers      Int            @default(0)
+  views          Int?
+  likes          Int?
+  comments       Int?
+  shares         Int?
+  engagement     Float?
+  screenshotUrl  String?
+  screenshotDate DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, platform, month])
+  @@map("social_kpis")
+}
+
