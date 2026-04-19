@@ -29,6 +29,6 @@ services:
 databases:
   - name: new-vision-db
     region: frankfurt
-    plan: starter
+    plan: basic-256mb
     databaseName: newvision_db
     user: newvision_user
