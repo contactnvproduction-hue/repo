@@ -18,7 +18,6 @@ export default function LoginPage() {
     setLoading(true)
     try {
       const result = await signIn('credentials', { email, password, redirect: false })
-      toast(JSON.stringify(result), { duration: 8000 })
       if (result?.error) {
         toast.error('Email ou mot de passe incorrect')
       } else {

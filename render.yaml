@@ -18,10 +18,14 @@ services:
           property: connectionString
       - key: NEXTAUTH_SECRET
         generateValue: true
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: AUTH_TRUST_HOST
+        value: "true"
       - key: NEXTAUTH_URL
-        sync: false  # À renseigner manuellement avec l'URL Render de l'app
+        value: https://new-vision-dashboard-9468.onrender.com
       - key: NEXT_PUBLIC_APP_URL
-        sync: false  # À renseigner manuellement avec l'URL Render de l'app
+        value: https://new-vision-dashboard-9468.onrender.com
       - key: NODE_ENV
         value: production
 
