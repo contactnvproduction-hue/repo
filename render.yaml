@@ -4,7 +4,7 @@ services:
     name: new-vision-dashboard
     runtime: node
     region: frankfurt
-    plan: free
+    plan: starter
     branch: main
     buildCommand: npm install --legacy-peer-deps && npx prisma generate && npx prisma db push && npm run build
     startCommand: npm start
