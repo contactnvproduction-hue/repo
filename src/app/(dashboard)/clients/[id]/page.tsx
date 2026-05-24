@@ -8,7 +8,7 @@ import Link from 'next/link'
 import {
   Building2, Mail, Phone, MapPin, FileText, Receipt,
   FolderKanban, Plus,
-  Hash, TrendingUp, StickyNote, Bell,
+  Hash, TrendingUp, StickyNote, Bell, RepeatIcon,
 } from 'lucide-react'
 import { ClientActions } from '@/components/clients/ClientActions'
 import { ClientNotes } from '@/components/clients/ClientNotes'
@@ -16,6 +16,7 @@ import { ClientOnboarding } from '@/components/clients/ClientOnboarding'
 import { ClientSocialKPIs } from '@/components/clients/ClientSocialKPIs'
 import { DeleteButton } from '@/components/ui/DeleteButton'
 import { ClientInteractions } from '@/components/clients/ClientInteractions'
+import { ClientRetainerManager } from '@/components/clients/ClientRetainerManager'
 
 const statusBadge: Record<string, 'success' | 'info' | 'warning' | 'muted'> = {
   ACTIF: 'success', PROSPECT: 'info', EN_PAUSE: 'warning', ARCHIVÉ: 'muted',
@@ -98,6 +99,9 @@ export default async function ClientDetailPage({ params }: PageProps) {
           orderBy: { createdAt: 'desc' },
           take: 20,
         },
+        retainers: {
+          orderBy: { startDate: 'asc' },
+        },
       },
     }),
     prisma.user.findMany({ select: { id: true, name: true }, orderBy: { name: 'asc' } }),
@@ -115,6 +119,16 @@ export default async function ClientDetailPage({ params }: PageProps) {
   })
 
   const caTotal = totalCA._sum.amount || 0
+
+  // MRR actuel et LTV contractée
+  const now = new Date()
+  const activeMRR = client.retainers.reduce((sum, r) => {
+    const start = new Date(r.startDate)
+    const end = new Date(r.startDate)
+    end.setMonth(end.getMonth() + r.durationMonths)
+    return now >= start && now < end ? sum + r.monthlyAmount : sum
+  }, 0)
+  const ltvContractée = client.retainers.reduce((sum, r) => sum + r.monthlyAmount * r.durationMonths, 0)
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -168,16 +182,16 @@ export default async function ClientDetailPage({ params }: PageProps) {
           <p className="text-xl font-bold text-white">{formatCurrency(caTotal)}</p>
         </div>
         <div className="bg-nv-card border border-nv-border rounded-xl p-4">
+          <div className="flex items-center gap-2 text-nv-text-muted text-xs mb-2"><RepeatIcon size={14} className="text-primary" />MRR actuel</div>
+          <p className="text-xl font-bold text-primary">{activeMRR > 0 ? formatCurrency(activeMRR) : '—'}<span className="text-xs text-nv-text-muted font-normal">{activeMRR > 0 ? '/m' : ''}</span></p>
+        </div>
+        <div className="bg-nv-card border border-nv-border rounded-xl p-4">
+          <div className="flex items-center gap-2 text-nv-text-muted text-xs mb-2"><TrendingUp size={14} className="text-emerald-400" />LTV contractée</div>
+          <p className="text-xl font-bold text-emerald-400">{ltvContractée > 0 ? formatCurrency(ltvContractée) : '—'}</p>
+        </div>
+        <div className="bg-nv-card border border-nv-border rounded-xl p-4">
           <div className="flex items-center gap-2 text-nv-text-muted text-xs mb-2"><FolderKanban size={14} />Projets</div>
           <p className="text-xl font-bold text-white">{client.projects.length}</p>
-        </div>
-        <div className="bg-nv-card border border-nv-border rounded-xl p-4">
-          <div className="flex items-center gap-2 text-nv-text-muted text-xs mb-2"><FileText size={14} />Devis</div>
-          <p className="text-xl font-bold text-white">{client.quotes.length}</p>
-        </div>
-        <div className="bg-nv-card border border-nv-border rounded-xl p-4">
-          <div className="flex items-center gap-2 text-nv-text-muted text-xs mb-2"><Receipt size={14} />Factures</div>
-          <p className="text-xl font-bold text-white">{client.invoices.length}</p>
         </div>
       </div>
 
@@ -385,6 +399,26 @@ export default async function ClientDetailPage({ params }: PageProps) {
                   ...k,
                   month: k.month.toISOString(),
                   screenshotDate: k.screenshotDate?.toISOString() ?? null,
+                }))}
+              />
+            </CardContent>
+          </Card>
+
+          {/* Retainers MRR */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <RepeatIcon size={16} className="text-primary" />
+                Retainers &amp; MRR
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ClientRetainerManager
+                clientId={client.id}
+                initialRetainers={client.retainers.map(r => ({
+                  ...r,
+                  startDate: r.startDate.toISOString(),
+                  createdAt: r.createdAt.toISOString(),
                 }))}
               />
             </CardContent>

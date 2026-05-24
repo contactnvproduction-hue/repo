@@ -4,7 +4,7 @@ import { formatCurrency, formatDate } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatCard } from '@/components/ui/stat-card'
 import { Badge } from '@/components/ui/badge'
-import { BarChart3, TrendingUp, TrendingDown, Wallet, AlertCircle } from 'lucide-react'
+import { BarChart3, TrendingUp, TrendingDown, Wallet, AlertCircle, RepeatIcon } from 'lucide-react'
 import { FinanceCharts } from '@/components/finance/FinanceCharts'
 import { ExpenseManager } from '@/components/finance/ExpenseManager'
 
@@ -32,6 +32,7 @@ export default async function FinancePage() {
     catDépenses,
     recentPayments,
     caContracté,
+    allRetainers,
   ] = await Promise.all([
     prisma.payment.aggregate({
       where: { confirmed: true, date: { gte: startOfYear } },
@@ -96,6 +97,10 @@ export default async function FinancePage() {
       },
       _sum: { totalTTC: true },
     }),
+    // Retainers pour prévisionnel MRR
+    prisma.clientRetainer.findMany({
+      include: { client: { select: { name: true } } },
+    }),
   ])
 
   const caYearVal = caYear._sum.amount || 0
@@ -110,6 +115,25 @@ export default async function FinancePage() {
   const trendVsLastYear = caLastYearVal > 0
     ? Math.round(((caYearVal - caLastYearVal) / caLastYearVal) * 100)
     : 0
+
+  // Prévisionnel MRR sur 12 mois
+  const mrrForecast: { month: string; mrr: number; label: string }[] = []
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1)
+    const monthMRR = allRetainers.reduce((sum, r) => {
+      const start = new Date(r.startDate)
+      const end = new Date(r.startDate)
+      end.setMonth(end.getMonth() + r.durationMonths)
+      return d >= start && d < end ? sum + r.monthlyAmount : sum
+    }, 0)
+    mrrForecast.push({
+      month: d.toISOString().slice(0, 7),
+      mrr: monthMRR,
+      label: d.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' }),
+    })
+  }
+  const currentMRR = mrrForecast[0]?.mrr ?? 0
+  const mrrAnnuel = mrrForecast.reduce((s, m) => s + m.mrr, 0)
 
   const catLabel: Record<string, string> = {
     LOYER: 'Loyer', LOGICIELS: 'Logiciels', MATÉRIEL: 'Matériel',
@@ -264,6 +288,70 @@ export default async function FinancePage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Prévisionnel MRR — toujours visible */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <RepeatIcon size={16} className="text-primary" />
+            MRR &amp; Prévisionnel — 12 prochains mois
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-6">
+            <div>
+              <p className="text-xs text-nv-text-muted mb-1">MRR actuel</p>
+              <p className="text-2xl font-bold text-primary">
+                {formatCurrency(currentMRR)}
+                <span className="text-sm text-nv-text-muted font-normal">/mois</span>
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-nv-text-muted mb-1">ARR (revenu récurrent annuel)</p>
+              <p className="text-2xl font-bold text-white">{formatCurrency(mrrAnnuel)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-nv-text-muted mb-1">Retainers actifs</p>
+              <p className="text-2xl font-bold text-white">
+                {allRetainers.filter(r => {
+                  const end = new Date(r.startDate)
+                  end.setMonth(end.getMonth() + r.durationMonths)
+                  return end > now
+                }).length}
+              </p>
+            </div>
+          </div>
+
+          {allRetainers.length === 0 ? (
+            <div className="text-center py-8 border border-dashed border-nv-border rounded-xl">
+              <RepeatIcon size={32} className="mx-auto mb-3 text-nv-text-muted opacity-30" />
+              <p className="text-sm text-nv-text-muted">Aucun retainer configuré.</p>
+              <p className="text-xs text-nv-text-muted mt-1">Ajoutez des retainers dans chaque fiche client pour voir le prévisionnel ici.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {mrrForecast.map((m, i) => {
+                const maxMRR = Math.max(...mrrForecast.map(x => x.mrr), 1)
+                const pct = Math.round((m.mrr / maxMRR) * 100)
+                return (
+                  <div key={m.month} className="flex items-center gap-3">
+                    <span className={`text-xs w-14 shrink-0 ${i === 0 ? 'text-primary font-medium' : 'text-nv-text-muted'}`}>{m.label}</span>
+                    <div className="flex-1 h-6 bg-nv-border rounded-lg overflow-hidden">
+                      <div
+                        className={`h-full rounded-lg transition-all ${i === 0 ? 'bg-primary' : 'bg-primary/40'}`}
+                        style={{ width: `${Math.max(pct, m.mrr > 0 ? 2 : 0)}%` }}
+                      />
+                    </div>
+                    <span className={`text-sm font-medium w-24 text-right shrink-0 ${i === 0 ? 'text-primary' : m.mrr === 0 ? 'text-nv-text-muted' : 'text-white'}`}>
+                      {m.mrr > 0 ? formatCurrency(m.mrr) : '—'}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Gestion des dépenses */}
       <ExpenseManager />

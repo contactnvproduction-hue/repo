@@ -101,6 +101,7 @@ model Client {
   prestas         Presta[]
   clientNotes     ClientNote[]
   socialKpis      SocialKPI[]
+  retainers       ClientRetainer[]
 
   @@map("clients")
 }
@@ -769,6 +770,68 @@ model LeadCall {
   lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
   @@map("lead_calls")
+}
+
+// ─── RETAINERS MRR ───────────────────────────────────────────────────────────
+
+model ClientRetainer {
+  id             String   @id @default(cuid())
+  clientId       String
+  description    String
+  monthlyAmount  Float
+  startDate      DateTime
+  durationMonths Int
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("client_retainers")
+}
+
+// ─── ESPACE CEO ───────────────────────────────────────────────────────────────
+
+model CeoMeeting {
+  id        String          @id @default(cuid())
+  title     String
+  date      DateTime
+  notes     String?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  topics      MeetingTopic[]
+  actionSteps CeoActionStep[]
+
+  @@map("ceo_meetings")
+}
+
+model MeetingTopic {
+  id        String     @id @default(cuid())
+  meetingId String
+  content   String
+  done      Boolean    @default(false)
+  order     Int        @default(0)
+  createdAt DateTime   @default(now())
+
+  meeting CeoMeeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@map("meeting_topics")
+}
+
+model CeoActionStep {
+  id        String      @id @default(cuid())
+  meetingId String?
+  taskId    String?
+  content   String
+  done      Boolean     @default(false)
+  dueDate   DateTime?
+  assignee  String?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  meeting CeoMeeting? @relation(fields: [meetingId], references: [id], onDelete: SetNull)
+
+  @@map("ceo_action_steps")
 }
 
 // ─── KPI SOCIAUX ──────────────────────────────────────────────────────────────

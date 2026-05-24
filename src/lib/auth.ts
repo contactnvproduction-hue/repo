@@ -4,7 +4,12 @@ import bcrypt from 'bcryptjs'
 import { prisma } from './db'
 import { UserRole } from '@prisma/client'
 
-export const { auth, handlers, signIn, signOut } = NextAuth({
+const DEV_SESSION = process.env.DEV_MOCK_DB === 'true' ? {
+  user: { id: 'dev', name: 'Noah Rapharin', email: 'admin@newvision.fr', role: 'ADMIN' as UserRole, avatar: null },
+  expires: '2099-01-01',
+} : null
+
+const { auth: _auth, handlers, signIn, signOut } = NextAuth({
   session: { strategy: 'jwt' },
   pages: {
     signIn: '/login',
@@ -61,3 +66,6 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
     },
   },
 })
+
+export const auth = DEV_SESSION ? async () => DEV_SESSION : _auth
+export { handlers, signIn, signOut }

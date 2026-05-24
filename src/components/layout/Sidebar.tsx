@@ -7,11 +7,12 @@ import { cn } from '@/lib/utils'
 import {
   LayoutDashboard, Users, FolderKanban, Receipt, BarChart3,
   CheckSquare, Target, Calendar, Users2, Settings,
-  LogOut, X, ChevronRight, Database, Crosshair,
+  LogOut, X, ChevronRight, Database, Crosshair, Briefcase,
 } from 'lucide-react'
 
 const navItems = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { href: '/ceo', icon: Briefcase, label: 'Espace CEO' },
   { href: '/acquisition', icon: Crosshair, label: 'Acquisition' },
   { href: '/clients', icon: Users, label: 'Clients' },
   { href: '/projects', icon: FolderKanban, label: 'Projets' },

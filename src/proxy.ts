@@ -6,6 +6,15 @@ import { getToken } from 'next-auth/jwt'
 
 export async function proxy(req: NextRequest) {
   const { nextUrl } = req
+
+  // Dev bypass — aucune auth requise en mode mock
+  if (process.env.DEV_MOCK_DB === 'true') {
+    if (nextUrl.pathname.startsWith('/login')) {
+      return NextResponse.redirect(new URL('/dashboard', nextUrl))
+    }
+    return NextResponse.next()
+  }
+
   const isSecure = nextUrl.protocol === 'https:'
 
   const isAuthPage       = nextUrl.pathname.startsWith('/login')

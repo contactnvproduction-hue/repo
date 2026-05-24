@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import {
   TrendingUp, Users, FolderKanban, Receipt, Clock,
-  AlertTriangle, CheckCircle2, ArrowRight, Bell, Crosshair, PhoneCall, UserCheck
+  AlertTriangle, CheckCircle2, ArrowRight, Bell, Crosshair, PhoneCall, UserCheck, RepeatIcon, Briefcase, Calendar
 } from 'lucide-react'
 import Link from 'next/link'
 import { DashboardCharts } from '@/components/dashboard/DashboardCharts'
@@ -33,6 +33,8 @@ async function getDashboardData(userId: string) {
     monthlyPayments,
     leadCalls,
     leadsFollowUp,
+    allRetainers,
+    upcomingCeoMeetings,
   ] = await Promise.all([
     // CA du mois (factures payées)
     prisma.payment.aggregate({
@@ -113,6 +115,18 @@ async function getDashboardData(userId: string) {
       select: { id: true, name: true, company: true, followUpDate: true },
       orderBy: { followUpDate: 'asc' },
     }),
+    // MRR global (retainers actifs)
+    prisma.clientRetainer.findMany({
+      where: {
+        startDate: { lte: now },
+      },
+    }),
+    // Réunions CEO à venir
+    prisma.ceoMeeting.findMany({
+      where: { date: { gte: now } },
+      orderBy: { date: 'asc' },
+      take: 5,
+    }),
   ])
 
   const caMonthVal = caMonth._sum.amount || 0
@@ -133,6 +147,20 @@ async function getDashboardData(userId: string) {
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const todayEnd = new Date(todayStart.getTime() + 86_400_000)
 
+  // MRR = retainers dont la date de fin > now
+  const currentMRR = allRetainers.reduce((sum, r) => {
+    const end = new Date(r.startDate)
+    end.setMonth(end.getMonth() + r.durationMonths)
+    return end > now ? sum + r.monthlyAmount : sum
+  }, 0)
+
+  const nextMeeting = upcomingCeoMeetings[0] ?? null
+
+  // Réunion CEO dans moins de 48h
+  const ceoMeetingSoon = nextMeeting && (new Date(nextMeeting.date).getTime() - now.getTime()) < 48 * 3600 * 1000
+    ? nextMeeting
+    : null
+
   return {
     caMonth: caMonthVal,
     caYear: caYear._sum.amount || 0,
@@ -146,6 +174,9 @@ async function getDashboardData(userId: string) {
     prospectsToRelance,
     monthlyPayments,
     acquisition: { totalCalls, showupRate, qualifRate, closingRate },
+    currentMRR,
+    ceoMeetingSoon: ceoMeetingSoon ? { ...ceoMeetingSoon, date: ceoMeetingSoon.date.toISOString() } : null,
+    upcomingMeetings: upcomingCeoMeetings.map(m => ({ id: m.id, title: m.title, date: m.date.toISOString() })),
     leadsFollowUp: leadsFollowUp.map(l => ({
       ...l,
       followUpDate: l.followUpDate!.toISOString(),
@@ -182,6 +213,20 @@ export default async function DashboardPage() {
     <div className="space-y-6 animate-fade-in">
       {/* Popup relances leads */}
       <LeadFollowUpModal leads={data.leadsFollowUp} />
+
+      {/* Banner réunion CEO imminente */}
+      {data.ceoMeetingSoon && (
+        <Link href="/ceo" className="flex items-center gap-3 p-4 rounded-xl border border-primary/40 bg-primary/5 hover:bg-primary/10 transition-colors">
+          <div className="w-9 h-9 rounded-xl bg-primary/20 flex items-center justify-center shrink-0">
+            <Briefcase size={16} className="text-primary" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-white">Réunion CEO dans moins de 48h</p>
+            <p className="text-xs text-nv-text-muted">{data.ceoMeetingSoon.title} — {new Date(data.ceoMeetingSoon.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}</p>
+          </div>
+          <ArrowRight size={15} className="text-primary shrink-0" />
+        </Link>
+      )}
 
       {/* Titre */}
       <div>
@@ -302,10 +347,11 @@ export default async function DashboardPage() {
           subtitle={`${formatCurrency(data.caYear)} cette année`}
         />
         <StatCard
-          title="Clients actifs"
-          value={String(data.activeClients)}
-          icon={Users}
+          title="MRR actuel"
+          value={formatCurrency(data.currentMRR)}
+          icon={RepeatIcon}
           color="success"
+          subtitle="Revenu récurrent / mois"
         />
         <StatCard
           title="Projets en cours"
@@ -320,6 +366,51 @@ export default async function DashboardPage() {
           color={data.pendingInvoices > 0 ? 'danger' : 'success'}
         />
       </div>
+
+      {/* Réunions CEO à venir */}
+      {data.upcomingMeetings.length > 0 && (
+        <div className="rounded-xl border border-nv-border bg-nv-card p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Briefcase size={15} className="text-primary" />
+              <p className="text-sm font-semibold text-white">Réunions à venir</p>
+            </div>
+            <Link href="/ceo" className="text-xs text-nv-text-muted hover:text-primary transition-colors flex items-center gap-1">
+              Voir tout <ArrowRight size={11} />
+            </Link>
+          </div>
+          <div className="space-y-2">
+            {data.upcomingMeetings.map(meeting => {
+              const msUntil = new Date(meeting.date).getTime() - Date.now()
+              const daysUntilMeeting = Math.ceil(msUntil / 86_400_000)
+              const isSoon = msUntil < 48 * 3600 * 1000
+              return (
+                <Link key={meeting.id} href="/ceo"
+                  className="flex items-center justify-between p-2.5 rounded-lg border border-nv-border hover:border-primary/30 hover:bg-white/3 transition-colors group">
+                  <div className="flex items-center gap-2.5">
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${isSoon ? 'bg-primary/20' : 'bg-nv-border'}`}>
+                      <Calendar size={13} className={isSoon ? 'text-primary' : 'text-nv-text-muted'} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-white">{meeting.title}</p>
+                      <p className="text-xs text-nv-text-muted">
+                        {new Date(meeting.date).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {isSoon && <span className="text-[10px] px-1.5 py-0.5 bg-primary/20 text-primary rounded-full font-medium">Bientôt</span>}
+                    <span className={`text-xs ${isSoon ? 'text-primary font-medium' : 'text-nv-text-muted'}`}>
+                      {daysUntilMeeting <= 0 ? "Aujourd'hui" : daysUntilMeeting === 1 ? 'Demain' : `Dans ${daysUntilMeeting}j`}
+                    </span>
+                    <ArrowRight size={13} className="text-nv-text-muted opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                </Link>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Stats acquisition */}
       {data.acquisition.totalCalls > 0 && (
