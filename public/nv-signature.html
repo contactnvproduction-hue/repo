@@ -2,604 +2,452 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>New Vision Production — Plateforme de signature</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>New Vision Production — Contrat de Prestation</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#0a0a0a;--bg-card:#111111;--bg-card2:#141414;
-  --border:#222222;--border-light:#2a2a2a;
-  --gold:#c9a96e;--gold-light:#dfc08a;--gold-dim:rgba(201,169,110,0.15);--gold-dim2:rgba(201,169,110,0.08);
-  --white:#f5f5f0;--white-dim:rgba(245,245,240,0.7);--white-dim2:rgba(245,245,240,0.4);
-  --red:#e05a5a;--green:#5aaa7a;--radius:12px;--radius-sm:8px;
-  --transition:0.25s cubic-bezier(0.4,0,0.2,1)
+  --bg:#080808;--card:#101010;--card2:#161616;
+  --border:#1e1e1e;--border2:#282828;
+  --gold:#c9a96e;--gold2:#dfc08a;--gold-glow:rgba(201,169,110,.12);--gold-dim:rgba(201,169,110,.08);
+  --white:#f0ede8;--muted:rgba(240,237,232,.55);--faint:rgba(240,237,232,.25);
+  --red:#e05a5a;--green:#4dbb7e;
+  --r:14px;--r-sm:10px;--t:.22s cubic-bezier(.4,0,.2,1)
 }
-html{scroll-behavior:smooth}
-body{background:var(--bg);color:var(--white);font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;font-size:15px;line-height:1.6;min-height:100vh;-webkit-font-smoothing:antialiased}
-::-webkit-scrollbar{width:5px}
-::-webkit-scrollbar-track{background:var(--bg)}
-::-webkit-scrollbar-thumb{background:var(--border-light);border-radius:3px}
+html{scroll-behavior:smooth;-webkit-tap-highlight-color:transparent}
+body{background:var(--bg);color:var(--white);font-family:"Inter",-apple-system,sans-serif;font-size:15px;line-height:1.65;min-height:100vh;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
 
-.page{display:none}
+/* ── PAGES ── */
+.page{display:none;animation:fadeIn .35s ease both}
 .page.active{display:block}
-.page-slide-out{animation:slideOut .4s ease forwards}
-.page-slide-in{animation:slideIn .4s ease forwards}
-@keyframes slideOut{to{opacity:0;transform:translateX(-30px)}}
-@keyframes slideIn{from{opacity:0;transform:translateX(30px)}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}}
 
 /* ── HEADER ── */
-.header{padding:32px 24px 24px;border-bottom:1px solid var(--border);margin-bottom:40px}
-.header-inner{max-width:700px;margin:0 auto;display:flex;flex-direction:column;align-items:center;gap:12px}
-.logo{height:36px;width:auto;filter:brightness(0) invert(1)}
-.badge{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);border:1px solid var(--gold-dim);background:var(--gold-dim2);padding:4px 12px;border-radius:20px}
-.subtitle{font-size:12px;color:var(--white-dim2);letter-spacing:.04em}
+.hdr{padding:28px 20px 20px;text-align:center;border-bottom:1px solid var(--border);margin-bottom:36px;position:relative}
+.hdr-inner{max-width:640px;margin:0 auto;display:flex;flex-direction:column;align-items:center;gap:10px}
+.logo{height:32px;width:auto;filter:brightness(0) invert(1);opacity:.95}
+.badge{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);border:1px solid rgba(201,169,110,.25);background:var(--gold-dim);padding:4px 14px;border-radius:20px}
+.hdr-sub{font-size:11px;color:var(--faint);letter-spacing:.04em}
 
-/* ── CONTAINER & SECTIONS ── */
-.container{max-width:700px;margin:0 auto;padding:0 24px 80px}
-.section{margin-bottom:28px;animation:fadeUp .5s ease both}
-.section:nth-child(1){animation-delay:.05s}.section:nth-child(2){animation-delay:.1s}.section:nth-child(3){animation-delay:.15s}.section:nth-child(4){animation-delay:.2s}
-@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}}
-.section-label{display:flex;align-items:center;gap:12px;margin-bottom:16px}
-.section-num{font-size:11px;font-weight:700;color:var(--gold);background:var(--gold-dim2);border:1px solid var(--gold-dim);width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.section-line{height:1px;background:var(--border);flex:1}
-.section-title{font-size:16px;font-weight:700;color:var(--white);margin-bottom:16px}
+/* ── STEP INDICATOR (admin) ── */
+.step-bar{display:flex;align-items:center;justify-content:center;gap:8px;max-width:420px;margin:0 auto 32px}
+.step{display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;cursor:pointer}
+.step-dot{width:28px;height:28px;border-radius:50%;border:2px solid var(--border2);background:var(--card);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--faint);transition:var(--t)}
+.step-dot.active{border-color:var(--gold);background:var(--gold-dim);color:var(--gold)}
+.step-dot.done{border-color:var(--green);background:rgba(77,187,126,.12);color:var(--green)}
+.step-label{font-size:10px;color:var(--faint);font-weight:500;transition:var(--t);white-space:nowrap}
+.step.active .step-label{color:var(--gold)}
+.step.done .step-label{color:var(--green)}
+.step-line{flex:1;height:1px;background:var(--border);margin-top:-18px;transition:var(--t)}
+.step-line.done{background:var(--green)}
 
-/* ── MISSION TYPE TOGGLE ── */
-.mission-toggle{display:flex;gap:10px;margin-bottom:28px}
-.mission-btn{flex:1;padding:14px;border-radius:12px;border:2px solid var(--border);background:var(--bg-card);cursor:pointer;transition:var(--transition);text-align:center}
-.mission-btn .mission-icon{font-size:22px;margin-bottom:6px}
-.mission-btn .mission-name{font-size:13px;font-weight:700;color:var(--white-dim)}
-.mission-btn .mission-desc{font-size:11px;color:var(--white-dim2);margin-top:2px}
-.mission-btn.active{border-color:var(--gold);background:var(--gold-dim2)}
-.mission-btn.active .mission-name{color:var(--gold)}
+/* ── CONTAINER ── */
+.container{max-width:640px;margin:0 auto;padding:0 20px 80px}
+
+/* ── MISSION TOGGLE ── */
+.mission-toggle{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:28px}
+.mission-btn{padding:16px 12px;border-radius:var(--r);border:1.5px solid var(--border);background:var(--card);cursor:pointer;transition:var(--t);text-align:center;-webkit-user-select:none;user-select:none}
+.mission-btn:hover{border-color:var(--border2)}
+.mission-btn .m-icon{font-size:24px;margin-bottom:6px;display:block}
+.mission-btn .m-name{font-size:13px;font-weight:700;color:var(--muted);display:block}
+.mission-btn .m-sub{font-size:11px;color:var(--faint);margin-top:2px;display:block}
+.mission-btn.active{border-color:var(--gold);background:var(--gold-dim)}
+.mission-btn.active .m-name{color:var(--gold)}
+
+/* ── SECTION HEADER ── */
+.sec{margin-bottom:24px}
+.sec-head{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.sec-num{width:26px;height:26px;border-radius:8px;border:1px solid rgba(201,169,110,.25);background:var(--gold-dim);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:var(--gold);flex-shrink:0}
+.sec-title{font-size:15px;font-weight:700;color:var(--white)}
+.sec-line{flex:1;height:1px;background:var(--border)}
 
 /* ── CARD ── */
-.card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:18px}
 
-/* ── FORM ELEMENTS ── */
-.form-group{margin-bottom:16px}
-.form-group label{display:block;font-size:12px;font-weight:600;color:var(--white-dim2);margin-bottom:6px;letter-spacing:.02em}
-input[type=text],input[type=email],input[type=number],input[type=date],select,textarea{
-  width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);
-  padding:10px 14px;font-size:14px;color:var(--white);font-family:inherit;transition:var(--transition);outline:none;-webkit-appearance:none
-}
-input:focus,select:focus,textarea:focus{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-dim2)}
-input::placeholder,textarea::placeholder{color:var(--white-dim2)}
-select{cursor:pointer}
-select option{background:var(--bg-card)}
-textarea{resize:vertical;min-height:72px}
-.form-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.field-error{border-color:var(--red)!important;box-shadow:0 0 0 3px rgba(224,90,90,.1)!important}
+/* ── FORM ── */
+.fg{margin-bottom:14px}
+.fg:last-child{margin-bottom:0}
+.fg label{display:block;font-size:11px;font-weight:600;color:var(--faint);margin-bottom:5px;letter-spacing:.03em}
+input,select,textarea{width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:10px 13px;font-size:14px;color:var(--white);font-family:inherit;transition:var(--t);outline:none;-webkit-appearance:none;appearance:none}
+input:focus,select:focus,textarea:focus{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-dim)}
+input::placeholder,textarea::placeholder{color:var(--faint)}
+select{cursor:pointer;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23666'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px}
+select option{background:var(--card2)}
+textarea{resize:vertical;min-height:64px;line-height:1.5}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.field-err{border-color:var(--red)!important;box-shadow:0 0 0 3px rgba(224,90,90,.08)!important}
+.err-msg{display:none;background:rgba(224,90,90,.08);border:1px solid rgba(224,90,90,.2);border-radius:var(--r-sm);padding:9px 13px;font-size:12px;color:#e8a0a0;margin-bottom:12px;align-items:center;gap:7px}
+.err-msg.show{display:flex}
 
-/* ── CHECKBOXES (livrables) ── */
-.livrable-group{display:flex;flex-direction:column;gap:10px}
-.livrable-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg);transition:var(--transition)}
-.livrable-row:has(.livrable-check:checked){border-color:var(--gold-dim);background:var(--gold-dim2)}
-.livrable-check{width:18px;height:18px;accent-color:var(--gold);cursor:pointer;flex-shrink:0}
-.livrable-label{flex:1;font-size:13px;font-weight:500;color:var(--white-dim);cursor:pointer}
-.livrable-qty{width:60px;padding:6px 10px;font-size:13px;text-align:center;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;color:var(--white)}
-.livrable-qty-label{font-size:11px;color:var(--white-dim2);flex-shrink:0}
-.livrable-detail-wrap{display:none;padding:0 12px 10px}
-.livrable-row:has(.livrable-check:checked) + .livrable-detail-wrap{display:block}
-.livrable-detail{width:100%;background:var(--bg-card2);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:12px;color:var(--white-dim);resize:none;min-height:56px}
+/* ── LIVRABLES ── */
+.lv-group{display:flex;flex-direction:column;gap:8px}
+.lv-row{display:flex;align-items:center;gap:10px;padding:11px 13px;border-radius:var(--r-sm);border:1.5px solid var(--border);background:var(--bg);transition:var(--t);cursor:pointer}
+.lv-row:has(.lv-chk:checked){border-color:rgba(201,169,110,.3);background:var(--gold-dim)}
+.lv-chk{width:17px;height:17px;accent-color:var(--gold);cursor:pointer;flex-shrink:0}
+.lv-label{flex:1;font-size:13px;font-weight:500;color:var(--muted);cursor:pointer;-webkit-user-select:none;user-select:none}
+.lv-row:has(.lv-chk:checked) .lv-label{color:var(--white)}
+.lv-qty{width:55px;padding:6px 8px;font-size:13px;text-align:center;background:var(--card);border:1px solid var(--border);border-radius:6px;color:var(--white)}
+.lv-ql{font-size:11px;color:var(--faint);flex-shrink:0}
+.lv-detail{display:none;padding:0 13px 10px;margin-top:-4px}
+.lv-row:has(.lv-chk:checked) + .lv-detail{display:block}
+.lv-detail textarea{background:var(--card2);font-size:12px;min-height:48px;border-radius:8px}
 
 /* ── BUTTONS ── */
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 24px;border-radius:var(--radius-sm);font-size:14px;font-weight:600;cursor:pointer;transition:var(--transition);border:none;font-family:inherit}
-.btn-gold{background:linear-gradient(135deg,var(--gold),#b8903f);color:#0a0a0a}
-.btn-gold:hover{filter:brightness(1.1);transform:translateY(-1px)}
-.btn-gold:disabled{opacity:.5;cursor:not-allowed;transform:none}
-.btn-outline{background:transparent;border:1px solid var(--border);color:var(--white-dim)}
-.btn-outline:hover{border-color:var(--border-light);color:var(--white)}
-.btn-ghost{background:transparent;color:var(--white-dim2);font-size:13px;padding:8px 12px}
-.btn-ghost:hover{color:var(--white)}
-.btn-full{width:100%}
-.btn.loading{opacity:.7;cursor:not-allowed}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:12px 22px;border-radius:var(--r-sm);font-size:14px;font-weight:700;cursor:pointer;transition:var(--t);border:none;font-family:inherit;letter-spacing:.01em}
+.btn-primary{background:linear-gradient(135deg,#c9a96e 0%,#b8903f 100%);color:#060606;box-shadow:0 2px 16px rgba(201,169,110,.2)}
+.btn-primary:hover{filter:brightness(1.08);transform:translateY(-1px);box-shadow:0 4px 24px rgba(201,169,110,.3)}
+.btn-primary:active{transform:translateY(0)}
+.btn-primary:disabled{opacity:.45;cursor:not-allowed;transform:none;box-shadow:none}
+.btn-ghost{background:transparent;border:1.5px solid var(--border2);color:var(--muted)}
+.btn-ghost:hover{border-color:var(--border2);color:var(--white);background:rgba(255,255,255,.04)}
+.btn-full{width:100%;padding:14px 22px;font-size:15px}
+.btn-sm{padding:8px 16px;font-size:12px}
 
-/* ── GENERATED LINK ── */
-.link-box{background:var(--gold-dim2);border:1px solid var(--gold-dim);border-radius:var(--radius);padding:20px;margin-top:20px;display:none}
+/* ── NAV BUTTONS (steps) ── */
+.nav-btns{display:flex;gap:10px;margin-top:24px}
+
+/* ── LINK BOX ── */
+.link-box{display:none;background:linear-gradient(135deg,rgba(77,187,126,.06) 0%,rgba(77,187,126,.03) 100%);border:1px solid rgba(77,187,126,.2);border-radius:var(--r);padding:18px;margin-top:20px;animation:fadeIn .4s ease}
 .link-box.show{display:block}
-.link-label{font-size:11px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;display:flex;align-items:center;gap:6px}
-.link-value{font-family:monospace;font-size:13px;color:var(--white-dim);word-break:break-all;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:12px;line-height:1.5}
-.link-actions{display:flex;gap:8px}
-.link-copied{color:var(--green);font-size:12px;font-weight:600;display:none;align-items:center;gap:4px}
-.link-copied.show{display:flex}
+.link-label{font-size:10px;font-weight:800;color:#4dbb7e;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.link-url{font-family:monospace;font-size:12px;color:var(--muted);word-break:break-all;background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:12px;line-height:1.6}
+.link-row{display:flex;gap:8px;flex-wrap:wrap}
+.copied-msg{color:#4dbb7e;font-size:11px;font-weight:700;display:none;align-items:center;gap:4px;padding:8px 12px}
+.copied-msg.show{display:flex}
 
 /* ── CLIENT PAGE ── */
-.recap-card{background:var(--gold-dim2);border:1px solid var(--gold-dim);border-radius:var(--radius);padding:20px;margin-bottom:24px}
-.recap-logo{height:28px;width:auto;filter:brightness(0) invert(1);margin-bottom:14px}
-.recap-title{font-size:18px;font-weight:800;color:var(--white);margin-bottom:4px}
-.recap-sub{font-size:13px;color:var(--gold)}
-.recap-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}
-.recap-item label{font-size:10px;font-weight:700;color:var(--white-dim2);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:3px}
-.recap-item span{font-size:14px;font-weight:600;color:var(--white)}
-.livrable-badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
-.livrable-badge{font-size:11px;font-weight:600;color:var(--gold);background:var(--gold-dim2);border:1px solid var(--gold-dim);border-radius:6px;padding:4px 10px}
+.recap{background:var(--gold-dim);border:1px solid rgba(201,169,110,.2);border-radius:var(--r);padding:20px;margin-bottom:24px}
+.recap-name{font-size:18px;font-weight:800;color:var(--white);margin-bottom:2px}
+.recap-type{font-size:12px;color:var(--gold);font-weight:600;margin-bottom:16px}
+.recap-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.recap-item label{font-size:9px;font-weight:800;color:var(--faint);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:3px}
+.recap-item .val{font-size:14px;font-weight:700;color:var(--white)}
+.recap-item .val.big{font-size:20px}
+.lv-badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
+.lv-badge{font-size:11px;font-weight:600;color:var(--gold);background:rgba(201,169,110,.1);border:1px solid rgba(201,169,110,.2);border-radius:6px;padding:4px 10px}
 
-/* ── CONTRACT TEXT ── */
-.contract-wrap{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:24px}
-.contract-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
-.contract-header span{font-size:12px;font-weight:600;color:var(--white-dim2)}
-.contract-text{padding:20px;font-size:12px;line-height:1.8;color:var(--white-dim);white-space:pre-wrap;max-height:400px;overflow-y:auto;font-family:'Inter',sans-serif}
-.contract-text h3{font-size:13px;font-weight:700;color:var(--white);margin:16px 0 6px}
+/* ── CONTRACT ── */
+.contract-wrap{background:var(--card);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:20px}
+.contract-top{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.contract-top span:first-child{font-size:12px;font-weight:700;color:var(--white)}
+.contract-top span:last-child{font-size:11px;color:var(--faint)}
+.contract-body{padding:20px 18px;font-size:12px;line-height:1.85;color:rgba(240,237,232,.65);max-height:380px;overflow-y:auto;white-space:pre-wrap;font-family:inherit}
+.contract-body .ct{font-size:11px;font-weight:800;color:var(--gold);text-transform:uppercase;letter-spacing:.08em;display:block;margin:14px 0 5px}
+.contract-body .ct:first-child{margin-top:0}
 
 /* ── CONSENT ── */
-.consent-box{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:20px}
-.consent-check-row{display:flex;align-items:flex-start;gap:12px;cursor:pointer}
-.consent-checkbox{width:20px;height:20px;accent-color:var(--gold);cursor:pointer;flex-shrink:0;margin-top:2px}
-.consent-text{font-size:12px;color:var(--white-dim);line-height:1.6}
+.consent{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:15px;margin-bottom:18px}
+.consent label{display:flex;align-items:flex-start;gap:11px;cursor:pointer}
+.consent-chk{width:19px;height:19px;accent-color:var(--gold);cursor:pointer;flex-shrink:0;margin-top:2px}
+.consent-text{font-size:12px;color:var(--muted);line-height:1.65}
 
-/* ── SIGNATURE PAD ── */
-.sig-wrap{margin-bottom:20px}
-.sig-label{font-size:12px;font-weight:600;color:var(--white-dim2);margin-bottom:8px;letter-spacing:.02em}
-.sig-name-row{margin-bottom:12px}
-.sig-name-row input{font-size:16px;font-weight:600}
-.canvas-wrap{position:relative;border:2px dashed var(--border);border-radius:var(--radius-sm);overflow:hidden;background:var(--bg-card);cursor:crosshair;touch-action:none}
-.canvas-wrap:focus-within{border-color:var(--gold)}
-#sigCanvas{display:block;width:100%;height:140px}
-.canvas-hint{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:12px;color:var(--white-dim2);pointer-events:none;transition:var(--transition)}
-.canvas-hint.hidden{opacity:0}
-.sig-clear{margin-top:8px;font-size:12px;color:var(--white-dim2);background:none;border:none;cursor:pointer;padding:0}
-.sig-clear:hover{color:var(--red)}
+/* ── SIG PAD ── */
+.sig-wrap{margin-bottom:18px}
+.sig-lbl{font-size:11px;font-weight:600;color:var(--faint);margin-bottom:6px;letter-spacing:.03em}
+.sig-name-wrap{margin-bottom:12px}
+.sig-name-wrap input{font-size:16px;font-weight:600}
+.canvas-outer{position:relative;border:2px dashed var(--border2);border-radius:var(--r-sm);overflow:hidden;background:var(--card);touch-action:none}
+.canvas-outer:has(canvas:active){border-color:var(--gold)}
+#sigCanvas{display:block;width:100%;height:130px}
+.canvas-hint{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:12px;color:var(--faint);pointer-events:none;transition:opacity .2s;white-space:nowrap}
+.canvas-hint.gone{opacity:0}
+.sig-clear-btn{font-size:11px;color:var(--faint);background:none;border:none;cursor:pointer;padding:6px 0;margin-top:4px;font-family:inherit}
+.sig-clear-btn:hover{color:var(--red)}
 
-/* ── POST-SIGN ── */
-.signed-overlay{display:none;position:fixed;inset:0;background:var(--bg);z-index:200;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px;animation:fadeIn .5s ease}
-.signed-overlay.show{display:flex}
-@keyframes fadeIn{from{opacity:0}}
-.signed-icon{width:80px;height:80px;border-radius:50%;background:rgba(90,170,122,.15);border:2px solid rgba(90,170,122,.4);display:flex;align-items:center;justify-content:center;margin-bottom:24px;font-size:36px}
-.signed-title{font-size:24px;font-weight:800;color:var(--white);margin-bottom:8px}
-.signed-sub{font-size:14px;color:var(--white-dim);max-width:400px;line-height:1.7;margin-bottom:32px}
-.signed-actions{display:flex;flex-direction:column;gap:12px;width:100%;max-width:340px}
-.redirect-bar{margin-top:20px;font-size:12px;color:var(--white-dim2)}
-.redirect-progress{width:100%;max-width:340px;height:3px;background:var(--border);border-radius:2px;margin-top:8px;overflow:hidden}
-.redirect-fill{height:100%;background:var(--gold);border-radius:2px;transition:width linear}
+/* ── SIGNED OVERLAY ── */
+.signed-ov{display:none;position:fixed;inset:0;background:var(--bg);z-index:200;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px 24px;animation:fadeIn .5s ease}
+.signed-ov.show{display:flex}
+.signed-icon{width:76px;height:76px;border-radius:50%;background:rgba(77,187,126,.12);border:2px solid rgba(77,187,126,.3);display:flex;align-items:center;justify-content:center;font-size:34px;margin-bottom:22px}
+.signed-title{font-size:22px;font-weight:800;color:var(--white);margin-bottom:8px}
+.signed-sub{font-size:14px;color:var(--muted);max-width:380px;line-height:1.75;margin-bottom:28px}
+.signed-actions{display:flex;flex-direction:column;gap:10px;width:100%;max-width:320px}
+.redir-bar{font-size:11px;color:var(--faint);margin-top:18px}
+.redir-track{width:100%;max-width:320px;height:2px;background:var(--border);border-radius:1px;margin:7px auto 0;overflow:hidden}
+.redir-fill{height:100%;background:var(--gold);border-radius:1px;width:0;transition:width 1s linear}
 
 /* ── PDF OVERLAY ── */
-.pdf-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:300;flex-direction:column;align-items:center;justify-content:center;gap:16px}
-.pdf-overlay.active{display:flex}
-.pdf-spinner{width:48px;height:48px;border:3px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin 1s linear infinite}
+.pdf-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:300;flex-direction:column;align-items:center;justify-content:center;gap:14px}
+.pdf-ov.show{display:flex}
+.pdf-spin{width:44px;height:44px;border:3px solid var(--border2);border-top-color:var(--gold);border-radius:50%;animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-.pdf-status{font-size:13px;color:var(--white-dim)}
+.pdf-bar-wrap{width:240px;height:3px;background:var(--border);border-radius:2px;overflow:hidden}
+.pdf-bar{height:100%;background:linear-gradient(90deg,var(--gold),var(--gold2));border-radius:2px;width:0;transition:width .4s ease}
+.pdf-status{font-size:12px;color:var(--muted)}
 
-/* ── ERROR / LOADING ── */
-.center-state{min-height:60vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px}
-.center-state .state-icon{font-size:48px;margin-bottom:16px;opacity:.6}
-.center-state h2{font-size:20px;font-weight:700;color:var(--white);margin-bottom:8px}
-.center-state p{font-size:14px;color:var(--white-dim2)}
+/* ── LOADING / ERROR ── */
+.state-page{min-height:70vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px}
+.state-icon{font-size:44px;margin-bottom:16px;opacity:.6}
+.state-title{font-size:18px;font-weight:700;color:var(--white);margin-bottom:8px}
+.state-sub{font-size:13px;color:var(--faint)}
 
 /* ── MISC ── */
-.msg{display:none;align-items:center;gap:8px;padding:10px 14px;border-radius:var(--radius-sm);font-size:13px;margin-bottom:12px}
-.msg.show{display:flex}
-.msg-error{background:rgba(224,90,90,.1);border:1px solid rgba(224,90,90,.3);color:#e8a0a0}
-.divider{height:1px;background:var(--border);margin:24px 0}
+.divider{height:1px;background:var(--border);margin:22px 0}
 .text-gold{color:var(--gold)}
-.text-muted{color:var(--white-dim2)}
-.text-sm{font-size:12px}
-.fw-bold{font-weight:700}
+.eidas{text-align:center;font-size:10px;color:var(--faint);margin-top:10px}
 
-/* ── RESPONSIVE ── */
-@media(max-width:600px){
+@media(max-width:520px){
   .form-row{grid-template-columns:1fr}
-  .recap-grid{grid-template-columns:1fr}
-  .mission-toggle{flex-direction:column}
-  .link-actions{flex-direction:column}
+  .recap-grid{grid-template-columns:1fr 1fr}
+  .mission-toggle{grid-template-columns:1fr 1fr}
+  .nav-btns{flex-direction:column}
+  .link-row{flex-direction:column}
 }
 </style>
 </head>
 <body>
 
-<!-- ══════════════════════════════════════════
-     LOADING STATE
-═══════════════════════════════════════════ -->
+<!-- ════════════ LOADING ════════════ -->
 <div id="pageLoading" class="page active">
-  <div class="center-state">
-    <div style="width:48px;height:48px;border:3px solid #222;border-top-color:#c9a96e;border-radius:50%;animation:spin 1s linear infinite;margin-bottom:20px"></div>
-    <p class="text-muted">Chargement du contrat…</p>
+  <div class="state-page">
+    <div class="pdf-spin" style="margin-bottom:16px"></div>
+    <p style="font-size:13px;color:var(--faint)">Chargement du contrat…</p>
   </div>
 </div>
 
-<!-- ══════════════════════════════════════════
-     ERROR STATE
-═══════════════════════════════════════════ -->
+<!-- ════════════ ERROR ════════════ -->
 <div id="pageError" class="page">
-  <div class="center-state">
+  <div class="state-page">
     <div class="state-icon">⚠️</div>
-    <h2>Lien invalide</h2>
-    <p>Ce contrat est introuvable ou a expiré.<br>Contactez New Vision Production.</p>
+    <div class="state-title">Lien invalide</div>
+    <div class="state-sub">Ce contrat est introuvable ou a expiré.<br>Contactez New Vision Production.</div>
   </div>
 </div>
 
-<!-- ══════════════════════════════════════════
-     PAGE ADMIN (Pôle acquisition)
-═══════════════════════════════════════════ -->
+<!-- ════════════ ADMIN ════════════ -->
 <div id="pageAdmin" class="page">
-  <div class="header">
-    <div class="header-inner">
+  <div class="hdr">
+    <div class="hdr-inner">
       <img src="data:image/png;base64,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" alt="New Vision Production" class="logo">
       <div class="badge">⚙ Pôle acquisition</div>
-      <div class="subtitle">Génération de contrat client</div>
+      <div class="hdr-sub">Génération de contrat client</div>
     </div>
   </div>
 
   <div class="container">
-
-    <!-- Sélection du type de mission -->
+    <!-- Mission toggle -->
     <div style="margin-bottom:28px">
-      <p style="font-size:12px;font-weight:700;color:rgba(245,245,240,.4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Type de mission</p>
+      <p style="font-size:10px;font-weight:700;color:var(--faint);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Type de mission</p>
       <div class="mission-toggle">
         <div class="mission-btn active" id="btnMRR" onclick="setMission('MRR')">
-          <div class="mission-icon">🔄</div>
-          <div class="mission-name">Retainer mensuel</div>
-          <div class="mission-desc">Abonnement récurrent</div>
+          <span class="m-icon">🔄</span>
+          <span class="m-name">Retainer mensuel</span>
+          <span class="m-sub">Abonnement récurrent</span>
         </div>
         <div class="mission-btn" id="btnPonctuel" onclick="setMission('PONCTUEL')">
-          <div class="mission-icon">⚡</div>
-          <div class="mission-name">Projet ponctuel</div>
-          <div class="mission-desc">One-shot avec acompte</div>
+          <span class="m-icon">⚡</span>
+          <span class="m-name">Projet ponctuel</span>
+          <span class="m-sub">One-shot avec acompte</span>
         </div>
       </div>
     </div>
 
+    <!-- Step bar -->
+    <div class="step-bar" id="stepBar">
+      <div class="step active" id="s1"><div class="step-dot active" id="d1">1</div><div class="step-label">Client</div></div>
+      <div class="step-line" id="l1"></div>
+      <div class="step" id="s2"><div class="step-dot" id="d2">2</div><div class="step-label">Conditions</div></div>
+      <div class="step-line" id="l2"></div>
+      <div class="step" id="s3"><div class="step-dot" id="d3">3</div><div class="step-label">Livrables</div></div>
+    </div>
+
     <form id="adminForm" novalidate>
 
-      <!-- Section 01 : Infos client -->
-      <div class="section">
-        <div class="section-label">
-          <span class="section-num">01</span>
-          <div class="section-line"></div>
-        </div>
-        <div class="section-title">Informations client</div>
+    <!-- ── ÉTAPE 1 : Client ── -->
+    <div id="step1">
+      <div class="sec">
+        <div class="sec-head"><div class="sec-num">01</div><div class="sec-title">Informations client</div><div class="sec-line"></div></div>
         <div class="card">
           <div class="form-row">
-            <div class="form-group">
-              <label for="clientName">Nom complet *</label>
-              <input type="text" id="clientName" placeholder="Jean Dupont" required>
-            </div>
-            <div class="form-group">
-              <label for="clientCompany">Société</label>
-              <input type="text" id="clientCompany" placeholder="JD Consulting (optionnel)">
-            </div>
+            <div class="fg"><label>Nom complet *</label><input type="text" id="clientName" placeholder="Jean Dupont" required></div>
+            <div class="fg"><label>Société</label><input type="text" id="clientCompany" placeholder="JD Consulting (optionnel)"></div>
           </div>
-          <div class="form-group">
-            <label for="clientAddress">Adresse complète *</label>
-            <input type="text" id="clientAddress" placeholder="12 rue des Lilas, 75011 Paris" required>
-          </div>
-          <div class="form-group" style="margin-bottom:0">
-            <label for="clientEmail">Email *</label>
-            <input type="email" id="clientEmail" placeholder="jean@exemple.fr" required>
-          </div>
+          <div class="fg"><label>Adresse complète *</label><input type="text" id="clientAddress" placeholder="12 rue des Lilas, 75011 Paris" required></div>
+          <div class="fg"><label>Email *</label><input type="email" id="clientEmail" placeholder="jean@exemple.fr" required></div>
         </div>
       </div>
+      <div class="err-msg" id="e1"><span>⚠</span><span id="e1t">Veuillez remplir les champs obligatoires.</span></div>
+      <button type="button" class="btn btn-primary btn-full" onclick="goStep(2)">Suivant →</button>
+    </div>
 
-      <!-- Section 02 : Conditions -->
-      <div class="section">
-        <div class="section-label">
-          <span class="section-num">02</span>
-          <div class="section-line"></div>
-        </div>
-        <div class="section-title" id="sectionCondTitle">Conditions de collaboration</div>
+    <!-- ── ÉTAPE 2 : Conditions ── -->
+    <div id="step2" style="display:none">
+      <div class="sec">
+        <div class="sec-head"><div class="sec-num">02</div><div class="sec-title" id="condTitle">Conditions de collaboration</div><div class="sec-line"></div></div>
         <div class="card">
-
-          <!-- MRR fields -->
-          <div id="fieldsMRR">
+          <!-- MRR -->
+          <div id="fMRR">
             <div class="form-row">
-              <div class="form-group">
-                <label for="montant">Montant mensuel TTC (€) *</label>
-                <input type="number" id="montant" placeholder="1500" min="1">
-              </div>
-              <div class="form-group">
-                <label for="duree">Durée d'engagement *</label>
+              <div class="fg"><label>Montant mensuel TTC (€) *</label><input type="number" id="montant" placeholder="1500" min="1"></div>
+              <div class="fg"><label>Durée d'engagement *</label>
                 <select id="duree">
                   <option value="">Sélectionner…</option>
-                  <option value="1 mois">1 mois</option>
-                  <option value="3 mois">3 mois</option>
-                  <option value="6 mois">6 mois</option>
-                  <option value="12 mois">12 mois</option>
+                  <option value="1">1 mois</option>
+                  <option value="3">3 mois</option>
+                  <option value="6">6 mois</option>
+                  <option value="12">12 mois</option>
                 </select>
               </div>
             </div>
-            <div class="form-row" style="margin-bottom:0">
-              <div class="form-group" style="margin-bottom:0">
-                <label for="dateDebut">Date de début *</label>
-                <input type="date" id="dateDebut">
-              </div>
-              <div class="form-group" style="margin-bottom:0">
-                <label for="villeSignature">Ville de signature</label>
-                <input type="text" id="villeSignature" value="Nantes">
-              </div>
-            </div>
-          </div>
-
-          <!-- Ponctuel fields -->
-          <div id="fieldsPonctuel" style="display:none">
             <div class="form-row">
-              <div class="form-group">
-                <label for="montantTotal">Montant total TTC (€) *</label>
-                <input type="number" id="montantTotal" placeholder="3000" min="1">
-              </div>
-              <div class="form-group">
-                <label for="acompte">Acompte</label>
+              <div class="fg"><label>Date de début *</label><input type="date" id="dateDebut"></div>
+              <div class="fg"><label>Ville de signature</label><input type="text" id="ville" value="Nantes"></div>
+            </div>
+          </div>
+          <!-- Ponctuel -->
+          <div id="fPonctuel" style="display:none">
+            <div class="form-row">
+              <div class="fg"><label>Montant total TTC (€) *</label><input type="number" id="montantTotal" placeholder="3000" min="1"></div>
+              <div class="fg"><label>Acompte à la commande</label>
                 <select id="acompte">
-                  <option value="0">Sans acompte (paiement à la livraison)</option>
-                  <option value="30" selected>30% à la commande</option>
-                  <option value="40">40% à la commande</option>
-                  <option value="50">50% à la commande</option>
-                  <option value="100">100% (paiement intégral)</option>
+                  <option value="0">Sans acompte</option>
+                  <option value="30" selected>30%</option>
+                  <option value="40">40%</option>
+                  <option value="50">50%</option>
+                  <option value="100">100% intégral</option>
                 </select>
               </div>
             </div>
-            <div class="form-row" style="margin-bottom:0">
-              <div class="form-group" style="margin-bottom:0">
-                <label for="dateLivraison">Date de livraison estimée</label>
-                <input type="date" id="dateLivraison">
-              </div>
-              <div class="form-group" style="margin-bottom:0">
-                <label for="villePonctuel">Ville de signature</label>
-                <input type="text" id="villePonctuel" value="Nantes">
-              </div>
+            <div class="form-row">
+              <div class="fg"><label>Date de livraison estimée</label><input type="date" id="dateLivraison"></div>
+              <div class="fg"><label>Ville de signature</label><input type="text" id="villePonctuel" value="Nantes"></div>
             </div>
           </div>
-
         </div>
       </div>
+      <div class="err-msg" id="e2"><span>⚠</span><span id="e2t">Veuillez remplir les champs obligatoires.</span></div>
+      <div class="nav-btns">
+        <button type="button" class="btn btn-ghost" onclick="goStep(1)">← Retour</button>
+        <button type="button" class="btn btn-primary" style="flex:1" onclick="goStep(3)">Suivant →</button>
+      </div>
+    </div>
 
-      <!-- Section 03 : Livrables -->
-      <div class="section">
-        <div class="section-label">
-          <span class="section-num">03</span>
-          <div class="section-line"></div>
-        </div>
-        <div class="section-title" id="livrableTitle">Livrables mensuels</div>
+    <!-- ── ÉTAPE 3 : Livrables + Générer ── -->
+    <div id="step3" style="display:none">
+      <div class="sec">
+        <div class="sec-head"><div class="sec-num">03</div><div class="sec-title" id="lvTitle">Livrables mensuels</div><div class="sec-line"></div></div>
         <div class="card">
-          <div class="livrable-group">
-
-            <div class="livrable-row">
-              <input type="checkbox" class="livrable-check" id="lReels" data-key="reels">
-              <label class="livrable-label" for="lReels">Reels / Shorts</label>
-              <input type="number" class="livrable-qty" id="qReels" placeholder="0" min="1">
-              <span class="livrable-qty-label">/mois</span>
-            </div>
-            <div class="livrable-detail-wrap">
-              <textarea class="livrable-detail" id="dReels" placeholder="Durée, style, musique, montage…"></textarea>
-            </div>
-
-            <div class="livrable-row">
-              <input type="checkbox" class="livrable-check" id="lYoutube" data-key="youtube">
-              <label class="livrable-label" for="lYoutube">Vidéos YouTube longue durée</label>
-              <input type="number" class="livrable-qty" id="qYoutube" placeholder="0" min="1">
-              <span class="livrable-qty-label">/mois</span>
-            </div>
-            <div class="livrable-detail-wrap">
-              <textarea class="livrable-detail" id="dYoutube" placeholder="Durée, chapitres, intro/outro…"></textarea>
-            </div>
-
-            <div class="livrable-row">
-              <input type="checkbox" class="livrable-check" id="lMiniatures" data-key="miniatures">
-              <label class="livrable-label" for="lMiniatures">Miniatures YouTube</label>
-              <input type="number" class="livrable-qty" id="qMiniatures" placeholder="0" min="1">
-              <span class="livrable-qty-label">/mois</span>
-            </div>
-            <div class="livrable-detail-wrap">
-              <textarea class="livrable-detail" id="dMiniatures" placeholder="Style graphique, format…"></textarea>
-            </div>
-
-            <div class="livrable-row">
-              <input type="checkbox" class="livrable-check" id="lPhotos" data-key="photos">
-              <label class="livrable-label" for="lPhotos">Photos / Visuels</label>
-              <input type="number" class="livrable-qty" id="qPhotos" placeholder="0" min="1">
-              <span class="livrable-qty-label">/mois</span>
-            </div>
-            <div class="livrable-detail-wrap">
-              <textarea class="livrable-detail" id="dPhotos" placeholder="Type de prises de vue, format…"></textarea>
-            </div>
-
-            <div class="livrable-row">
-              <input type="checkbox" class="livrable-check" id="lCreativeAds" data-key="ads">
-              <label class="livrable-label" for="lCreativeAds">Créatives Ads (publicités)</label>
-              <input type="number" class="livrable-qty" id="qCreativeAds" placeholder="0" min="1">
-              <span class="livrable-qty-label">/mois</span>
-            </div>
-            <div class="livrable-detail-wrap">
-              <textarea class="livrable-detail" id="dCreativeAds" placeholder="Plateforme, format, objectif…"></textarea>
-            </div>
-
-            <div class="livrable-row">
-              <input type="checkbox" class="livrable-check" id="lVSL" data-key="vsl">
-              <label class="livrable-label" for="lVSL">VSL (Video Sales Letter)</label>
-              <input type="number" class="livrable-qty" id="qVSL" placeholder="0" min="1">
-              <span class="livrable-qty-label">/mois</span>
-            </div>
-            <div class="livrable-detail-wrap">
-              <textarea class="livrable-detail" id="dVSL" placeholder="Durée, script inclus ou non…"></textarea>
-            </div>
-
-            <div class="livrable-row">
-              <input type="checkbox" class="livrable-check" id="lTournage" data-key="tournage">
-              <label class="livrable-label" for="lTournage">Journée(s) de tournage</label>
-              <input type="number" class="livrable-qty" id="qTournage" placeholder="0" min="1">
-              <span class="livrable-qty-label">/mois</span>
-            </div>
-            <div class="livrable-detail-wrap">
-              <textarea class="livrable-detail" id="dTournage" placeholder="Lieu, équipe, durée…"></textarea>
-            </div>
-
-            <div class="livrable-row">
-              <input type="checkbox" class="livrable-check" id="lProgrammation" data-key="prog">
-              <label class="livrable-label" for="lProgrammation">Programmation & stratégie contenu</label>
-            </div>
-            <div class="livrable-detail-wrap">
-              <textarea class="livrable-detail" id="dProgrammation" placeholder="Fréquence, plateformes, calendrier éditorial…"></textarea>
-            </div>
-
-            <div class="livrable-row">
-              <input type="checkbox" class="livrable-check" id="lAutre" data-key="autre">
-              <label class="livrable-label" for="lAutre">Autre prestation</label>
-            </div>
-            <div class="livrable-detail-wrap">
-              <input type="text" id="tAutre" placeholder="Nom de la prestation" style="margin-bottom:8px">
-              <textarea class="livrable-detail" id="dAutre" placeholder="Description…"></textarea>
-            </div>
-
+          <div class="lv-group">
+            <div class="lv-row"><input type="checkbox" class="lv-chk" id="lReels"><label class="lv-label" for="lReels">Reels / Shorts</label><input type="number" class="lv-qty" id="qReels" placeholder="0" min="1"><span class="lv-ql">/mois</span></div>
+            <div class="lv-detail"><textarea id="dReels" placeholder="Durée, style, musique, format…"></textarea></div>
+            <div class="lv-row"><input type="checkbox" class="lv-chk" id="lYoutube"><label class="lv-label" for="lYoutube">Vidéos YouTube longue durée</label><input type="number" class="lv-qty" id="qYoutube" placeholder="0" min="1"><span class="lv-ql">/mois</span></div>
+            <div class="lv-detail"><textarea id="dYoutube" placeholder="Durée, chapitres, intro/outro, motion…"></textarea></div>
+            <div class="lv-row"><input type="checkbox" class="lv-chk" id="lMiniatures"><label class="lv-label" for="lMiniatures">Miniatures YouTube</label><input type="number" class="lv-qty" id="qMiniatures" placeholder="0" min="1"><span class="lv-ql">/mois</span></div>
+            <div class="lv-detail"><textarea id="dMiniatures" placeholder="Style, format, format…"></textarea></div>
+            <div class="lv-row"><input type="checkbox" class="lv-chk" id="lPhotos"><label class="lv-label" for="lPhotos">Photos / Visuels</label><input type="number" class="lv-qty" id="qPhotos" placeholder="0" min="1"><span class="lv-ql">/mois</span></div>
+            <div class="lv-detail"><textarea id="dPhotos" placeholder="Type de prises de vue, format…"></textarea></div>
+            <div class="lv-row"><input type="checkbox" class="lv-chk" id="lAds"><label class="lv-label" for="lAds">Créatives Ads (publicités)</label><input type="number" class="lv-qty" id="qAds" placeholder="0" min="1"><span class="lv-ql">/mois</span></div>
+            <div class="lv-detail"><textarea id="dAds" placeholder="Plateforme, format, objectif…"></textarea></div>
+            <div class="lv-row"><input type="checkbox" class="lv-chk" id="lVSL"><label class="lv-label" for="lVSL">VSL (Video Sales Letter)</label><input type="number" class="lv-qty" id="qVSL" placeholder="0" min="1"><span class="lv-ql">/mois</span></div>
+            <div class="lv-detail"><textarea id="dVSL" placeholder="Durée, script, etc…"></textarea></div>
+            <div class="lv-row"><input type="checkbox" class="lv-chk" id="lTournage"><label class="lv-label" for="lTournage">Journée(s) de tournage</label><input type="number" class="lv-qty" id="qTournage" placeholder="0" min="1"><span class="lv-ql">/mois</span></div>
+            <div class="lv-detail"><textarea id="dTournage" placeholder="Lieu, équipe, durée…"></textarea></div>
+            <div class="lv-row"><input type="checkbox" class="lv-chk" id="lProg"><label class="lv-label" for="lProg">Programmation & stratégie contenu</label></div>
+            <div class="lv-detail"><textarea id="dProg" placeholder="Fréquence, plateformes, calendrier…"></textarea></div>
+            <div class="lv-row"><input type="checkbox" class="lv-chk" id="lAutre"><label class="lv-label" for="lAutre">Autre prestation</label></div>
+            <div class="lv-detail"><input type="text" id="tAutre" placeholder="Nom de la prestation" style="margin-bottom:8px"><textarea id="dAutre" placeholder="Description…"></textarea></div>
           </div>
         </div>
       </div>
-
-      <!-- Erreur + Bouton -->
-      <div class="msg msg-error" id="adminError">
-        <span>⚠</span><span id="adminErrorText">Veuillez remplir tous les champs obligatoires.</span>
+      <div class="err-msg" id="e3"><span>⚠</span><span id="e3t"></span></div>
+      <div class="nav-btns">
+        <button type="button" class="btn btn-ghost" onclick="goStep(2)">← Retour</button>
+        <button type="submit" class="btn btn-primary" style="flex:1" id="genBtn">✦ Générer le lien client</button>
       </div>
-
-      <button type="submit" class="btn btn-gold btn-full" id="adminSubmitBtn" style="padding:16px;font-size:15px">
-        <span id="adminBtnText">✦ Générer le lien client</span>
-      </button>
+    </div>
 
     </form>
 
     <!-- Lien généré -->
     <div class="link-box" id="linkBox">
-      <div class="link-label">✓ Lien client prêt à envoyer</div>
-      <div class="link-value" id="linkValue"></div>
-      <div class="link-actions">
-        <button class="btn btn-gold" onclick="copyLink()">📋 Copier le lien</button>
-        <button class="btn btn-outline" onclick="openLink()">Ouvrir en preview →</button>
-        <span class="link-copied" id="copiedMsg">✓ Copié !</span>
+      <div class="link-label">✓ Lien prêt — envoyez-le au client</div>
+      <div class="link-url" id="linkUrl"></div>
+      <div class="link-row">
+        <button class="btn btn-primary btn-sm" onclick="copyLink()">📋 Copier</button>
+        <button class="btn btn-ghost btn-sm" onclick="openLink()">Ouvrir →</button>
+        <span class="copied-msg" id="copiedMsg">✓ Copié !</span>
       </div>
-      <p style="margin-top:12px;font-size:11px;color:rgba(245,245,240,.3)">
-        Envoyez ce lien par email ou WhatsApp au client. Le contrat sera signé en ligne et enregistré automatiquement dans le dashboard.
-      </p>
+      <p style="margin-top:12px;font-size:11px;color:var(--faint)">Partagez ce lien par email, WhatsApp ou SMS. Fonctionne sur mobile et desktop. Les données sont sécurisées dans votre dashboard.</p>
     </div>
-
   </div>
 </div>
 
-<!-- ══════════════════════════════════════════
-     PAGE CLIENT (Signature)
-═══════════════════════════════════════════ -->
+<!-- ════════════ CLIENT ════════════ -->
 <div id="pageClient" class="page">
-  <div class="header">
-    <div class="header-inner">
+  <div class="hdr">
+    <div class="hdr-inner">
       <img src="data:image/png;base64,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" alt="New Vision Production" class="logo">
       <div class="badge">Contrat de prestation</div>
-      <div class="subtitle">Lisez attentivement avant de signer</div>
+      <div class="hdr-sub">Lisez attentivement avant de signer</div>
     </div>
   </div>
-
   <div class="container">
-
-    <!-- Recap -->
-    <div class="recap-card">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-        <div>
-          <div class="recap-title" id="rClientName">—</div>
-          <div class="recap-sub" id="rMissionType">Retainer mensuel</div>
-        </div>
-        <div style="text-align:right">
-          <div style="font-size:22px;font-weight:800;color:var(--gold)" id="rMontant">—</div>
-          <div style="font-size:11px;color:rgba(245,245,240,.4)" id="rMontantLabel">/mois TTC</div>
-        </div>
-      </div>
-      <div class="recap-grid" id="rGrid">
-        <div class="recap-item">
-          <label>Durée</label>
-          <span id="rDuree">—</span>
-        </div>
-        <div class="recap-item">
-          <label>Début</label>
-          <span id="rDateDebut">—</span>
-        </div>
-      </div>
-      <div style="margin-top:14px">
-        <div style="font-size:10px;font-weight:700;color:rgba(245,245,240,.3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Livrables</div>
-        <div class="livrable-badges" id="rLivrables"></div>
-      </div>
+    <div class="recap">
+      <div class="recap-name" id="rName">—</div>
+      <div class="recap-type" id="rType">Retainer mensuel</div>
+      <div class="recap-grid" id="rGrid"></div>
+      <div class="lv-badges" id="rBadges"></div>
     </div>
-
-    <!-- Contrat -->
     <div class="contract-wrap">
-      <div class="contract-header">
-        <span style="font-size:13px;font-weight:700;color:var(--white)">Contrat de prestation</span>
+      <div class="contract-top">
+        <span>Contrat de prestation</span>
         <span>SAS New Vision Production</span>
       </div>
-      <div class="contract-text" id="contractText"></div>
+      <div class="contract-body" id="contractBody"></div>
     </div>
-
-    <!-- Consentement -->
-    <div class="consent-box">
-      <label class="consent-check-row">
-        <input type="checkbox" id="consentCheck" class="consent-checkbox">
-        <span class="consent-text" id="consentTextEl">
-          Je certifie avoir lu et accepté l'intégralité du présent contrat.
-        </span>
-      </label>
+    <div class="consent">
+      <label><input type="checkbox" id="consentChk" class="consent-chk"><span class="consent-text" id="consentTxt">Je certifie avoir lu et accepté l'intégralité du présent contrat.</span></label>
     </div>
-
-    <!-- Signature -->
     <div class="sig-wrap">
-      <div class="sig-label">Votre nom complet</div>
-      <div class="sig-name-row">
-        <input type="text" id="sigName" placeholder="Prénom NOM">
-      </div>
-      <div class="sig-label">Signature manuscrite</div>
-      <div class="canvas-wrap">
+      <p class="sig-lbl">Nom complet *</p>
+      <div class="sig-name-wrap"><input type="text" id="sigName" placeholder="Prénom NOM"></div>
+      <p class="sig-lbl">Signature manuscrite *</p>
+      <div class="canvas-outer">
         <canvas id="sigCanvas"></canvas>
-        <div class="canvas-hint" id="canvasHint">Signez ici avec votre souris ou votre doigt</div>
+        <div class="canvas-hint" id="canvasHint">Signez ici avec votre doigt ou votre souris</div>
       </div>
-      <button type="button" class="sig-clear" onclick="clearCanvas()">✕ Effacer la signature</button>
+      <button type="button" class="sig-clear-btn" onclick="clearCanvas()">✕ Effacer</button>
     </div>
-
-    <div class="msg msg-error" id="clientError">
-      <span>⚠</span><span id="clientErrorText"></span>
-    </div>
-
-    <button class="btn btn-gold btn-full" id="signBtn" onclick="handleSign()" style="padding:16px;font-size:15px">
-      ✦ Signer et valider le contrat
-    </button>
-
-    <p style="text-align:center;font-size:11px;color:rgba(245,245,240,.25);margin-top:12px">
-      Signature électronique à valeur légale — Règlement eIDAS (UE) n° 910/2014
-    </p>
-
+    <div class="err-msg" id="eSign"><span>⚠</span><span id="eSignT"></span></div>
+    <button class="btn btn-primary btn-full" id="signBtn" onclick="doSign()">✦ Signer et valider le contrat</button>
+    <p class="eidas">Signature électronique à valeur légale — Règlement eIDAS (UE) n° 910/2014</p>
   </div>
 </div>
 
-<!-- ══════════════════════════════════════════
-     POST-SIGNATURE OVERLAY
-═══════════════════════════════════════════ -->
-<div class="signed-overlay" id="signedOverlay">
+<!-- ════════════ SIGNED OVERLAY ════════════ -->
+<div class="signed-ov" id="signedOv">
   <div class="signed-icon">✓</div>
   <div class="signed-title">Contrat signé !</div>
-  <div class="signed-sub" id="signedSubText">
-    Votre signature a été enregistrée. Vous allez être redirigé vers votre espace onboarding.
-  </div>
+  <div class="signed-sub" id="signedSub">Votre contrat a été enregistré. Bienvenue chez New Vision Production.</div>
   <div class="signed-actions">
-    <button class="btn btn-gold btn-full" onclick="downloadPDF()">⬇ Télécharger le PDF</button>
-    <button class="btn btn-outline btn-full" onclick="goOnboarding()">→ Accéder à l'espace onboarding</button>
+    <button class="btn btn-primary btn-full" onclick="downloadPDF()">⬇ Télécharger le PDF</button>
+    <button class="btn btn-ghost btn-full" onclick="goOnboarding()">→ Espace onboarding</button>
   </div>
-  <div class="redirect-bar">Redirection automatique dans <span id="redirectCount">5</span>s…</div>
-  <div class="redirect-progress" style="max-width:340px;margin:8px auto 0">
-    <div class="redirect-fill" id="redirectFill" style="width:0%"></div>
-  </div>
+  <div class="redir-bar">Redirection dans <span id="redirN">6</span>s</div>
+  <div class="redir-track"><div class="redir-fill" id="redirFill"></div></div>
 </div>
 
-<!-- PDF Overlay -->
-<div class="pdf-overlay" id="pdfOverlay">
-  <div class="pdf-spinner"></div>
-  <div class="pdf-status" id="pdfStatus">Génération du PDF…</div>
+<!-- ════════════ PDF OVERLAY ════════════ -->
+<div class="pdf-ov" id="pdfOv">
+  <div class="pdf-spin"></div>
+  <div class="pdf-bar-wrap"><div class="pdf-bar" id="pdfBar"></div></div>
+  <div class="pdf-status" id="pdfSt">Génération en cours…</div>
 </div>
 
 <script>
-// ══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════
 // CONFIG
-// ══════════════════════════════════════════════════════
-// Utilise des URLs relatives si servi depuis le dashboard lui-même (local ou Render)
-// Sinon utilise l'URL Render absolue (si déployé sur Netlify séparé)
-const DASHBOARD_API = (window.location.hostname === 'localhost' || 
-                       window.location.hostname === 'new-vision-dashboard-9468.onrender.com')
-                       ? '' 
-                       : 'https://new-vision-dashboard-9468.onrender.com'
+// ═══════════════════════════════════════════
+const DASHBOARD_API = window.location.hostname === 'new-vision-dashboard-9468.onrender.com'
+  ? ''
+  : window.location.hostname === 'localhost'
+  ? 'http://localhost:3000'
+  : 'https://new-vision-dashboard-9468.onrender.com'
+
 const PLATFORM_URL  = window.location.origin + window.location.pathname
 const ONBOARDING_URL = 'https://nv-onboarding-client.netlify.app'
 
@@ -609,351 +457,334 @@ const AGENCY = {
   capital: '500,00 €',
   rcs: 'Nantes',
   address: '2 Le Village Boucher, 44690 Monnières, France',
-  managers: 'Noah Rapharin & Maël Labroche, Co-dirigeants',
-  email: 'contact@newvisionproduction.fr'
+  managers: 'Noah Rapharin & Maël Labroche, Co-dirigeants'
 }
 
-// ══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════
 // STATE
-// ══════════════════════════════════════════════════════
-let missionType = 'MRR'
+// ═══════════════════════════════════════════
+let mission = 'MRR'
+let currentStep = 1
 let contractData = null
 let generatedCode = null
-let signatureDataUrl = null
-let hasDrawn = false
+let sigDataUrl = null
+let sigHasContent = false
 
-// ══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════
 // ROUTING
-// ══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════
 async function startApp() {
-  const params = new URLSearchParams(window.location.search)
-  const code = params.get('c')
-  if (code) {
-    showPage('loading')
-    try {
-      const res = await fetch(`${DASHBOARD_API}/api/contracts/${code}`)
-      if (!res.ok) throw new Error('not found')
-      contractData = await res.json()
-      showPage('client')
-      renderClient()
-    } catch(e) {
-      showPage('error')
-    }
-  } else {
-    showPage('admin')
+  const code = new URLSearchParams(window.location.search).get('c')
+  if (!code) { showPage('admin'); return }
+  showPage('loading')
+  try {
+    const r = await fetch(`${DASHBOARD_API}/api/contracts/${code}`)
+    if (!r.ok) throw new Error()
+    contractData = await r.json()
+    renderClient()
+    showPage('client')
+  } catch {
+    showPage('error')
   }
 }
 
-function showPage(name) {
+function showPage(n) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'))
-  const map = { admin: 'pageAdmin', client: 'pageClient', loading: 'pageLoading', error: 'pageError' }
-  document.getElementById(map[name]).classList.add('active')
+  const map = { admin:'pageAdmin', client:'pageClient', loading:'pageLoading', error:'pageError' }
+  document.getElementById(map[n]).classList.add('active')
 }
 
-// ══════════════════════════════════════════════════════
-// ADMIN — Mission type toggle
-// ══════════════════════════════════════════════════════
-function setMission(type) {
-  missionType = type
-  document.getElementById('btnMRR').classList.toggle('active', type === 'MRR')
-  document.getElementById('btnPonctuel').classList.toggle('active', type === 'PONCTUEL')
-  document.getElementById('fieldsMRR').style.display = type === 'MRR' ? '' : 'none'
-  document.getElementById('fieldsPonctuel').style.display = type === 'PONCTUEL' ? '' : 'none'
-  document.getElementById('livrableTitle').textContent = type === 'MRR' ? 'Livrables mensuels' : 'Livrables / Description de la prestation'
-  document.getElementById('sectionCondTitle').textContent = type === 'MRR' ? 'Conditions de collaboration' : 'Conditions financières'
+// ═══════════════════════════════════════════
+// ADMIN — Mission toggle
+// ═══════════════════════════════════════════
+function setMission(m) {
+  mission = m
+  document.getElementById('btnMRR').classList.toggle('active', m === 'MRR')
+  document.getElementById('btnPonctuel').classList.toggle('active', m === 'PONCTUEL')
+  document.getElementById('fMRR').style.display = m === 'MRR' ? '' : 'none'
+  document.getElementById('fPonctuel').style.display = m === 'PONCTUEL' ? '' : 'none'
+  document.getElementById('condTitle').textContent = m === 'MRR' ? 'Conditions de collaboration' : 'Conditions financières'
+  document.getElementById('lvTitle').textContent = m === 'MRR' ? 'Livrables mensuels' : 'Livrables & description'
 }
 
-// ══════════════════════════════════════════════════════
-// ADMIN — Form submission → generate link
-// ══════════════════════════════════════════════════════
-document.getElementById('adminForm').addEventListener('submit', async function(e) {
-  e.preventDefault()
-  hideMsg('adminError')
-
-  const name    = v('clientName')
-  const addr    = v('clientAddress')
-  const email   = v('clientEmail')
-  const company = v('clientCompany')
-  const ville   = v('villeSignature') || v('villePonctuel') || 'Nantes'
-
-  // MRR fields
-  const montant = v('montant')
-  const duree   = v('duree')
-  const dateDebut = v('dateDebut')
-  // Ponctuel fields
-  const montantTotal = v('montantTotal')
-  const acompte = v('acompte')
-  const dateLivraison = v('dateLivraison')
-
-  // Validate required
-  const requiredBase = [
-    { id: 'clientName', val: name },
-    { id: 'clientAddress', val: addr },
-    { id: 'clientEmail', val: email },
-  ]
-  const requiredMRR = missionType === 'MRR' ? [
-    { id: 'montant', val: montant },
-    { id: 'duree', val: duree },
-    { id: 'dateDebut', val: dateDebut },
-  ] : []
-  const requiredPonctuel = missionType === 'PONCTUEL' ? [
-    { id: 'montantTotal', val: montantTotal },
-  ] : []
-
-  const allRequired = [...requiredBase, ...requiredMRR, ...requiredPonctuel]
-  let hasError = false
-  allRequired.forEach(({ id, val }) => {
-    const el = document.getElementById(id)
-    if (!val) { el.classList.add('field-error'); hasError = true }
-    else el.classList.remove('field-error')
-  })
-
-  if (hasError) {
-    showMsg('adminError', 'Veuillez remplir tous les champs obligatoires (marqués en rouge).')
-    return
+// ═══════════════════════════════════════════
+// ADMIN — Multi-step navigation
+// ═══════════════════════════════════════════
+function goStep(n) {
+  if (n > currentStep) {
+    // Validate current step
+    if (currentStep === 1 && !validateStep1()) return
+    if (currentStep === 2 && !validateStep2()) return
   }
+  document.getElementById('step' + currentStep).style.display = 'none'
+  document.getElementById('step' + n).style.display = 'block'
+  document.getElementById('step' + n).scrollIntoView({ behavior: 'smooth', block: 'start' })
+  // Update step bar
+  for (let i = 1; i <= 3; i++) {
+    const dot = document.getElementById('d' + i)
+    const s   = document.getElementById('s' + i)
+    if (i < n)  { dot.className = 'step-dot done'; s.className = 'step done' }
+    else if (i === n) { dot.className = 'step-dot active'; s.className = 'step active' }
+    else        { dot.className = 'step-dot'; s.className = 'step' }
+    if (i < 3)  { document.getElementById('l' + i).className = 'step-line' + (i < n ? ' done' : '') }
+  }
+  currentStep = n
+  hideErr('e1'); hideErr('e2'); hideErr('e3')
+}
+
+function validateStep1() {
+  const name = val('clientName'), addr = val('clientAddress'), email = val('clientEmail')
+  const errs = [{ id:'clientName', v:name }, { id:'clientAddress', v:addr }, { id:'clientEmail', v:email }]
+  let ok = true
+  errs.forEach(e => {
+    const el = document.getElementById(e.id)
+    if (!e.v) { el.classList.add('field-err'); ok = false }
+    else el.classList.remove('field-err')
+  })
+  if (!ok) showErr('e1', 'Veuillez remplir les champs obligatoires.')
+  return ok
+}
+
+function validateStep2() {
+  if (mission === 'MRR') {
+    const m = val('montant'), d = val('duree'), dd = val('dateDebut')
+    const errs = [{ id:'montant', v:m }, { id:'duree', v:d }, { id:'dateDebut', v:dd }]
+    let ok = true
+    errs.forEach(e => {
+      const el = document.getElementById(e.id)
+      if (!e.v) { el.classList.add('field-err'); ok = false }
+      else el.classList.remove('field-err')
+    })
+    if (!ok) { showErr('e2', 'Veuillez remplir les champs obligatoires.'); return false }
+  } else {
+    const m = val('montantTotal')
+    if (!m) { document.getElementById('montantTotal').classList.add('field-err'); showErr('e2', 'Veuillez indiquer le montant total.'); return false }
+  }
+  return true
+}
+
+// ═══════════════════════════════════════════
+// ADMIN — Generate contract
+// ═══════════════════════════════════════════
+document.getElementById('adminForm').addEventListener('submit', async (e) => {
+  e.preventDefault()
+  const btn = document.getElementById('genBtn')
 
   // Build livrables
   const livDefs = [
-    { chk: 'lReels',        qty: 'qReels',      detail: 'dReels',       label: 'Reels / Shorts',                   hasQty: true },
-    { chk: 'lYoutube',      qty: 'qYoutube',    detail: 'dYoutube',     label: 'Vidéos YouTube longue durée',      hasQty: true },
-    { chk: 'lMiniatures',   qty: 'qMiniatures', detail: 'dMiniatures',  label: 'Miniatures YouTube',               hasQty: true },
-    { chk: 'lPhotos',       qty: 'qPhotos',     detail: 'dPhotos',      label: 'Photos / Visuels',                 hasQty: true },
-    { chk: 'lCreativeAds',  qty: 'qCreativeAds',detail: 'dCreativeAds', label: 'Créatives Ads',                    hasQty: true },
-    { chk: 'lVSL',          qty: 'qVSL',        detail: 'dVSL',         label: 'VSL (Video Sales Letter)',          hasQty: true },
-    { chk: 'lTournage',     qty: 'qTournage',   detail: 'dTournage',    label: 'Journée(s) de tournage',           hasQty: true },
-    { chk: 'lProgrammation',qty: null,           detail: 'dProgrammation',label: 'Programmation & stratégie contenu', hasQty: false },
+    { chk:'lReels',    qty:'qReels',    det:'dReels',    lbl:'Reels / Shorts',                  hasQty:true  },
+    { chk:'lYoutube',  qty:'qYoutube',  det:'dYoutube',  lbl:'Vidéos YouTube longue durée',     hasQty:true  },
+    { chk:'lMiniatures',qty:'qMiniatures',det:'dMiniatures',lbl:'Miniatures YouTube',           hasQty:true  },
+    { chk:'lPhotos',   qty:'qPhotos',   det:'dPhotos',   lbl:'Photos / Visuels',                hasQty:true  },
+    { chk:'lAds',      qty:'qAds',      det:'dAds',      lbl:'Créatives Ads',                   hasQty:true  },
+    { chk:'lVSL',      qty:'qVSL',      det:'dVSL',      lbl:'VSL (Video Sales Letter)',         hasQty:true  },
+    { chk:'lTournage', qty:'qTournage', det:'dTournage', lbl:'Journée(s) de tournage',           hasQty:true  },
+    { chk:'lProg',     qty:null,        det:'dProg',     lbl:'Programmation & stratégie contenu',hasQty:false },
   ]
   const livrables = []
-  livDefs.forEach(def => {
-    if (!document.getElementById(def.chk).checked) return
-    const qty = def.hasQty ? (document.getElementById(def.qty).value || '?') : null
-    const detail = document.getElementById(def.detail).value.trim()
-    livrables.push({ label: def.label, qty, hasQty: def.hasQty, detail })
+  livDefs.forEach(d => {
+    if (!document.getElementById(d.chk).checked) return
+    const qty = d.hasQty ? (document.getElementById(d.qty).value || '?') : null
+    const det = document.getElementById(d.det).value.trim()
+    livrables.push({ label:d.lbl, qty, hasQty:d.hasQty, detail:det })
   })
   if (document.getElementById('lAutre').checked) {
-    const t = v('tAutre')
-    const detail = document.getElementById('dAutre').value.trim()
-    if (t) livrables.push({ label: t, qty: null, hasQty: false, detail })
+    const t = val('tAutre'), det = document.getElementById('dAutre').value.trim()
+    if (t) livrables.push({ label:t, qty:null, hasQty:false, detail:det })
   }
 
-  // Build payload
+  const ville = val('ville') || val('villePonctuel') || 'Nantes'
+  const contractFullData = {
+    name: val('clientName'), company: val('clientCompany'), address: val('clientAddress'),
+    email: val('clientEmail'), ville, mission,
+    montant: mission === 'MRR' ? parseFloat(val('montant')) : null,
+    dureeNum: mission === 'MRR' ? parseInt(val('duree')) : null,
+    dureeLabel: mission === 'MRR' ? dureeLabel(val('duree')) : null,
+    dateDebut: mission === 'MRR' ? val('dateDebut') : null,
+    montantTotal: mission === 'PONCTUEL' ? parseFloat(val('montantTotal')) : null,
+    acompte: mission === 'PONCTUEL' ? parseInt(val('acompte')) : null,
+    dateLivraison: mission === 'PONCTUEL' ? val('dateLivraison') : null,
+    livrables
+  }
+
   const payload = {
-    clientName: name,
-    clientEmail: email,
-    clientCompany: company || null,
-    clientAddress: addr,
-    missionType,
-    ville,
+    clientName: contractFullData.name,
+    clientEmail: contractFullData.email,
+    clientCompany: contractFullData.company || null,
+    clientAddress: contractFullData.address,
+    missionType: mission,
+    monthlyAmount: mission === 'MRR' ? contractFullData.montant : null,
+    totalAmount: mission === 'PONCTUEL' ? contractFullData.montantTotal : null,
+    durationMonths: mission === 'MRR' ? contractFullData.dureeNum : null,
+    startDate: mission === 'MRR' ? contractFullData.dateDebut : null,
+    depositPercent: mission === 'PONCTUEL' ? contractFullData.acompte : null,
     deliverables: livrables,
-    contractData: {
-      name, company, addr, email, ville, missionType,
-      montant: missionType === 'MRR' ? parseFloat(montant) : null,
-      duree: missionType === 'MRR' ? duree : null,
-      dateDebut: missionType === 'MRR' ? dateDebut : null,
-      montantTotal: missionType === 'PONCTUEL' ? parseFloat(montantTotal) : null,
-      acompte: missionType === 'PONCTUEL' ? parseInt(acompte) : null,
-      dateLivraison: missionType === 'PONCTUEL' ? dateLivraison : null,
-      livrables,
-    }
-  }
-  if (missionType === 'MRR') {
-    payload.monthlyAmount = parseFloat(montant)
-    payload.durationMonths = parseInt(duree)
-    payload.startDate = dateDebut
-  } else {
-    payload.totalAmount = parseFloat(montantTotal)
-    payload.depositPercent = parseInt(acompte)
+    contractData: contractFullData
   }
 
-  const btn = document.getElementById('adminSubmitBtn')
-  const btnText = document.getElementById('adminBtnText')
-  btn.disabled = true
-  btn.classList.add('loading')
-  btnText.textContent = '⏳ Génération en cours…'
-
+  btn.disabled = true; btn.textContent = '⏳ Génération…'
   try {
-    const res = await fetch(`${DASHBOARD_API}/api/contracts`, {
+    const r = await fetch(`${DASHBOARD_API}/api/contracts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     })
-    if (!res.ok) throw new Error('API error')
-    const data = await res.json()
+    if (!r.ok) throw new Error('API error')
+    const data = await r.json()
     generatedCode = data.shortCode
-    const shareUrl = `${PLATFORM_URL}?c=${generatedCode}`
-    document.getElementById('linkValue').textContent = shareUrl
+    const link = `${PLATFORM_URL}?c=${generatedCode}`
+    document.getElementById('linkUrl').textContent = link
     document.getElementById('linkBox').classList.add('show')
-    document.getElementById('linkBox').scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-    btnText.textContent = '✓ Lien régénéré'
-  } catch(err) {
-    showMsg('adminError', 'Erreur lors de la création du contrat. Vérifiez votre connexion.')
-    btnText.textContent = '✦ Générer le lien client'
+    document.getElementById('linkBox').scrollIntoView({ behavior:'smooth', block:'nearest' })
+    btn.textContent = '✓ Nouveau lien'
+  } catch {
+    showErr('e3', 'Erreur lors de la création du contrat. Vérifiez la connexion.')
+    btn.textContent = '✦ Générer le lien client'
   } finally {
     btn.disabled = false
-    btn.classList.remove('loading')
   }
 })
 
 function copyLink() {
-  const link = document.getElementById('linkValue').textContent
+  const link = document.getElementById('linkUrl').textContent
   navigator.clipboard.writeText(link).then(() => {
-    const msg = document.getElementById('copiedMsg')
-    msg.classList.add('show')
-    setTimeout(() => msg.classList.remove('show'), 2500)
+    const m = document.getElementById('copiedMsg')
+    m.classList.add('show')
+    setTimeout(() => m.classList.remove('show'), 2500)
   })
 }
+function openLink() { window.open(document.getElementById('linkUrl').textContent, '_blank') }
 
-function openLink() {
-  const link = document.getElementById('linkValue').textContent
-  window.open(link, '_blank')
+function dureeLabel(v) {
+  const map = {'1':'1 mois','3':'3 mois','6':'6 mois','12':'12 mois'}
+  return map[v] || v + ' mois'
 }
 
-// ══════════════════════════════════════════════════════
-// CLIENT — Render contract
-// ══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════
+// CLIENT — Render
+// ═══════════════════════════════════════════
 function renderClient() {
-  const d = contractData.contractData || contractData
-  const isMRR = (contractData.missionType || 'MRR') === 'MRR'
+  const c = contractData
+  const d = c.contractData || c
+  const isMRR = c.missionType === 'MRR'
+  const livrables = c.deliverables || d.livrables || []
 
-  // Recap card
-  document.getElementById('rClientName').textContent = contractData.clientName + (contractData.clientCompany ? ` — ${contractData.clientCompany}` : '')
-  document.getElementById('rMissionType').textContent = isMRR ? 'Retainer mensuel' : 'Projet ponctuel'
+  // Recap
+  document.getElementById('rName').textContent = c.clientName + (c.clientCompany ? ' — ' + c.clientCompany : '')
+  document.getElementById('rType').textContent = isMRR ? '🔄 Retainer mensuel' : '⚡ Projet ponctuel'
 
   if (isMRR) {
-    document.getElementById('rMontant').textContent = fmtEUR(contractData.monthlyAmount || 0)
-    document.getElementById('rMontantLabel').textContent = '/mois TTC'
+    const durN = c.durationMonths || d.dureeNum || 3
     document.getElementById('rGrid').innerHTML = `
-      <div class="recap-item"><label>Durée</label><span>${d.duree || `${contractData.durationMonths} mois`}</span></div>
-      <div class="recap-item"><label>Début</label><span>${fmtDateFR(contractData.startDate || d.dateDebut)}</span></div>
+      <div class="recap-item"><label>Mensualité TTC</label><div class="val big">${EUR(c.monthlyAmount || 0)}</div></div>
+      <div class="recap-item"><label>Durée</label><div class="val">${durN} mois</div></div>
+      <div class="recap-item"><label>Date de début</label><div class="val">${dateFR(c.startDate || d.dateDebut)}</div></div>
+      <div class="recap-item"><label>Total contrat</label><div class="val">${EUR((c.monthlyAmount||0) * durN)}</div></div>
     `
   } else {
-    document.getElementById('rMontant').textContent = fmtEUR(contractData.totalAmount || 0)
-    document.getElementById('rMontantLabel').textContent = 'total TTC'
-    const pct = contractData.depositPercent || 0
+    const pct = c.depositPercent || 0
+    const dep = pct > 0 ? EUR((c.totalAmount||0) * pct / 100) : null
     document.getElementById('rGrid').innerHTML = `
-      <div class="recap-item"><label>Acompte</label><span>${pct > 0 ? pct + '%' : 'Sans acompte'}</span></div>
-      <div class="recap-item"><label>Livraison</label><span>${d.dateLivraison ? fmtDateFR(d.dateLivraison) : 'À définir'}</span></div>
+      <div class="recap-item"><label>Montant total TTC</label><div class="val big">${EUR(c.totalAmount || 0)}</div></div>
+      <div class="recap-item"><label>Acompte</label><div class="val">${pct > 0 ? pct + '%' + (dep ? ' — ' + dep : '') : 'Paiement à la livraison'}</div></div>
+      <div class="recap-item"><label>Solde</label><div class="val">${pct > 0 && pct < 100 ? (100-pct) + '% à la livraison' : pct === 100 ? 'Déjà inclus' : '100% à la livraison'}</div></div>
+      <div class="recap-item"><label>Livraison</label><div class="val">${d.dateLivraison ? dateFR(d.dateLivraison) : 'À définir'}</div></div>
     `
   }
 
-  // Livrables badges
-  const livrables = contractData.deliverables || d.livrables || []
-  const badgesEl = document.getElementById('rLivrables')
+  const badgesEl = document.getElementById('rBadges')
   if (!livrables.length) {
-    badgesEl.innerHTML = '<span style="font-size:12px;color:rgba(245,245,240,.3)">À définir</span>'
+    badgesEl.innerHTML = '<span style="font-size:11px;color:var(--faint)">À définir</span>'
   } else {
-    badgesEl.innerHTML = livrables.map(l => {
-      const qty = l.hasQty && l.qty ? ` × ${l.qty}` : ''
-      return `<span class="livrable-badge">◆ ${l.label}${qty}</span>`
-    }).join('')
+    badgesEl.innerHTML = livrables.map(l => `<span class="lv-badge">◆ ${l.label}${l.hasQty && l.qty ? ' ×' + l.qty : ''}</span>`).join('')
   }
 
-  // Contract text
-  document.getElementById('contractText').innerHTML = buildContractHTML(contractData)
+  document.getElementById('contractBody').innerHTML = buildContractHTML(c)
 
-  // Consent
-  const dur = contractData.durationMonths ? `${contractData.durationMonths} mois` : (d.duree || '')
-  document.getElementById('consentTextEl').innerHTML = isMRR
-    ? `Je certifie avoir lu et accepté l'intégralité du présent contrat de prestation New Vision Production, sans réserve. Je reconnais que ce document constitue un engagement contractuel ferme et que la durée minimale d'engagement de <strong>${dur}</strong> s'applique avec renouvellement automatique sauf préavis de 30 jours.`
-    : `Je certifie avoir lu et accepté l'intégralité du présent contrat de prestation New Vision Production, sans réserve. Je reconnais que ce document constitue un engagement contractuel ferme et m'engage à respecter les modalités de paiement définies.`
+  const dur = (c.durationMonths || d.dureeNum || '?') + ' mois'
+  document.getElementById('consentTxt').innerHTML = isMRR
+    ? `Je certifie avoir lu et accepté l'intégralité du présent contrat de prestation New Vision Production, sans réserve. Je reconnais que ce document constitue un engagement contractuel ferme et que la durée minimale de <strong>${dur}</strong> s'applique avec renouvellement automatique sauf préavis de 30 jours.`
+    : `Je certifie avoir lu et accepté l'intégralité du présent contrat de prestation New Vision Production, sans réserve. Je m'engage à respecter les modalités de paiement définies ci-dessus.`
 
-  // Pre-fill name
-  document.getElementById('sigName').value = contractData.clientName || ''
-
-  // Init canvas
+  document.getElementById('sigName').value = c.clientName || ''
   initCanvas()
 }
 
 function buildContractHTML(c) {
   const d = c.contractData || c
-  const isMRR = (c.missionType || 'MRR') === 'MRR'
+  const isMRR = c.missionType === 'MRR'
   const livrables = c.deliverables || d.livrables || []
   const ville = d.ville || 'Nantes'
-  const dateSignature = fmtDateFR(new Date().toISOString().slice(0, 10))
-  const clientLine = c.clientCompany ? `${c.clientName} (${c.clientCompany}) — ${c.clientAddress || ''}` : `${c.clientName} — ${c.clientAddress || ''}`
+  const today = dateFR(new Date().toISOString().slice(0, 10))
 
   const livrablesList = livrables.length
-    ? livrables.map(l => {
-        let line = `  • ${l.label}${l.hasQty && l.qty ? ` : ${l.qty} par mois` : ''}`
-        if (l.detail) line += `\n    (${l.detail})`
-        return line
-      }).join('\n')
-    : '  • (livrables à définir par avenant)'
+    ? livrables.map(l => '• ' + l.label + (l.hasQty && l.qty ? ' : ' + l.qty + ' par mois' : '') + (l.detail ? '\n  (' + l.detail + ')' : '')).join('\n')
+    : '• (livrables à définir par avenant)'
 
-  let header = `CONTRAT DE PRESTATION DE SERVICES
-Entre les soussignés :
+  const clientLine = c.clientName + (c.clientCompany ? ' (' + c.clientCompany + ')' : '') + (c.clientAddress ? ' — ' + c.clientAddress : '')
 
-${AGENCY.name}
-SIRET : ${AGENCY.siret} — Capital ${AGENCY.capital} — RCS ${AGENCY.rcs}
-${AGENCY.address}
-Représentée par ${AGENCY.managers}
-Ci-après dénommée "le Prestataire"
-
-ET
-
-${clientLine}
-Ci-après dénommé "le Client"
-
-Fait à ${ville}, le ${dateSignature}
-`
+  let intro = `<span class="ct">PARTIES AU CONTRAT</span>LE PRESTATAIRE\n${AGENCY.name}\nSIRET : ${AGENCY.siret} — Capital ${AGENCY.capital} — RCS ${AGENCY.rcs}\n${AGENCY.address}\nReprésenté par ${AGENCY.managers}\nCi-après dénommé "le Prestataire"\n\nLE CLIENT\n${clientLine}\nCi-après dénommé "le Client"\n\nFait à ${ville}, le ${today}\n`
 
   let articles = []
 
   if (isMRR) {
-    const dateDebut = fmtDateFR(c.startDate || d.dateDebut)
-    const dur = d.duree || `${c.durationMonths} mois`
-    const montant = fmtEUR(c.monthlyAmount || 0)
+    const dateDebut = dateFR(c.startDate || d.dateDebut)
+    const durLabel = (d.dureeLabel || (c.durationMonths || d.dureeNum || '?') + ' mois')
+    const montant = EUR(c.monthlyAmount || 0)
     articles = [
-      { num:'1', title:'OBJET DU CONTRAT', body:`Le présent contrat définit les conditions dans lesquelles le Prestataire s'engage à fournir au Client des prestations de création de contenu visuel et de gestion de présence digitale. Ce contrat est un engagement de moyens, et non de résultats.` },
-      { num:'2', title:'PRESTATIONS', body:`Dans le cadre de la collaboration débutant le ${dateDebut}, le Prestataire s'engage à fournir mensuellement :\n${livrablesList}\n\nTout service additionnel fera l'objet d'un avenant signé par les deux parties.` },
-      { num:'3', title:'DURÉE ET RENOUVELLEMENT', body:`Le présent contrat est conclu pour une durée minimale de ${dur} à compter du ${dateDebut}. À l'issue de cette période, il se renouvelle automatiquement par périodes successives de même durée, sauf préavis de résiliation adressé par écrit (email) au moins 30 jours avant la date d'échéance.` },
-      { num:'4', title:'CONDITIONS FINANCIÈRES', body:`Le Client s'engage à régler la somme de ${montant} TTC par mois, payable en début de mois par virement bancaire.\nTout retard de paiement entraînera des pénalités de 15% du montant dû.\nEn cas de non-paiement de plus de 30 jours, le Prestataire se réserve le droit de suspendre les prestations sans préjudice de toute autre action.\nAucun remboursement des mensualités déjà réglées ne sera effectué sauf cas de force majeure.` },
-      { num:'5', title:'PROPRIÉTÉ INTELLECTUELLE', body:`Les contenus produits dans le cadre du présent contrat sont cédés au Client à titre non-exclusif, pour une utilisation commerciale sur ses propres plateformes digitales, à compter du règlement intégral de chaque mensualité.\nLe Prestataire conserve le droit de faire figurer ces réalisations dans son portfolio et ses supports de communication, sauf demande contraire écrite du Client.` },
-      { num:'6', title:'RÉSILIATION', body:`Le Client peut résilier le présent contrat à l'échéance de la période minimale d'engagement, par email avec un préavis de 30 jours.\nEn cas de rupture anticipée avant la fin de la durée minimale, le Client s'engage à régler l'intégralité des mensualités restantes dues.` },
-      { num:'7', title:'CONFIDENTIALITÉ', body:`Chaque partie s'engage à garder strictement confidentielles toutes les informations commerciales, techniques ou stratégiques échangées dans le cadre de cette collaboration, et à ne pas les divulguer à des tiers sans accord préalable écrit.` },
-      { num:'8', title:'DISPOSITIONS GÉNÉRALES', body:`Le présent contrat est régi par le droit français. Tout litige relatif à son interprétation ou son exécution sera soumis aux tribunaux compétents du ressort de ${ville}.\nLe fait pour l'une des parties de ne pas se prévaloir d'un manquement de l'autre partie à l'une quelconque des obligations ne saurait être interprété comme une renonciation à l'obligation en cause.` },
+      { n:'1', t:'OBJET DU CONTRAT', b:`Le présent contrat définit les conditions dans lesquelles le Prestataire s'engage à fournir au Client des prestations de création de contenu visuel et de gestion de présence digitale. Ce contrat est un engagement de moyens, et non de résultats.` },
+      { n:'2', t:'PRESTATIONS', b:`Dans le cadre de la collaboration débutant le ${dateDebut}, le Prestataire s'engage à fournir mensuellement :\n${livrablesList}\n\nTout service additionnel fera l'objet d'un avenant signé par les deux parties.` },
+      { n:'3', t:'DURÉE ET RENOUVELLEMENT', b:`Le présent contrat est conclu pour une durée minimale de ${durLabel} à compter du ${dateDebut}.\nÀ l'issue de cette période, il se renouvelle automatiquement par périodes successives de même durée, sauf préavis de résiliation adressé par écrit (email) au moins 30 jours avant la date d'échéance.` },
+      { n:'4', t:'CONDITIONS FINANCIÈRES', b:`Le Client s'engage à régler la somme de ${montant} TTC par mois, payable en début de mois par virement bancaire sur présentation du RIB communiqué par le Prestataire.\nTout retard de paiement entraînera des pénalités de 15%.\nEn cas de non-paiement, le Prestataire se réserve le droit de suspendre les prestations. Aucun remboursement ne sera effectué, sauf cas de force majeure.` },
+      { n:'5', t:'OBLIGATIONS DU PRESTATAIRE', b:`• Réaliser les prestations avec professionnalisme\n• Respecter les délais dans la mesure du raisonnable\n• Maintenir la confidentialité des informations du Client\n• Informer le Client de toute modification majeure` },
+      { n:'6', t:'OBLIGATIONS DU CLIENT', b:`• Transmettre les informations nécessaires à la bonne réalisation\n• Être réactif dans la validation des livrables\n• Respecter les conditions de paiement\n• Ne pas modifier les visuels sans accord préalable` },
+      { n:'7', t:'LIMITATION DE RESPONSABILITÉ', b:`Le Prestataire ne peut être tenu responsable d'un résultat commercial non atteint à partir des contenus créés, ni d'un usage non conforme des visuels par le Client.` },
+      { n:'8', t:'PROPRIÉTÉ INTELLECTUELLE', b:`Les créations demeurent propriété du Prestataire jusqu'au paiement complet.\nUne fois la totalité réglée, les droits d'utilisation sont cédés pour : réseaux sociaux, site web, publicité, print.\nLe Prestataire se réserve le droit d'utiliser les créations à des fins promotionnelles, sauf refus écrit du Client.` },
+      { n:'9', t:'RÉTRACTATION', b:`Le Client renonce à son droit de rétractation dès la validation du contrat et la réservation du premier tournage.` },
+      { n:'10', t:'DONNÉES PERSONNELLES', b:`Les données du Client sont utilisées uniquement dans le cadre de la mission, conformément au RGPD. Aucune transmission à un tiers sans accord.` },
+      { n:'11', t:'RÉSILIATION', b:`Résiliation possible par l'une ou l'autre des parties avec un préavis de 30 jours avant toute échéance.\nEn cas de non-paiement ou non-coopération, le Prestataire peut résilier immédiatement.` },
+      { n:'12', t:'DROIT APPLICABLE', b:`Contrat régi par le droit français. Tout litige sera porté devant le Tribunal de Commerce de Nantes.` }
     ]
   } else {
+    const total = EUR(c.totalAmount || 0)
     const pct = c.depositPercent || 0
-    const total = fmtEUR(c.totalAmount || 0)
-    const deposit = pct > 0 ? `${pct}% à la commande (${fmtEUR((c.totalAmount || 0) * pct / 100)})` : 'Paiement intégral à la livraison'
-    const solde = pct > 0 && pct < 100 ? `${100-pct}% à la livraison (${fmtEUR((c.totalAmount || 0) * (100-pct) / 100)})` : null
-    const livraison = d.dateLivraison ? fmtDateFR(d.dateLivraison) : 'à définir en accord entre les parties'
+    const dep = pct > 0 ? pct + '% à la commande (' + EUR((c.totalAmount||0)*pct/100) + ')' : 'Aucun acompte'
+    const solde = pct > 0 && pct < 100 ? (100-pct) + '% à la livraison (' + EUR((c.totalAmount||0)*(100-pct)/100) + ')' : pct===100 ? 'Paiement intégral à la commande' : '100% à la livraison'
+    const livDat = d.dateLivraison ? dateFR(d.dateLivraison) : 'à définir'
     articles = [
-      { num:'1', title:'OBJET DU CONTRAT', body:`Le présent contrat définit les conditions dans lesquelles le Prestataire s'engage à réaliser pour le Client une prestation de création de contenu audiovisuel et/ou visuel, telle que décrite ci-dessous.` },
-      { num:'2', title:'PRESTATIONS', body:`Le Prestataire s'engage à réaliser les prestations suivantes :\n${livrablesList}\n\nTout service additionnel non prévu dans le présent contrat fera l'objet d'un devis complémentaire.` },
-      { num:'3', title:'DÉLAIS', body:`La livraison est estimée ${livraison}. Ce délai est indicatif et pourra être ajusté en fonction des retours et validations du Client. Le Prestataire s'engage à informer le Client de tout retard significatif.` },
-      { num:'4', title:'CONDITIONS FINANCIÈRES', body:`Le montant total de la prestation est fixé à ${total} TTC.\n\nModalités de paiement :\n  • ${deposit}${solde ? '\n  • ' + solde : ''}\n\nLe paiement s'effectue par virement bancaire sur présentation de facture.\nTout retard de paiement entraînera des pénalités de 15% du montant dû.` },
-      { num:'5', title:'PROPRIÉTÉ INTELLECTUELLE', body:`Les droits de propriété intellectuelle sur les contenus produits sont cédés au Client à titre non-exclusif, pour une utilisation commerciale sur ses plateformes digitales, après règlement intégral de la prestation.\nLe Prestataire conserve le droit d'inclure ces réalisations dans son portfolio.` },
-      { num:'6', title:'RÉVISIONS ET VALIDATIONS', body:`Le contrat inclut jusqu'à 2 cycles de révision par livrable. Au-delà, toute modification supplémentaire sera facturée selon le tarif horaire en vigueur. Les validations du Client sont réputées acquises après 5 jours ouvrés sans retour écrit.` },
-      { num:'7', title:'RÉSILIATION', body:`En cas d'annulation par le Client après signature, l'acompte versé reste acquis au Prestataire à titre d'indemnité forfaitaire. En cas d'annulation par le Prestataire, l'acompte est intégralement restitué.` },
-      { num:'8', title:'CONFIDENTIALITÉ', body:`Chaque partie s'engage à garder strictement confidentielles toutes les informations échangées dans le cadre de cette mission.` },
-      { num:'9', title:'DISPOSITIONS GÉNÉRALES', body:`Le présent contrat est régi par le droit français. Tout litige sera soumis aux tribunaux compétents du ressort de ${ville}.` },
+      { n:'1', t:'OBJET DU CONTRAT', b:`Le présent contrat définit les conditions dans lesquelles le Prestataire s'engage à réaliser pour le Client une prestation de création de contenu audiovisuel et/ou visuel, décrite ci-après.` },
+      { n:'2', t:'PRESTATIONS', b:`Le Prestataire s'engage à réaliser les prestations suivantes :\n${livrablesList}\n\nTout service additionnel non prévu fera l'objet d'un devis complémentaire.` },
+      { n:'3', t:'DÉLAIS DE RÉALISATION', b:`La livraison est estimée le ${livDat}. Ce délai indicatif pourra être ajusté en fonction des retours et validations du Client. Toute demande de modification significative en cours de réalisation pourra entraîner un report du délai.` },
+      { n:'4', t:'CONDITIONS FINANCIÈRES', b:`Montant total de la prestation : ${total} TTC\n\nModalités de paiement :\n• ${dep}\n• ${solde}\n\nTout retard de paiement entraînera des pénalités de 15% du montant dû. En cas de non-paiement, le Prestataire suspend les livraisons.` },
+      { n:'5', t:'OBLIGATIONS DU PRESTATAIRE', b:`• Réaliser les prestations avec professionnalisme\n• Respecter les délais dans la mesure du raisonnable\n• Maintenir la confidentialité des informations du Client\n• Informer le Client de toute modification majeure` },
+      { n:'6', t:'OBLIGATIONS DU CLIENT', b:`• Transmettre tous les éléments nécessaires à la réalisation dans les délais convenus\n• Être réactif dans la validation des livrables (réponse sous 5 jours ouvrés)\n• Respecter les conditions de paiement\n• Ne pas modifier les livrables sans accord préalable` },
+      { n:'7', t:'RÉVISIONS', b:`Le contrat inclut 2 cycles de révision par livrable. Au-delà, toute révision supplémentaire sera facturée au tarif horaire en vigueur.` },
+      { n:'8', t:'PROPRIÉTÉ INTELLECTUELLE', b:`Les créations demeurent propriété du Prestataire jusqu'au paiement complet.\nUne fois la totalité réglée, les droits d'utilisation sont cédés pour : réseaux sociaux, site web, publicité, print.\nLe Prestataire se réserve le droit d'utiliser les créations à des fins promotionnelles, sauf refus écrit du Client.` },
+      { n:'9', t:'RÉTRACTATION', b:`Le Client renonce à son droit de rétractation dès la validation du contrat et le versement de l'acompte.` },
+      { n:'10', t:'DONNÉES PERSONNELLES', b:`Les données du Client sont utilisées uniquement dans le cadre de la mission, conformément au RGPD. Aucune transmission à un tiers sans accord.` },
+      { n:'11', t:'RÉSILIATION', b:`En cas d'annulation par le Client après signature et versement de l'acompte, ce dernier reste acquis au Prestataire à titre d'indemnité forfaitaire.\nEn cas d'annulation par le Prestataire, l'acompte est intégralement restitué.` },
+      { n:'12', t:'DROIT APPLICABLE', b:`Contrat régi par le droit français. Tout litige sera porté devant le Tribunal de Commerce de Nantes.` }
     ]
   }
 
-  return '<pre style="white-space:pre-wrap;font-family:inherit">' + header + '</pre>' +
-    articles.map(a => `<h3>Article ${a.num} — ${a.title}</h3><pre style="white-space:pre-wrap;font-family:inherit">${a.body}</pre>`).join('')
+  const body = articles.map(a => `<span class="ct">Article ${a.n} — ${a.t}</span>${a.b}`).join('\n\n')
+  return intro + body
 }
 
-// ══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════
 // SIGNATURE PAD
-// ══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════
 function initCanvas() {
-  const canvas = document.getElementById('sigCanvas')
-  const ctx = canvas.getContext('2d')
+  const cv = document.getElementById('sigCanvas')
+  const ctx = cv.getContext('2d')
   const hint = document.getElementById('canvasHint')
-  let painting = false
-  let lastX, lastY
+  let drawing = false, lx = 0, ly = 0
 
   function resize() {
-    const w = canvas.offsetWidth
-    const h = 140
     const dpr = window.devicePixelRatio || 1
-    canvas.width = w * dpr
-    canvas.height = h * dpr
-    canvas.style.height = h + 'px'
+    const w = cv.offsetWidth, h = 130
+    cv.width = w * dpr; cv.height = h * dpr
+    cv.style.height = h + 'px'
     ctx.scale(dpr, dpr)
     ctx.strokeStyle = '#c9a96e'
     ctx.lineWidth = 2
@@ -963,282 +794,298 @@ function initCanvas() {
   resize()
   window.addEventListener('resize', resize)
 
-  function getPos(e) {
-    const rect = canvas.getBoundingClientRect()
-    const src = e.touches ? e.touches[0] : e
-    return [(src.clientX - rect.left), (src.clientY - rect.top)]
+  function pos(e) {
+    const r = cv.getBoundingClientRect()
+    const s = e.touches ? e.touches[0] : e
+    return [s.clientX - r.left, s.clientY - r.top]
   }
-
-  function startDraw(e) {
-    e.preventDefault()
-    painting = true;
-    [lastX, lastY] = getPos(e)
-    hint.classList.add('hidden')
-    hasDrawn = true
+  function start(e) {
+    e.preventDefault(); drawing = true;
+    [lx, ly] = pos(e)
+    hint.classList.add('gone')
+    sigHasContent = true
   }
   function draw(e) {
-    if (!painting) return
-    e.preventDefault()
-    const [x, y] = getPos(e)
-    ctx.beginPath()
-    ctx.moveTo(lastX, lastY)
-    ctx.lineTo(x, y)
-    ctx.stroke();
-    [lastX, lastY] = [x, y]
+    if (!drawing) return; e.preventDefault()
+    const [x, y] = pos(e)
+    ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(x, y); ctx.stroke()
+    ;[lx, ly] = [x, y]
   }
-  function stopDraw() { painting = false }
-
-  canvas.addEventListener('mousedown', startDraw)
-  canvas.addEventListener('mousemove', draw)
-  canvas.addEventListener('mouseup', stopDraw)
-  canvas.addEventListener('mouseleave', stopDraw)
-  canvas.addEventListener('touchstart', startDraw, { passive: false })
-  canvas.addEventListener('touchmove', draw, { passive: false })
-  canvas.addEventListener('touchend', stopDraw)
+  function stop() { drawing = false }
+  cv.addEventListener('mousedown', start)
+  cv.addEventListener('mousemove', draw)
+  cv.addEventListener('mouseup', stop)
+  cv.addEventListener('mouseleave', stop)
+  cv.addEventListener('touchstart', start, {passive:false})
+  cv.addEventListener('touchmove', draw, {passive:false})
+  cv.addEventListener('touchend', stop)
 }
 
 function clearCanvas() {
-  const canvas = document.getElementById('sigCanvas')
-  const ctx = canvas.getContext('2d')
-  ctx.clearRect(0, 0, canvas.width, canvas.height)
-  hasDrawn = false
-  document.getElementById('canvasHint').classList.remove('hidden')
+  const cv = document.getElementById('sigCanvas')
+  cv.getContext('2d').clearRect(0, 0, cv.width, cv.height)
+  sigHasContent = false
+  document.getElementById('canvasHint').classList.remove('gone')
 }
 
-// ══════════════════════════════════════════════════════
-// SIGN HANDLER
-// ══════════════════════════════════════════════════════
-async function handleSign() {
-  hideMsg('clientError')
+// ═══════════════════════════════════════════
+// SIGN
+// ═══════════════════════════════════════════
+async function doSign() {
+  hideErr('eSign')
   const name = document.getElementById('sigName').value.trim()
-  const consent = document.getElementById('consentCheck').checked
+  const consent = document.getElementById('consentChk').checked
+  if (!name)    { showErr('eSign', 'Veuillez renseigner votre nom complet.'); return }
+  if (!consent) { showErr('eSign', 'Veuillez cocher la case de consentement.'); return }
+  if (!sigHasContent) { showErr('eSign', 'Veuillez apposer votre signature dans le cadre.'); return }
 
-  if (!name) { showMsg('clientError', 'Veuillez renseigner votre nom complet.'); return }
-  if (!consent) { showMsg('clientError', 'Veuillez cocher la case de consentement.'); return }
-  if (!hasDrawn) { showMsg('clientError', 'Veuillez apposer votre signature dans le cadre prévu.'); return }
-
-  // Capture signature image
-  const canvas = document.getElementById('sigCanvas')
-  signatureDataUrl = canvas.toDataURL('image/png')
-
+  sigDataUrl = document.getElementById('sigCanvas').toDataURL('image/png')
   const btn = document.getElementById('signBtn')
-  btn.disabled = true
-  btn.textContent = '⏳ Enregistrement…'
+  btn.disabled = true; btn.textContent = '⏳ Enregistrement…'
 
-  // Get IP (best effort)
   let ip = null
-  try {
-    const ipRes = await fetch('https://api.ipify.org?format=json')
-    const ipData = await ipRes.json()
-    ip = ipData.ip
-  } catch(e) {}
+  try { ip = (await (await fetch('https://api.ipify.org?format=json')).json()).ip } catch {}
 
-  const params = new URLSearchParams(window.location.search)
-  const code = params.get('c')
-
+  const code = new URLSearchParams(window.location.search).get('c')
   try {
-    const res = await fetch(`${DASHBOARD_API}/api/contracts/${code}`, {
+    const r = await fetch(`${DASHBOARD_API}/api/contracts/${code}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ signeeName: name, signatureIp: ip })
     })
-    if (!res.ok) {
-      const err = await res.json()
-      throw new Error(err.error || 'Erreur')
-    }
-
-    // Show success
+    if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Erreur') }
     showSignedOverlay(name)
-
-  } catch(err) {
-    showMsg('clientError', `Erreur lors de l'enregistrement : ${err.message}. Réessayez.`)
-    btn.disabled = false
-    btn.textContent = '✦ Signer et valider le contrat'
+  } catch(e) {
+    showErr('eSign', 'Erreur : ' + e.message)
+    btn.disabled = false; btn.textContent = '✦ Signer et valider le contrat'
   }
 }
 
 function showSignedOverlay(name) {
-  const overlay = document.getElementById('signedOverlay')
-  document.getElementById('signedSubText').textContent = `Félicitations ${name}, votre contrat est signé et enregistré. L'équipe New Vision Production a été notifiée.`
-  overlay.classList.add('show')
-
-  // Countdown to onboarding redirect
-  let count = 6
-  const countEl = document.getElementById('redirectCount')
-  const fill = document.getElementById('redirectFill')
-  const timer = setInterval(() => {
-    count--
-    countEl.textContent = count
-    fill.style.width = ((6 - count) / 6 * 100) + '%'
-    if (count <= 0) {
-      clearInterval(timer)
-      goOnboarding()
-    }
+  document.getElementById('signedSub').textContent = `Félicitations ${name} ! Votre contrat a été enregistré et l'équipe New Vision Production a été notifiée.`
+  document.getElementById('signedOv').classList.add('show')
+  let n = 6
+  const el = document.getElementById('redirN')
+  const fill = document.getElementById('redirFill')
+  const t = setInterval(() => {
+    n--; el.textContent = n; fill.style.width = ((6-n)/6*100) + '%'
+    if (n <= 0) { clearInterval(t); goOnboarding() }
   }, 1000)
-  fill.style.transition = 'width 1s linear'
 }
 
-function goOnboarding() {
-  window.location.href = ONBOARDING_URL
-}
+function goOnboarding() { window.location.href = ONBOARDING_URL }
 
-// ══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════
 // PDF GENERATION
-// ══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════
 async function downloadPDF() {
-  const overlay = document.getElementById('pdfOverlay')
-  const status = document.getElementById('pdfStatus')
-  overlay.classList.add('active')
-  status.textContent = 'Génération du PDF…'
+  const ov = document.getElementById('pdfOv')
+  const bar = document.getElementById('pdfBar')
+  const st  = document.getElementById('pdfSt')
+  ov.classList.add('show')
+
+  function prog(pct, msg) { bar.style.width = pct + '%'; if (msg) st.textContent = msg }
+
+  prog(10, 'Préparation…'); await delay(300)
+  prog(30, 'Mise en page du contrat…'); await delay(400)
+  prog(55, 'Intégration des articles…'); await delay(350)
+  prog(75, 'Ajout de la signature…'); await delay(200)
 
   try {
     const { jsPDF } = window.jspdf
-    const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' })
-    const c = contractData
-    const d = c.contractData || c
-    const isMRR = (c.missionType || 'MRR') === 'MRR'
-    const margin = 18
-    const pageW = 210
-    const usableW = pageW - margin * 2
-    let y = margin
+    const pdf = new jsPDF({ orientation:'p', unit:'mm', format:'a4' })
+    const c = contractData, d = c.contractData || c
+    const isMRR = c.missionType === 'MRR'
+    const W = 210, M = 18, CW = W - M * 2
+    let y = M
 
-    function checkPageBreak(needed = 6) {
-      if (y + needed > 280) { pdf.addPage(); y = margin }
-    }
-    function addY(n) { y += n }
+    const checkPg = (n=6) => { if (y + n > 277) { pdf.addPage(); y = M } }
+    const addY = (n) => { y += n }
 
-    // Header
-    pdf.setFillColor(10, 10, 10)
-    pdf.rect(0, 0, 210, 297, 'F')
-    pdf.setFontSize(18)
-    pdf.setFont('helvetica', 'bold')
-    pdf.setTextColor(201, 169, 110)
-    pdf.text('NEW VISION PRODUCTION', margin, y)
-    addY(7)
-    pdf.setFontSize(8)
-    pdf.setFont('helvetica', 'normal')
-    pdf.setTextColor(140, 140, 140)
-    pdf.text('Contrat de prestation de services', margin, y)
-    addY(12)
-    pdf.setDrawColor(201, 169, 110)
-    pdf.setLineWidth(0.5)
-    pdf.line(margin, y, pageW - margin, y)
-    addY(10)
+    // ── HEADER NOIR ──
+    pdf.setFillColor(8,8,8)
+    pdf.rect(0, 0, 210, 34, 'F')
+    pdf.setFontSize(15); pdf.setFont('helvetica','bold'); pdf.setTextColor(201,169,110)
+    pdf.text('NEW VISION PRODUCTION', M, 13)
+    pdf.setFontSize(8); pdf.setFont('helvetica','normal'); pdf.setTextColor(160,150,130)
+    pdf.text('CONTRAT DE PRESTATION DE SERVICES', M, 21)
+    pdf.setFontSize(7); pdf.setTextColor(100,95,85)
+    pdf.text('Signé le ' + dateFR(new Date().toISOString().slice(0,10)), M, 28)
+    y = 43
 
-    // Contract text
-    pdf.setFontSize(9)
-    pdf.setFont('helvetica', 'normal')
-    pdf.setTextColor(220, 220, 215)
+    // ── ENCADRÉ PARTIES ──
+    pdf.setDrawColor(40,40,40); pdf.setLineWidth(0.3)
+    pdf.rect(M, y, CW, 38, 'S')
+    pdf.setFillColor(201,169,110); pdf.rect(M, y, 2.5, 38, 'F')
+    pdf.setFontSize(7); pdf.setFont('helvetica','bold'); pdf.setTextColor(150,130,80)
+    pdf.text('PRESTATAIRE', M+5, y+7)
+    pdf.setFontSize(8.5); pdf.setFont('helvetica','bold'); pdf.setTextColor(20,20,20)
+    pdf.text(AGENCY.name, M+5, y+13)
+    pdf.setFontSize(7.5); pdf.setFont('helvetica','normal'); pdf.setTextColor(60,60,60)
+    pdf.text('SIRET : ' + AGENCY.siret + ' — Capital ' + AGENCY.capital + ' — RCS ' + AGENCY.rcs, M+5, y+18)
+    pdf.text(AGENCY.address, M+5, y+22.5)
+    pdf.text('Représenté par ' + AGENCY.managers, M+5, y+27)
+    pdf.setFontSize(7); pdf.setFont('helvetica','bold'); pdf.setTextColor(150,130,80)
+    pdf.text('CLIENT', M+5, y+32)
+    const cl = c.clientName + (c.clientCompany ? ' (' + c.clientCompany + ')' : '') + (c.clientAddress ? ' — ' + c.clientAddress : '')
+    pdf.setFontSize(8.5); pdf.setFont('helvetica','bold'); pdf.setTextColor(20,20,20)
+    const clLines = pdf.splitTextToSize(cl, CW-10)
+    pdf.text(clLines, M+5, y+37.5)
+    y += 45
 
-    const lines = []
-    lines.push(`CONTRAT DE PRESTATION DE SERVICES`)
-    lines.push(``)
-    lines.push(`${AGENCY.name}`)
-    lines.push(`SIRET : ${AGENCY.siret} — Capital ${AGENCY.capital} — RCS ${AGENCY.rcs}`)
-    lines.push(`${AGENCY.address}`)
-    lines.push(`Représentée par ${AGENCY.managers}`)
-    lines.push(``)
-    lines.push(`ET`)
-    lines.push(``)
-    const clientLine = c.clientCompany ? `${c.clientName} (${c.clientCompany})` : c.clientName
-    lines.push(clientLine)
-    if (c.clientAddress) lines.push(c.clientAddress)
-    lines.push(``)
+    // ── RECAP BOX ──
+    checkPg(30)
+    pdf.setFillColor(245,242,235)
+    pdf.rect(M, y, CW, 26, 'F')
+    pdf.setFillColor(201,169,110)
+    pdf.rect(M, y, 2.5, 26, 'F')
+    const cols = isMRR
+      ? [['MENSUALITÉ TTC', EUR(c.monthlyAmount||0)], ['DURÉE', (c.durationMonths||d.dureeNum||'?')+' mois'], ['DATE DE DÉBUT', dateFR(c.startDate||d.dateDebut)]]
+      : [['TOTAL TTC', EUR(c.totalAmount||0)], ['ACOMPTE', (c.depositPercent||0)+'%'], ['LIVRAISON', d.dateLivraison ? dateFR(d.dateLivraison) : 'À définir']]
+    cols.forEach(([lbl, val], i) => {
+      const x = M + 6 + i * (CW/3)
+      pdf.setFontSize(6.5); pdf.setFont('helvetica','bold'); pdf.setTextColor(160,130,80)
+      pdf.text(lbl, x, y+8)
+      pdf.setFontSize(10); pdf.setFont('helvetica','bold'); pdf.setTextColor(20,20,20)
+      pdf.text(String(val), x, y+18)
+    })
+    y += 32
 
-    if (isMRR) {
-      lines.push(`Durée : ${d.duree || c.durationMonths + ' mois'} — Début : ${fmtDateFR(c.startDate || d.dateDebut)}`)
-      lines.push(`Montant mensuel TTC : ${fmtEUR(c.monthlyAmount || 0)}`)
-    } else {
-      lines.push(`Montant total TTC : ${fmtEUR(c.totalAmount || 0)}`)
-      if (c.depositPercent) lines.push(`Acompte : ${c.depositPercent}%`)
-    }
-    lines.push(``)
-
+    // ── LIVRABLES ──
     const livrables = c.deliverables || d.livrables || []
     if (livrables.length) {
-      lines.push('Livrables :')
+      checkPg(14)
+      pdf.setFontSize(7); pdf.setFont('helvetica','bold'); pdf.setTextColor(150,130,80)
+      pdf.text('LIVRABLES', M, y+5)
+      y += 9
       livrables.forEach(l => {
-        const qty = l.hasQty && l.qty ? ` : ${l.qty}/mois` : ''
-        lines.push(`  • ${l.label}${qty}`)
+        checkPg(6)
+        const lbl = '• ' + l.label + (l.hasQty && l.qty ? ' : ' + l.qty + '/mois' : '')
+        const lines = pdf.splitTextToSize(lbl, CW)
+        pdf.setFontSize(8); pdf.setFont('helvetica','normal'); pdf.setTextColor(40,40,40)
+        pdf.text(lines, M, y)
+        y += lines.length * 4.5
       })
+      y += 4
     }
 
-    lines.forEach(line => {
-      checkPageBreak()
-      pdf.text(pdf.splitTextToSize(line, usableW), margin, y)
-      addY(line.length > 80 ? 8 : 5)
+    // ── ARTICLES ──
+    const durLabel = d.dureeLabel || (c.durationMonths||d.dureeNum||'?') + ' mois'
+    const artList = buildArticlesForPDF(c, d, isMRR, durLabel, livrables)
+
+    artList.forEach(a => {
+      checkPg(16)
+      pdf.setFontSize(7.5); pdf.setFont('helvetica','bold'); pdf.setTextColor(201,169,110)
+      pdf.text('Article ' + a.n + ' — ' + a.t, M, y); addY(5)
+      pdf.setFontSize(7.5); pdf.setFont('helvetica','normal'); pdf.setTextColor(50,50,50)
+      const lines = pdf.splitTextToSize(a.b, CW)
+      checkPg(lines.length * 3.8 + 4)
+      pdf.text(lines, M, y)
+      y += lines.length * 3.8 + 5
     })
 
-    addY(6)
-    checkPageBreak(20)
-    pdf.setDrawColor(50, 50, 50)
-    pdf.line(margin, y, pageW - margin, y)
-    addY(8)
-
-    // Signature
-    pdf.setFontSize(8)
-    pdf.setTextColor(140, 140, 140)
-    pdf.text('Signature du client :', margin, y)
-    addY(4)
-    pdf.text(document.getElementById('sigName').value, margin, y)
-    addY(4)
-    pdf.text('Signé le : ' + new Date().toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }), margin, y)
-    addY(8)
-
-    if (signatureDataUrl) {
-      try { pdf.addImage(signatureDataUrl, 'PNG', margin, y, 70, 20) } catch(e) {}
-      addY(24)
+    // ── SIGNATURE ──
+    addY(4); checkPg(38)
+    pdf.setDrawColor(180,180,180); pdf.setLineWidth(0.3)
+    pdf.line(M, y, W-M, y); addY(8)
+    pdf.setFontSize(7.5); pdf.setFont('helvetica','bold'); pdf.setTextColor(100,100,100)
+    pdf.text('SIGNATURE DU CLIENT', M, y); addY(5)
+    pdf.setFont('helvetica','normal'); pdf.setTextColor(30,30,30); pdf.setFontSize(9)
+    pdf.text(document.getElementById('sigName').value || c.clientName, M, y); addY(5)
+    pdf.setFontSize(7.5); pdf.setTextColor(100,100,100)
+    pdf.text('Signé le ' + dateFR(new Date().toISOString().slice(0,10)) + ' — ' + new Date().toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'}), M, y); addY(6)
+    if (sigDataUrl) {
+      try { pdf.addImage(sigDataUrl, 'PNG', M, y, 65, 18) } catch {}
+      addY(22)
     }
+    checkPg(6)
+    pdf.setFontSize(6); pdf.setTextColor(140,140,140)
+    pdf.text('Signature électronique à valeur légale — Règlement eIDAS (UE) n° 910/2014', M, y)
 
-    pdf.setFontSize(6)
-    pdf.setTextColor(100, 100, 100)
-    pdf.text('Signature électronique à valeur légale — Règlement eIDAS (UE) n° 910/2014', margin, y)
+    prog(95, 'Finalisation…'); await delay(200); prog(100, 'Terminé ✓'); await delay(300)
 
-    const refDate = new Date().toLocaleDateString('fr-FR').replace(/\//g, '')
-    pdf.save(`Contrat-NVP-${c.clientName.replace(/\s/g,'-')}-${refDate}.pdf`)
+    const d2 = new Date().toLocaleDateString('fr-FR').replace(/\//g,'')
+    pdf.save('Contrat-NVP-' + (c.clientName||'client').replace(/\s+/g,'-') + '-' + d2 + '.pdf')
 
-  } catch(e) {
-    alert('Erreur PDF : ' + e.message)
-  } finally {
-    overlay.classList.remove('active')
+  } catch(e) { alert('Erreur PDF : ' + e.message) }
+  finally { setTimeout(() => { ov.classList.remove('show'); bar.style.width = '0' }, 600) }
+}
+
+function buildArticlesForPDF(c, d, isMRR, durLabel, livrables) {
+  const livrablesList = livrables.length
+    ? livrables.map(l => '- ' + l.label + (l.hasQty && l.qty ? ' : ' + l.qty + '/mois' : '')).join('\n')
+    : '(livrables à définir par avenant)'
+
+  if (isMRR) {
+    const db = dateFR(c.startDate || d.dateDebut)
+    const mt = EUR(c.monthlyAmount || 0)
+    return [
+      { n:'1', t:'OBJET DU CONTRAT', b:`Le présent contrat définit les conditions dans lesquelles le Prestataire s'engage à fournir au Client des prestations de création de contenu visuel et de gestion de présence digitale. Ce contrat est un engagement de moyens, et non de résultats.` },
+      { n:'2', t:'PRESTATIONS', b:`Débutant le ${db}, le Prestataire fournit mensuellement :\n${livrablesList}\n\nTout service additionnel fera l'objet d'un avenant signé.` },
+      { n:'3', t:'DURÉE ET RENOUVELLEMENT', b:`Durée minimale : ${durLabel} à compter du ${db}. Renouvellement automatique par périodes successives, sauf préavis écrit de 30 jours avant échéance.` },
+      { n:'4', t:'CONDITIONS FINANCIÈRES', b:`Montant mensuel : ${mt} TTC, payable en début de mois par virement bancaire. Pénalités de retard : 15%. Suspension des prestations en cas de non-paiement.` },
+      { n:'5', t:'OBLIGATIONS DU PRESTATAIRE', b:`Réaliser les prestations avec professionnalisme. Respecter les délais. Maintenir la confidentialité. Informer de toute modification majeure.` },
+      { n:'6', t:'OBLIGATIONS DU CLIENT', b:`Transmettre les informations nécessaires. Être réactif dans les validations. Respecter les conditions de paiement. Ne pas modifier les visuels sans accord.` },
+      { n:'7', t:'LIMITATION DE RESPONSABILITÉ', b:`Le Prestataire ne peut être tenu responsable d'un résultat commercial non atteint, ni d'un usage non conforme des visuels par le Client.` },
+      { n:'8', t:'PROPRIÉTÉ INTELLECTUELLE', b:`Les créations restent propriété du Prestataire jusqu'au paiement complet. Droits cédés après règlement intégral pour : réseaux sociaux, site web, publicité, print. Portfolio autorisé sauf refus écrit.` },
+      { n:'9', t:'RÉTRACTATION', b:`Le Client renonce à son droit de rétractation dès la validation du contrat et la réservation du premier tournage.` },
+      { n:'10', t:'DONNÉES PERSONNELLES', b:`Données du Client utilisées uniquement dans le cadre de la mission, conformément au RGPD. Aucune transmission à un tiers sans accord.` },
+      { n:'11', t:'RÉSILIATION', b:`Résiliation possible avec un préavis de 30 jours avant toute échéance. En cas de non-paiement ou non-coopération, résiliation immédiate par le Prestataire.` },
+      { n:'12', t:'DROIT APPLICABLE', b:`Contrat régi par le droit français. Tout litige sera porté devant le Tribunal de Commerce de Nantes.` }
+    ]
+  } else {
+    const total = EUR(c.totalAmount || 0)
+    const pct = c.depositPercent || 0
+    const dep = pct > 0 ? pct + '% à la commande (' + EUR((c.totalAmount||0)*pct/100) + ')' : 'Sans acompte'
+    const sol = pct > 0 && pct < 100 ? (100-pct) + '% à la livraison' : pct===100 ? 'Paiement intégral à la commande' : '100% à la livraison'
+    const ldat = d.dateLivraison ? dateFR(d.dateLivraison) : 'à définir'
+    return [
+      { n:'1', t:'OBJET DU CONTRAT', b:`Le Prestataire s'engage à réaliser une prestation de création de contenu audiovisuel/visuel pour le Client, selon les conditions définies ci-après.` },
+      { n:'2', t:'PRESTATIONS', b:`${livrablesList}\n\nTout service additionnel fera l'objet d'un devis complémentaire.` },
+      { n:'3', t:'DÉLAIS', b:`Livraison estimée le ${ldat}. Délai ajustable en fonction des retours et validations du Client.` },
+      { n:'4', t:'CONDITIONS FINANCIÈRES', b:`Total : ${total} TTC\nAcompte : ${dep}\nSolde : ${sol}\nPénalités de retard : 15%.` },
+      { n:'5', t:'OBLIGATIONS DU PRESTATAIRE', b:`Réaliser avec professionnalisme. Respecter les délais. Maintenir la confidentialité.` },
+      { n:'6', t:'OBLIGATIONS DU CLIENT', b:`Transmettre les éléments nécessaires. Valider dans les délais (5 jours ouvrés). Respecter les conditions de paiement.` },
+      { n:'7', t:'RÉVISIONS', b:`2 cycles de révision inclus par livrable. Au-delà, facturation au tarif horaire en vigueur.` },
+      { n:'8', t:'PROPRIÉTÉ INTELLECTUELLE', b:`Droits cédés après règlement intégral pour : réseaux sociaux, site web, publicité, print. Portfolio autorisé sauf refus écrit.` },
+      { n:'9', t:'RÉTRACTATION', b:`Le Client renonce à son droit de rétractation dès la validation du contrat et le versement de l'acompte.` },
+      { n:'10', t:'DONNÉES PERSONNELLES', b:`Données utilisées uniquement dans le cadre de la mission, conformément au RGPD.` },
+      { n:'11', t:'RÉSILIATION', b:`En cas d'annulation par le Client après signature et acompte versé, l'acompte reste acquis au Prestataire. En cas d'annulation par le Prestataire, remboursement intégral.` },
+      { n:'12', t:'DROIT APPLICABLE', b:`Contrat régi par le droit français. Tout litige devant le Tribunal de Commerce de Nantes.` }
+    ]
   }
 }
 
-// ══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════
 // UTILS
-// ══════════════════════════════════════════════════════
-function v(id) {
-  const el = document.getElementById(id)
-  return el ? el.value.trim() : ''
-}
-function fmtEUR(n) {
-  return new Intl.NumberFormat('fr-FR', { style:'currency', currency:'EUR', maximumFractionDigits:0 }).format(n)
-}
-function fmtDateFR(iso) {
+// ═══════════════════════════════════════════
+function val(id) { const e = document.getElementById(id); return e ? e.value.trim() : '' }
+function EUR(n) { return new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(n) }
+function dateFR(iso) {
   if (!iso) return '—'
-  const [y, m, d] = String(iso).slice(0, 10).split('-')
-  const months = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre']
-  return `${parseInt(d)} ${months[parseInt(m)-1]} ${y}`
+  const [y,m,d] = String(iso).slice(0,10).split('-')
+  const ms = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre']
+  return `${parseInt(d)} ${ms[parseInt(m)-1]} ${y}`
 }
-function showMsg(id, text) {
-  const el = document.getElementById(id)
-  const textEl = document.getElementById(id + 'Text')
-  if (textEl) textEl.textContent = text
-  el.classList.add('show')
+function showErr(id, msg) {
+  const e = document.getElementById(id)
+  if (!e) return
+  const t = document.getElementById(id + 't')
+  if (t) t.textContent = msg
+  e.classList.add('show')
 }
-function hideMsg(id) {
-  document.getElementById(id).classList.remove('show')
-}
+function hideErr(id) { const e = document.getElementById(id); if (e) e.classList.remove('show') }
+function delay(ms) { return new Promise(r => setTimeout(r, ms)) }
 
 // Clear field errors on input
 ['clientName','clientAddress','clientEmail','montant','duree','dateDebut','montantTotal'].forEach(id => {
   const el = document.getElementById(id)
-  if (el) {
-    el.addEventListener('input', () => el.classList.remove('field-error'))
-    el.addEventListener('change', () => el.classList.remove('field-error'))
-  }
+  if (el) { el.addEventListener('input', () => el.classList.remove('field-err')); el.addEventListener('change', () => el.classList.remove('field-err')) }
 })
-// ── START ──────────────────────────────────────────────
+
+// ═══════════════════════════════════════════
+// START
+// ═══════════════════════════════════════════
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', startApp)
 } else {
