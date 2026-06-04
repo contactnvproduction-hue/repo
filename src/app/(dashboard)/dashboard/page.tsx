@@ -6,11 +6,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import {
   TrendingUp, Users, FolderKanban, Receipt, Clock,
-  AlertTriangle, CheckCircle2, ArrowRight, Bell, Crosshair, PhoneCall, UserCheck, RepeatIcon, Briefcase, Calendar
+  AlertTriangle, CheckCircle2, ArrowRight, Bell, Crosshair, PhoneCall, UserCheck, RepeatIcon, Briefcase, Calendar,
+  AlertCircle, RefreshCw,
 } from 'lucide-react'
 import Link from 'next/link'
 import { DashboardCharts } from '@/components/dashboard/DashboardCharts'
 import { LeadFollowUpModal } from '@/components/dashboard/LeadFollowUpModal'
+import { DailyCheckinModal } from '@/components/dashboard/DailyCheckinModal'
+
+function todayStr() { return new Date().toISOString().slice(0, 10) }
 
 async function getDashboardData(userId: string) {
   const now = new Date()
@@ -35,6 +39,7 @@ async function getDashboardData(userId: string) {
     leadsFollowUp,
     allRetainers,
     upcomingCeoMeetings,
+    todayCheckin,
   ] = await Promise.all([
     // CA du mois (factures payées)
     prisma.payment.aggregate({
@@ -115,17 +120,21 @@ async function getDashboardData(userId: string) {
       select: { id: true, name: true, company: true, followUpDate: true },
       orderBy: { followUpDate: 'asc' },
     }),
-    // MRR global (retainers actifs)
+    // MRR global (retainers actifs avec client)
     prisma.clientRetainer.findMany({
-      where: {
-        startDate: { lte: now },
-      },
+      where: { startDate: { lte: now } },
+      include: { client: { select: { id: true, name: true, company: true } } },
+      orderBy: { startDate: 'asc' },
     }),
     // Réunions CEO à venir
     prisma.ceoMeeting.findMany({
       where: { date: { gte: now } },
       orderBy: { date: 'asc' },
       take: 5,
+    }),
+    // Daily checkin du jour
+    prisma.userDailyCheckin.findFirst({
+      where: { userId, date: todayStr() },
     }),
   ])
 
@@ -161,6 +170,22 @@ async function getDashboardData(userId: string) {
     ? nextMeeting
     : null
 
+  // Retainers actifs + alertes fin de contrat (15 jours)
+  const activeRetainers = allRetainers.filter(r => {
+    const end = new Date(r.startDate)
+    end.setMonth(end.getMonth() + r.durationMonths)
+    return end > now
+  })
+  const retainersEndingSoon = allRetainers
+    .map(r => {
+      const end = new Date(r.startDate)
+      end.setMonth(end.getMonth() + r.durationMonths)
+      const daysLeft = Math.ceil((end.getTime() - now.getTime()) / 86_400_000)
+      return { ...r, endDate: end.toISOString(), daysLeft }
+    })
+    .filter(r => r.daysLeft > 0 && r.daysLeft <= 15)
+    .sort((a, b) => a.daysLeft - b.daysLeft)
+
   return {
     caMonth: caMonthVal,
     caYear: caYear._sum.amount || 0,
@@ -177,6 +202,26 @@ async function getDashboardData(userId: string) {
     currentMRR,
     ceoMeetingSoon: ceoMeetingSoon ? { ...ceoMeetingSoon, date: ceoMeetingSoon.date.toISOString() } : null,
     upcomingMeetings: upcomingCeoMeetings.map(m => ({ id: m.id, title: m.title, date: m.date.toISOString() })),
+    checkinDone: !!todayCheckin,
+    activeRetainers: activeRetainers.map(r => ({
+      id: r.id,
+      clientId: r.client.id,
+      clientName: r.client.name,
+      clientCompany: r.client.company,
+      monthlyAmount: r.monthlyAmount,
+      durationMonths: r.durationMonths,
+      startDate: r.startDate.toISOString(),
+      description: r.description,
+    })),
+    retainersEndingSoon: retainersEndingSoon.map(r => ({
+      id: r.id,
+      clientId: r.client.id,
+      clientName: r.client.name,
+      clientCompany: r.client.company,
+      monthlyAmount: r.monthlyAmount,
+      daysLeft: r.daysLeft,
+      endDate: r.endDate,
+    })),
     leadsFollowUp: leadsFollowUp.map(l => ({
       ...l,
       followUpDate: l.followUpDate!.toISOString(),
@@ -211,6 +256,9 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* Popup daily checkin to-do */}
+      <DailyCheckinModal initialDone={data.checkinDone} />
+
       {/* Popup relances leads */}
       <LeadFollowUpModal leads={data.leadsFollowUp} />
 
@@ -366,6 +414,89 @@ export default async function DashboardPage() {
           color={data.pendingInvoices > 0 ? 'danger' : 'success'}
         />
       </div>
+
+      {/* ── Alertes fin de contrat MRR (15 jours) ── */}
+      {data.retainersEndingSoon.length > 0 && (
+        <div className="rounded-xl border border-amber-400/40 bg-amber-400/5 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <AlertCircle size={15} className="text-amber-400 shrink-0" />
+            <p className="text-sm font-semibold text-amber-300">
+              {data.retainersEndingSoon.length} contrat{data.retainersEndingSoon.length > 1 ? 's' : ''} MRR se termine{data.retainersEndingSoon.length > 1 ? 'nt' : ''} dans moins de 15 jours
+            </p>
+            <Link href="/finance" className="ml-auto text-xs text-nv-text-muted hover:text-white flex items-center gap-1 transition-colors">
+              Finance <ArrowRight size={11} />
+            </Link>
+          </div>
+          <div className="space-y-2">
+            {data.retainersEndingSoon.map(r => (
+              <Link key={r.id} href={`/clients/${r.clientId}`}
+                className="flex items-center justify-between p-2.5 rounded-lg bg-amber-400/5 border border-amber-400/15 hover:border-amber-400/35 hover:bg-amber-400/10 transition-colors group">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-7 h-7 rounded-full bg-amber-400/20 flex items-center justify-center text-xs font-bold text-amber-300 shrink-0">
+                    {r.clientName.charAt(0)}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-white">{r.clientName}</p>
+                    {r.clientCompany && <p className="text-xs text-nv-text-muted">{r.clientCompany}</p>}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-xs font-semibold text-amber-300">
+                    {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(r.monthlyAmount)}/mois
+                  </span>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${r.daysLeft <= 7 ? 'bg-red-500/20 text-red-300' : 'bg-amber-400/20 text-amber-300'}`}>
+                    J-{r.daysLeft}
+                  </span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Clients MRR actifs — à facturer ce mois ── */}
+      {data.activeRetainers.length > 0 && (
+        <div className="rounded-xl border border-nv-border bg-nv-card p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <RefreshCw size={14} className="text-primary" />
+              <p className="text-sm font-semibold text-white">Clients MRR — À facturer ce mois</p>
+              <span className="text-xs px-2 py-0.5 bg-primary/15 text-primary rounded-full font-medium">{data.activeRetainers.length}</span>
+            </div>
+            <Link href="/finance" className="text-xs text-nv-text-muted hover:text-primary flex items-center gap-1 transition-colors">
+              Finance <ArrowRight size={11} />
+            </Link>
+          </div>
+          <div className="space-y-1.5">
+            {data.activeRetainers.map(r => {
+              const end = new Date(r.startDate)
+              end.setMonth(end.getMonth() + r.durationMonths)
+              return (
+                <Link key={r.id} href={`/clients/${r.clientId}`}
+                  className="flex items-center justify-between p-2.5 rounded-lg border border-nv-border hover:border-primary/30 hover:bg-white/3 transition-colors group">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary shrink-0">
+                      {r.clientName.charAt(0)}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-white">{r.clientName}</p>
+                      <p className="text-[10px] text-nv-text-muted">{r.description}</p>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-sm font-semibold text-emerald-400">
+                      {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(r.monthlyAmount)}
+                    </p>
+                    <p className="text-[10px] text-nv-text-muted">
+                      jusqu&apos;au {end.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+                    </p>
+                  </div>
+                </Link>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Réunions CEO à venir */}
       {data.upcomingMeetings.length > 0 && (

@@ -129,6 +129,14 @@ export function AcquisitionBoard({
   const [convertForm, setConvertForm] = useState({
     name: '', company: '', email: '', phone: '', type: 'PARTICULIER',
   })
+  const [convertDeal, setConvertDeal] = useState({
+    missionType: 'MRR' as 'MRR' | 'PONCTUEL',
+    monthlyAmount: '',
+    totalAmount: '',
+    durationMonths: '3',
+    deliverables: '',
+    depositPercent: '30',
+  })
 
   // ── Derived state ───────────────────────────────────────────────────────────
 
@@ -314,29 +322,34 @@ export function AcquisitionBoard({
     if (!selectedLead) return
     setConvertLoading(true)
     try {
-      const clientRes = await fetch('/api/clients', {
+      const res = await fetch('/api/deals/close', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: convertForm.name,
-          company: convertForm.company || undefined,
-          email: convertForm.email || undefined,
-          phone: convertForm.phone || undefined,
-          type: convertForm.type,
-          status: 'ACTIF',
-          source: 'AUTRE',
+          leadId: selectedLead.id,
+          client: {
+            name: convertForm.name,
+            company: convertForm.company || undefined,
+            email: convertForm.email || undefined,
+            phone: convertForm.phone || undefined,
+            type: convertForm.type,
+          },
+          deal: {
+            missionType: convertDeal.missionType,
+            monthlyAmount: convertDeal.missionType === 'MRR' ? parseFloat(convertDeal.monthlyAmount) || 0 : undefined,
+            totalAmount: convertDeal.missionType === 'PONCTUEL' ? parseFloat(convertDeal.totalAmount) || 0 : undefined,
+            durationMonths: convertDeal.missionType === 'MRR' ? parseInt(convertDeal.durationMonths) || 3 : undefined,
+            deliverables: convertDeal.deliverables || undefined,
+            depositPercent: convertDeal.missionType === 'PONCTUEL' ? parseInt(convertDeal.depositPercent) || 30 : undefined,
+          },
         }),
       })
-      if (!clientRes.ok) { toast.error('Erreur création client'); return }
-      const client = await clientRes.json()
-      const leadRes = await fetch(`/api/leads/${selectedLead.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ convertedClientId: client.id }),
-      })
-      updateLeadInState(await leadRes.json())
+      if (!res.ok) { toast.error('Erreur clôture de vente'); return }
+      const data = await res.json()
+      if (data.lead) updateLeadInState(data.lead)
       setShowConvert(false)
-      toast.success(`Fiche client créée — ${client.name}`)
+      const invCount = data.invoices?.length ?? 0
+      toast.success(`✅ Vente clôturée — ${data.client.name}${invCount ? ` · ${invCount} facture${invCount > 1 ? 's' : ''} créée${invCount > 1 ? 's' : ''}` : ''}`)
     } catch { toast.error('Erreur') } finally { setConvertLoading(false) }
   }
 
@@ -1270,43 +1283,151 @@ export function AcquisitionBoard({
         </form>
       </Modal>
 
-      {/* ── Modal : Convertir en client ───────────────────────────────────────── */}
-      <Modal open={showConvert} onClose={() => setShowConvert(false)} title="Créer la fiche client" size="sm">
-        <form onSubmit={handleConvertToClient} className="space-y-4">
+      {/* ── Modal : Clôturer la vente ─────────────────────────────────────────── */}
+      <Modal open={showConvert} onClose={() => setShowConvert(false)} title="🎉 Clôturer la vente">
+        <form onSubmit={handleConvertToClient} className="space-y-5">
+          {/* Banner succès */}
           <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-400/5 border border-emerald-400/20">
             <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
-            <p className="text-sm text-emerald-300">Lead signé — créez sa fiche client pour continuer le suivi</p>
+            <p className="text-sm text-emerald-300 font-medium">Lead signé — fiche client + retainer + facture(s) créés automatiquement</p>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Input label="Nom *" value={convertForm.name} onChange={e => setConvertForm({ ...convertForm, name: e.target.value })} required />
-            <Input label="Entreprise" value={convertForm.company} onChange={e => setConvertForm({ ...convertForm, company: e.target.value })} />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Input label="Email" type="email" value={convertForm.email} onChange={e => setConvertForm({ ...convertForm, email: e.target.value })} />
-            <Input label="Téléphone" value={convertForm.phone} onChange={e => setConvertForm({ ...convertForm, phone: e.target.value })} />
-          </div>
+
+          {/* ── Section 1 : Infos client ── */}
           <div>
-            <label className="block text-sm font-medium text-nv-text-muted mb-1.5">Type de client</label>
-            <div className="flex gap-2">
-              {CLIENT_TYPES.map(t => (
-                <button
-                  key={t.value}
-                  type="button"
-                  onClick={() => setConvertForm({ ...convertForm, type: t.value })}
-                  className={`flex-1 py-2 rounded-lg border text-sm transition-colors ${
-                    convertForm.type === t.value
-                      ? 'border-primary bg-primary/10 text-primary'
-                      : 'border-nv-border text-nv-text-muted'
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
+            <p className="text-xs font-semibold text-nv-text-muted uppercase tracking-wide mb-2">01 — Informations client</p>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <Input label="Nom *" value={convertForm.name} onChange={e => setConvertForm({ ...convertForm, name: e.target.value })} required />
+                <Input label="Entreprise" value={convertForm.company} onChange={e => setConvertForm({ ...convertForm, company: e.target.value })} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Input label="Email" type="email" value={convertForm.email} onChange={e => setConvertForm({ ...convertForm, email: e.target.value })} />
+                <Input label="Téléphone" value={convertForm.phone} onChange={e => setConvertForm({ ...convertForm, phone: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-nv-text-muted mb-1.5">Type de client</label>
+                <div className="flex gap-2">
+                  {CLIENT_TYPES.map(t => (
+                    <button key={t.value} type="button"
+                      onClick={() => setConvertForm({ ...convertForm, type: t.value })}
+                      className={`flex-1 py-1.5 rounded-lg border text-sm transition-colors ${convertForm.type === t.value ? 'border-primary bg-primary/10 text-primary' : 'border-nv-border text-nv-text-muted'}`}>
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
+
+          {/* ── Section 2 : Contrat ── */}
+          <div>
+            <p className="text-xs font-semibold text-nv-text-muted uppercase tracking-wide mb-2">02 — Détails du contrat</p>
+            <div className="space-y-3">
+              {/* Type de mission */}
+              <div className="flex gap-2">
+                {(['MRR', 'PONCTUEL'] as const).map(t => (
+                  <button key={t} type="button"
+                    onClick={() => setConvertDeal({ ...convertDeal, missionType: t })}
+                    className={`flex-1 py-2 rounded-lg border text-sm font-medium transition-colors ${convertDeal.missionType === t ? 'border-primary bg-primary/10 text-primary' : 'border-nv-border text-nv-text-muted hover:text-white'}`}>
+                    {t === 'MRR' ? '🔄 Retainer mensuel' : '⚡ Projet ponctuel'}
+                  </button>
+                ))}
+              </div>
+
+              {convertDeal.missionType === 'MRR' ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <Input
+                    label="Mensualité (€ TTC) *"
+                    type="number"
+                    min="0"
+                    step="50"
+                    value={convertDeal.monthlyAmount}
+                    onChange={e => setConvertDeal({ ...convertDeal, monthlyAmount: e.target.value })}
+                    placeholder="1500"
+                  />
+                  <div>
+                    <label className="block text-xs font-medium text-nv-text-muted mb-1.5">Durée (mois)</label>
+                    <select
+                      value={convertDeal.durationMonths}
+                      onChange={e => setConvertDeal({ ...convertDeal, durationMonths: e.target.value })}
+                      className="w-full bg-nv-bg border border-nv-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary"
+                    >
+                      {[1, 2, 3, 6, 12].map(m => <option key={m} value={m}>{m} mois</option>)}
+                    </select>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <Input
+                    label="Total projet (€ TTC) *"
+                    type="number"
+                    min="0"
+                    step="100"
+                    value={convertDeal.totalAmount}
+                    onChange={e => setConvertDeal({ ...convertDeal, totalAmount: e.target.value })}
+                    placeholder="3000"
+                  />
+                  <div>
+                    <label className="block text-xs font-medium text-nv-text-muted mb-1.5">Acompte (%)</label>
+                    <select
+                      value={convertDeal.depositPercent}
+                      onChange={e => setConvertDeal({ ...convertDeal, depositPercent: e.target.value })}
+                      className="w-full bg-nv-bg border border-nv-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary"
+                    >
+                      {[0, 30, 40, 50, 100].map(p => (
+                        <option key={p} value={p}>{p === 0 ? 'Sans acompte' : p === 100 ? 'Totalité' : `${p}%`}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-medium text-nv-text-muted mb-1.5">Livrables / Description</label>
+                <textarea
+                  value={convertDeal.deliverables}
+                  onChange={e => setConvertDeal({ ...convertDeal, deliverables: e.target.value })}
+                  rows={2}
+                  placeholder="Ex: 4 Reels/mois, 1 YouTube/mois…"
+                  className="w-full bg-nv-bg border border-nv-border rounded-lg px-3 py-2 text-sm text-white placeholder:text-nv-text-muted focus:outline-none focus:border-primary resize-none"
+                />
+              </div>
+
+              {/* Preview */}
+              {(convertDeal.monthlyAmount || convertDeal.totalAmount) && (
+                <div className="p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/20 text-xs space-y-0.5">
+                  <p className="text-emerald-300 font-semibold">Ce qui sera créé :</p>
+                  <p className="text-nv-text-muted">✓ Fiche client + projet</p>
+                  {convertDeal.missionType === 'MRR' && convertDeal.monthlyAmount && (
+                    <>
+                      <p className="text-nv-text-muted">✓ Retainer {convertDeal.durationMonths} mois · {parseFloat(convertDeal.monthlyAmount).toLocaleString('fr-FR')} €/mois</p>
+                      <p className="text-nv-text-muted">✓ Facture mensualité 1 · EN ATTENTE</p>
+                    </>
+                  )}
+                  {convertDeal.missionType === 'PONCTUEL' && convertDeal.totalAmount && (
+                    <>
+                      {parseInt(convertDeal.depositPercent) > 0 && parseInt(convertDeal.depositPercent) < 100 && (
+                        <p className="text-nv-text-muted">✓ Facture acompte {convertDeal.depositPercent}% · {Math.round(parseFloat(convertDeal.totalAmount) * parseInt(convertDeal.depositPercent) / 100).toLocaleString('fr-FR')} €</p>
+                      )}
+                      {parseInt(convertDeal.depositPercent) < 100 && (
+                        <p className="text-nv-text-muted">✓ Facture solde {100 - parseInt(convertDeal.depositPercent)}% · {Math.round(parseFloat(convertDeal.totalAmount) * (100 - parseInt(convertDeal.depositPercent)) / 100).toLocaleString('fr-FR')} €</p>
+                      )}
+                      {parseInt(convertDeal.depositPercent) === 100 && (
+                        <p className="text-nv-text-muted">✓ Facture totale · {parseFloat(convertDeal.totalAmount).toLocaleString('fr-FR')} €</p>
+                      )}
+                      {parseInt(convertDeal.depositPercent) === 0 && (
+                        <p className="text-nv-text-muted">✓ Facture totale · {parseFloat(convertDeal.totalAmount).toLocaleString('fr-FR')} €</p>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
           <div className="flex justify-end gap-3">
             <Button type="button" variant="outline" onClick={() => setShowConvert(false)}>Plus tard</Button>
-            <Button type="submit" loading={convertLoading}><UserPlus size={14} />Créer la fiche</Button>
+            <Button type="submit" loading={convertLoading}><UserPlus size={14} />Clôturer la vente</Button>
           </div>
         </form>
       </Modal>

@@ -15,6 +15,8 @@ function createMockClient(): PrismaClient {
         { id: 'cat-admin', name: 'Administratif', color: '#10b981', options: ['Devis envoyé', 'Contrat signé', 'Archivé'], order: 2, createdAt: new Date(), updatedAt: new Date() },
         { id: 'cat-client', name: 'Client', color: '#3b82f6', options: [], order: 3, createdAt: new Date(), updatedAt: new Date() },
       ],
+      userDailyCheckin: [],
+      signedContract: [],
     } as Store
   }
   const store: Store = gThis.__devStore

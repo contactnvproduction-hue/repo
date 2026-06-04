@@ -44,6 +44,7 @@ model User {
   authoredNotes     ClientNote[]       @relation("AuthoredNotes")
   projectComments   ProjectComment[]   @relation("ProjectCommentAuthor")
   availability      TeamAvailability[]
+  dailyCheckins     UserDailyCheckin[]
 
   @@map("users")
 }
@@ -787,6 +788,59 @@ model ClientRetainer {
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@map("client_retainers")
+}
+
+// ─── DAILY CHECKIN ───────────────────────────────────────────────────────────
+
+model UserDailyCheckin {
+  id        String   @id @default(cuid())
+  userId    String
+  date      String   // "2026-06-04" — one per user per day
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@map("user_daily_checkins")
+}
+
+// ─── CONTRATS SIGNÉS (Plateforme Signature) ──────────────────────────────────
+
+model SignedContract {
+  id             String    @id @default(cuid())
+  shortCode      String    @unique // ex: "NVP-A1B2C3"
+  // Infos client
+  clientName     String
+  clientEmail    String?
+  clientCompany  String?
+  clientAddress  String?
+  // Mission
+  missionType    String    @default("MRR") // MRR | PONCTUEL
+  monthlyAmount  Float?
+  totalAmount    Float?
+  durationMonths Int?
+  startDate      String?
+  currency       String    @default("EUR")
+  depositAmount  Float?
+  depositPercent Int?
+  // Livrables (JSON array)
+  deliverables   Json      @default("[]")
+  // Données complètes pour régénérer le PDF
+  contractData   Json?
+  // Signature
+  signedAt       DateTime?
+  signeeName     String?
+  signatureIp    String?
+  // Statut
+  status         String    @default("PENDING") // PENDING | SIGNED | ARCHIVED
+  // Liens vers le dashboard NV
+  clientId       String?
+  projectId      String?
+  leadId         String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@map("signed_contracts")
 }
 
 // ─── ESPACE CEO ───────────────────────────────────────────────────────────────

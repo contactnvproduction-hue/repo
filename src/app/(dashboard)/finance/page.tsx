@@ -4,7 +4,8 @@ import { formatCurrency, formatDate } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatCard } from '@/components/ui/stat-card'
 import { Badge } from '@/components/ui/badge'
-import { BarChart3, TrendingUp, TrendingDown, Wallet, AlertCircle, RepeatIcon } from 'lucide-react'
+import { BarChart3, TrendingUp, TrendingDown, Wallet, AlertCircle, RepeatIcon, RefreshCw, ArrowRight } from 'lucide-react'
+import Link from 'next/link'
 import { FinanceCharts } from '@/components/finance/FinanceCharts'
 import { ExpenseManager } from '@/components/finance/ExpenseManager'
 
@@ -97,9 +98,10 @@ export default async function FinancePage() {
       },
       _sum: { totalTTC: true },
     }),
-    // Retainers pour prévisionnel MRR
+    // Retainers pour prévisionnel MRR + clients MRR
     prisma.clientRetainer.findMany({
-      include: { client: { select: { name: true } } },
+      include: { client: { select: { id: true, name: true, company: true } } },
+      orderBy: { startDate: 'asc' },
     }),
   ])
 
@@ -134,6 +136,24 @@ export default async function FinancePage() {
   }
   const currentMRR = mrrForecast[0]?.mrr ?? 0
   const mrrAnnuel = mrrForecast.reduce((s, m) => s + m.mrr, 0)
+
+  // Retainers actifs (endDate > now)
+  const activeRetainers = allRetainers.filter(r => {
+    const end = new Date(r.startDate)
+    end.setMonth(end.getMonth() + r.durationMonths)
+    return end > now
+  })
+
+  // Alertes fin de contrat (≤ 15 jours)
+  const retainersEndingSoon = allRetainers
+    .map(r => {
+      const end = new Date(r.startDate)
+      end.setMonth(end.getMonth() + r.durationMonths)
+      const daysLeft = Math.ceil((end.getTime() - now.getTime()) / 86_400_000)
+      return { ...r, endDate: end, daysLeft }
+    })
+    .filter(r => r.daysLeft > 0 && r.daysLeft <= 15)
+    .sort((a, b) => a.daysLeft - b.daysLeft)
 
   const catLabel: Record<string, string> = {
     LOYER: 'Loyer', LOGICIELS: 'Logiciels', MATÉRIEL: 'Matériel',
@@ -178,6 +198,81 @@ export default async function FinancePage() {
           <p className="text-sm text-yellow-300">
             <span className="font-bold">{formatCurrency(impayéesVal)}</span> de factures impayées en attente de règlement
           </p>
+        </div>
+      )}
+
+      {/* ── Alertes fin de contrat MRR ── */}
+      {retainersEndingSoon.length > 0 && (
+        <div className="rounded-xl border border-amber-400/40 bg-amber-400/5 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <AlertCircle size={15} className="text-amber-400 shrink-0" />
+            <p className="text-sm font-semibold text-amber-300">
+              {retainersEndingSoon.length} contrat{retainersEndingSoon.length > 1 ? 's' : ''} MRR à renouveler — Fin dans moins de 15 jours
+            </p>
+          </div>
+          <div className="space-y-2">
+            {retainersEndingSoon.map(r => (
+              <Link key={r.id} href={`/clients/${r.client.id}`}
+                className="flex items-center justify-between p-2.5 rounded-lg bg-amber-400/5 border border-amber-400/15 hover:border-amber-400/35 hover:bg-amber-400/10 transition-colors">
+                <div>
+                  <p className="text-sm font-medium text-white">{r.client.name}</p>
+                  <p className="text-xs text-nv-text-muted">{r.description} · fin le {r.endDate.toLocaleDateString('fr-FR')}</p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-sm font-semibold text-amber-300">{formatCurrency(r.monthlyAmount)}/mois</span>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${r.daysLeft <= 7 ? 'bg-red-500/20 text-red-300' : 'bg-amber-400/15 text-amber-300'}`}>
+                    J-{r.daysLeft}
+                  </span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Clients MRR actifs — À facturer ce mois ── */}
+      {activeRetainers.length > 0 && (
+        <div className="rounded-xl border border-nv-border bg-nv-card p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <RefreshCw size={14} className="text-primary" />
+            <p className="text-sm font-semibold text-white">Clients MRR — À facturer ce mois</p>
+            <span className="text-xs px-2 py-0.5 bg-primary/15 text-primary rounded-full font-medium">{activeRetainers.length} clients</span>
+            <span className="ml-auto text-xs font-bold text-emerald-400">
+              {formatCurrency(activeRetainers.reduce((s, r) => s + r.monthlyAmount, 0))}/mois
+            </span>
+          </div>
+          <div className="space-y-1.5">
+            {activeRetainers.map(r => {
+              const end = new Date(r.startDate)
+              end.setMonth(end.getMonth() + r.durationMonths)
+              const monthsDone = Math.floor((now.getTime() - new Date(r.startDate).getTime()) / (30.5 * 86_400_000))
+              return (
+                <Link key={r.id} href={`/clients/${r.client.id}`}
+                  className="flex items-center justify-between p-2.5 rounded-lg border border-nv-border hover:border-primary/30 hover:bg-white/3 transition-colors">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-full bg-primary/15 flex items-center justify-center text-xs font-bold text-primary shrink-0">
+                      {r.client.name.charAt(0)}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-white">{r.client.name}</p>
+                      <p className="text-[10px] text-nv-text-muted">{r.description} · mois {Math.min(monthsDone + 1, r.durationMonths)}/{r.durationMonths}</p>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-sm font-bold text-emerald-400">{formatCurrency(r.monthlyAmount)}</p>
+                    <p className="text-[10px] text-nv-text-muted">jusqu&apos;au {end.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</p>
+                  </div>
+                </Link>
+              )
+            })}
+          </div>
+        </div>
+      )}
+      {activeRetainers.length === 0 && (
+        <div className="rounded-xl border border-nv-border bg-nv-card p-6 text-center">
+          <RefreshCw size={32} className="mx-auto mb-2 text-nv-text-muted opacity-40" />
+          <p className="text-sm font-medium text-white mb-1">Aucun client MRR actif</p>
+          <p className="text-xs text-nv-text-muted">Ajoutez des retainers depuis les fiches clients pour suivre votre MRR mensuel.</p>
         </div>
       )}
 
