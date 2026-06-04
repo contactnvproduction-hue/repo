@@ -193,11 +193,24 @@ export async function PATCH(
     }
 
     // ── 5. Lier le lead si applicable ────────────────────────────────────────
+    // Priorité : leadId explicit → sinon auto-match par email
     if (contract.leadId) {
       await prisma.lead.update({
         where: { id: contract.leadId },
         data: { convertedClientId: client.id },
-      }).catch(() => {}) // ignore if lead not found
+      }).catch(() => {})
+    } else if (contract.clientEmail) {
+      // Auto-match : cherche un lead avec le même email non encore converti
+      const matchedLead = await prisma.lead.findFirst({
+        where: { email: contract.clientEmail, convertedClientId: null },
+        orderBy: { createdAt: 'desc' },
+      })
+      if (matchedLead) {
+        await prisma.lead.update({
+          where: { id: matchedLead.id },
+          data: { convertedClientId: client.id },
+        }).catch(() => {})
+      }
     }
 
     // ── 6. Marquer le contrat comme signé ────────────────────────────────────

@@ -182,6 +182,10 @@ export default async function FinancePage() {
             <p className="text-lg font-bold text-emerald-400">{formatCurrency(caMonthVal)}</p>
           </div>
           <div className="text-right">
+            <p className="text-xs text-nv-text-muted">MRR actuel</p>
+            <p className="text-lg font-bold text-blue-400">{formatCurrency(currentMRR)}<span className="text-xs font-normal text-nv-text-muted">/mois</span></p>
+          </div>
+          <div className="text-right">
             <p className="text-xs text-nv-text-muted">Résultat net</p>
             <p className={`text-lg font-bold ${résultatNet >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{formatCurrency(résultatNet)}</p>
           </div>
@@ -231,7 +235,7 @@ export default async function FinancePage() {
       )}
 
       {/* ── Clients MRR actifs — À facturer ce mois ── */}
-      {activeRetainers.length > 0 && (
+      {true && (
         <div className="rounded-xl border border-nv-border bg-nv-card p-4">
           <div className="flex items-center gap-2 mb-3">
             <RefreshCw size={14} className="text-primary" />
