@@ -1,11 +1,20 @@
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
-import { Target } from 'lucide-react'
+import { Target, FileSignature, ExternalLink, CheckCircle2, Clock } from 'lucide-react'
 import { AcquisitionBoard } from '@/components/acquisition/AcquisitionBoard'
+import Link from 'next/link'
+
+const SIGNATURE_PLATFORM = process.env.NEXT_PUBLIC_SIGNATURE_URL || 'https://nv-contrats.netlify.app'
 
 export default async function AcquisitionPage() {
   const session = await auth()
   if (!session?.user) return null
+
+  // Contrats signés
+  const signedContracts = await prisma.signedContract.findMany({
+    orderBy: { createdAt: 'desc' },
+    take: 20,
+  })
 
   let statuses = await prisma.leadStatus.findMany({ orderBy: { order: 'asc' } })
 
@@ -46,17 +55,80 @@ export default async function AcquisitionPage() {
 
   const serializedStatuses = statuses.map(s => ({ ...s, createdAt: s.createdAt.toISOString() }))
 
+  const pendingContracts = signedContracts.filter(c => c.status === 'PENDING')
+  const completedContracts = signedContracts.filter(c => c.status === 'SIGNED')
+
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-          <Target size={24} className="text-primary" />
-          Acquisition
-        </h1>
-        <p className="text-sm text-nv-text-muted mt-1">
-          Tracker de leads — suivez vos prospects de la prospection à la signature
-        </p>
+      <div className="flex items-start justify-between flex-wrap gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+            <Target size={24} className="text-primary" />
+            Acquisition
+          </h1>
+          <p className="text-sm text-nv-text-muted mt-1">
+            Tracker de leads — suivez vos prospects de la prospection à la signature
+          </p>
+        </div>
+        <a href={SIGNATURE_PLATFORM} target="_blank" rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary/15 hover:bg-primary/25 border border-primary/30 text-primary text-sm font-medium rounded-xl transition-colors">
+          <FileSignature size={15} />
+          Plateforme de signature
+          <ExternalLink size={12} className="opacity-60" />
+        </a>
       </div>
+
+      {/* ── Section Contrats ── */}
+      {signedContracts.length > 0 && (
+        <div className="rounded-xl border border-nv-border bg-nv-card p-4">
+          <div className="flex items-center gap-2 mb-4">
+            <FileSignature size={15} className="text-primary" />
+            <p className="text-sm font-semibold text-white">Contrats</p>
+            <span className="text-xs px-2 py-0.5 bg-emerald-500/15 text-emerald-400 rounded-full">{completedContracts.length} signés</span>
+            {pendingContracts.length > 0 && <span className="text-xs px-2 py-0.5 bg-amber-400/15 text-amber-400 rounded-full">{pendingContracts.length} en attente</span>}
+          </div>
+          <div className="space-y-2">
+            {signedContracts.map(c => {
+              const isSigned = c.status === 'SIGNED'
+              const amount = c.missionType === 'MRR' ? c.monthlyAmount : c.totalAmount
+              const amountLabel = c.missionType === 'MRR' ? '/mois' : 'one-shot'
+              const contractUrl = `${SIGNATURE_PLATFORM}?c=${c.shortCode}`
+              return (
+                <div key={c.id} className={`flex items-center justify-between p-3 rounded-xl border transition-colors ${isSigned ? 'border-emerald-500/20 bg-emerald-500/3' : 'border-nv-border bg-nv-bg'}`}>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${isSigned ? 'bg-emerald-500/15' : 'bg-amber-400/15'}`}>
+                      {isSigned
+                        ? <CheckCircle2 size={14} className="text-emerald-400" />
+                        : <Clock size={14} className="text-amber-400" />}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-white truncate">{c.clientName}</p>
+                      <p className="text-xs text-nv-text-muted">{c.clientCompany || c.clientEmail || '—'} · {c.missionType === 'MRR' ? 'Retainer' : 'Ponctuel'}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    {amount && (
+                      <div className="text-right">
+                        <p className="text-sm font-semibold text-white">
+                          {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(amount)}
+                        </p>
+                        <p className="text-[10px] text-nv-text-muted">{amountLabel}</p>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-mono text-nv-text-muted bg-nv-border px-1.5 py-0.5 rounded">{c.shortCode}</span>
+                      <a href={contractUrl} target="_blank" rel="noopener noreferrer"
+                        className="p-1.5 text-nv-text-muted hover:text-primary transition-colors">
+                        <ExternalLink size={12} />
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       <AcquisitionBoard initialLeads={serialized} initialStatuses={serializedStatuses} />
     </div>
