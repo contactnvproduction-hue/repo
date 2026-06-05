@@ -96,10 +96,10 @@ export default async function PrestasPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3 mb-1 flex-wrap">
                       <Link
-                        href={`/clients/${presta.client.id}`}
+                        href={`/clients/${presta.client?.id ?? ''}`}
                         className="text-xs text-primary hover:underline shrink-0"
                       >
-                        {presta.client.company || presta.client.name}
+                        {presta.client?.company || presta.client?.name || '—'}
                       </Link>
                       <Badge variant={statusBadge[presta.status] || 'muted'} className="text-xs">
                         {statusLabel[presta.status]}

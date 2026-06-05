@@ -49,11 +49,15 @@ export async function PATCH(
       ? await prisma.client.findFirst({ where: { email: contract.clientEmail } })
       : null
 
+    // SIRET depuis contractData (champ optionnel du formulaire admin)
+    const siret = (contract.contractData as any)?.siret || null
+
     if (!client) {
       client = await prisma.client.create({
         data: {
           name: contract.clientName,
           company: contract.clientCompany || null,
+          siret: siret,
           email: contract.clientEmail || null,
           address: contract.clientAddress || null,
           type: 'PARTICULIER',
@@ -64,42 +68,85 @@ export async function PATCH(
     } else {
       client = await prisma.client.update({
         where: { id: client.id },
-        data: { status: 'ACTIF' },
-      })
-    }
-
-    // ── 2. Créer le retainer si MRR ───────────────────────────────────────────
-    if (contract.missionType === 'MRR' && contract.monthlyAmount && contract.durationMonths) {
-      await prisma.clientRetainer.create({
         data: {
-          clientId: client.id,
-          description: Array.isArray(contract.deliverables) && contract.deliverables.length > 0
-            ? (contract.deliverables as Array<{label?: string}>).map(l => l?.label).filter(Boolean).join(', ')
-            : 'Retainer mensuel',
-          monthlyAmount: contract.monthlyAmount,
-          startDate: contract.startDate ? new Date(contract.startDate) : new Date(),
-          durationMonths: contract.durationMonths,
+          name: contract.clientName,   // ← toujours mettre à jour le nom réel
+          status: 'ACTIF',
+          ...(siret && { siret }),
+          ...(contract.clientCompany && { company: contract.clientCompany }),
+          ...(contract.clientAddress && { address: contract.clientAddress }),
         },
       })
     }
 
+    // ── 2. Créer le retainer si MRR (idempotent — 1 seul par code contrat) ───
+    if (contract.missionType === 'MRR' && contract.monthlyAmount && contract.durationMonths) {
+      const retainerDesc = Array.isArray(contract.deliverables) && contract.deliverables.length > 0
+        ? (contract.deliverables as Array<{label?: string}>).map(l => l?.label).filter(Boolean).join(', ')
+        : 'Retainer mensuel'
+      // Idempotency: on ne crée pas si un retainer avec ce desc+montant existe déjà pour ce client
+      const existingRetainer = await prisma.clientRetainer.findFirst({
+        where: { clientId: client.id, monthlyAmount: contract.monthlyAmount, description: retainerDesc },
+      })
+      if (!existingRetainer) {
+        await prisma.clientRetainer.create({
+          data: {
+            clientId: client.id,
+            description: retainerDesc,
+            monthlyAmount: contract.monthlyAmount,
+            startDate: contract.startDate ? new Date(contract.startDate) : new Date(),
+            durationMonths: contract.durationMonths,
+          },
+        })
+      }
+    }
+
     // ── 3. Créer le projet ────────────────────────────────────────────────────
-    const delivrablesSummary = Array.isArray(contract.deliverables) && contract.deliverables.length > 0
-      ? (contract.deliverables as Array<{label?: string}>).map(l => l?.label).filter(Boolean).slice(0, 3).join(', ')
-      : contract.missionType
+    type DelivItem = { label?: string; qty?: string | null; hq?: boolean; detail?: string }
+    const delivsList = Array.isArray(contract.deliverables) ? contract.deliverables as DelivItem[] : []
+    // Résumé conservé pour les descriptions de retainer / facture
+    const delivrablesSummary = delivsList.length > 0
+      ? delivsList.map(l => l?.label).filter(Boolean).join(', ')
+      : (contract.missionType === 'MRR' ? 'Retainer mensuel' : 'Mission ponctuelle')
+
+    // Mois de départ des livrables : "2026-06" ou "2026-06-01" → toujours 1er du mois
+    const rawStart = contract.startDate
+      ? String(contract.startDate).slice(0, 7) + '-01'
+      : null
+    const delivMonth = rawStart
+      ? new Date(rawStart)
+      : new Date(new Date().getFullYear(), new Date().getMonth(), 1)
 
     const project = await prisma.project.create({
       data: {
         clientId: client.id,
-        title: `${contract.clientName} — ${delivrablesSummary}`,
+        title: contract.clientName,   // ← titre simple, les livrables sont dans la timeline
         type: 'VIDEO_CORPORATE',
         status: 'BRIEF_REÇU',
         budget: contract.missionType === 'MRR'
           ? (contract.monthlyAmount || 0) * (contract.durationMonths || 1)
           : contract.totalAmount || 0,
-        startDate: contract.startDate ? new Date(contract.startDate) : new Date(),
+        startDate: contract.startDate ? new Date(String(contract.startDate).slice(0, 7) + '-01') : new Date(),
       },
     })
+
+    // ── 3b. Créer les livrables liés au projet ────────────────────────────────
+    if (delivsList.length > 0) {
+      for (const deliv of delivsList) {
+        if (deliv?.label) {
+          await prisma.deliverable.create({
+            data: {
+              projectId: project.id,
+              title:       deliv.label,
+              description: deliv.detail || null,
+              quantity:    deliv.qty ? Math.max(1, parseInt(String(deliv.qty), 10)) || 1 : 1,
+              month:       delivMonth,   // ← apparaît dans la colonne du bon mois
+              status:      'EN_COURS',
+              assignedTo:  [],
+            },
+          })
+        }
+      }
+    }
 
     // ── 4. Générer facture(s) ─────────────────────────────────────────────────
     const settings = await prisma.agencySetting.findFirst()
@@ -108,7 +155,15 @@ export async function PATCH(
     const fmt = (n: number) => String(n).padStart(4, '0')
     const invoices = []
 
-    if (contract.missionType === 'MRR' && contract.monthlyAmount) {
+    // Idempotency: vérifier si une facture liée à ce contrat existe déjà
+    const existingInvoice = await prisma.invoice.findFirst({
+      where: { notes: { contains: `Contrat ${code}` } },
+    })
+
+    if (existingInvoice) {
+      // Facture(s) déjà créées → on ne recrée pas
+      invoices.push(existingInvoice)
+    } else if (contract.missionType === 'MRR' && contract.monthlyAmount) {
       const ttc = contract.monthlyAmount
       const ht = Math.round((ttc / 1.2) * 100) / 100
       const inv = await prisma.invoice.create({
@@ -192,15 +247,25 @@ export async function PATCH(
       })
     }
 
-    // ── 5. Lier le lead si applicable ────────────────────────────────────────
-    // Priorité : leadId explicit → sinon auto-match par email
+    // ── 5. Lier le lead + passer en statut "Signé" (taux de closing) ──────────
+    // Trouve le statut isClosed pour l'affecter au lead → comptabilise dans le taux
+    const closedStatus = await prisma.leadStatus.findFirst({
+      where: { isClosed: true },
+      orderBy: { order: 'asc' },
+    }).catch(() => null)
+
+    const leadUpdateData = {
+      convertedClientId: client.id,
+      ...(closedStatus && { statusId: closedStatus.id }),
+    }
+
     if (contract.leadId) {
       await prisma.lead.update({
         where: { id: contract.leadId },
-        data: { convertedClientId: client.id },
+        data: leadUpdateData,
       }).catch(() => {})
     } else if (contract.clientEmail) {
-      // Auto-match : cherche un lead avec le même email non encore converti
+      // Auto-match par email — le lead passe automatiquement en "Signé"
       const matchedLead = await prisma.lead.findFirst({
         where: { email: contract.clientEmail, convertedClientId: null },
         orderBy: { createdAt: 'desc' },
@@ -208,7 +273,7 @@ export async function PATCH(
       if (matchedLead) {
         await prisma.lead.update({
           where: { id: matchedLead.id },
-          data: { convertedClientId: client.id },
+          data: leadUpdateData,
         }).catch(() => {})
       }
     }

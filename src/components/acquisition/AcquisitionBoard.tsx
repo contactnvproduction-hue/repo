@@ -349,7 +349,7 @@ export function AcquisitionBoard({
       if (data.lead) updateLeadInState(data.lead)
       setShowConvert(false)
       const invCount = data.invoices?.length ?? 0
-      toast.success(`✅ Vente clôturée — ${data.client.name}${invCount ? ` · ${invCount} facture${invCount > 1 ? 's' : ''} créée${invCount > 1 ? 's' : ''}` : ''}`)
+      toast.success(`✅ Vente clôturée — ${data.client?.name ?? ''}${invCount ? ` · ${invCount} facture${invCount > 1 ? 's' : ''} créée${invCount > 1 ? 's' : ''}` : ''}`)
     } catch { toast.error('Erreur') } finally { setConvertLoading(false) }
   }
 

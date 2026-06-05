@@ -65,7 +65,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
 
   const days = daysUntil(project.deadline)
   const overdue = project.deadline && isOverdue(project.deadline)
-  const clientChecklist = project.client.onboardingChecklist as Array<{ id: string; label: string; done: boolean }> | null
+  const clientChecklist = project.client?.onboardingChecklist as Array<{ id: string; label: string; done: boolean }> | null
 
   const allTeamMembers = await prisma.user.findMany({
     select: { id: true, name: true, role: true, specialty: true, disponible: true },
@@ -80,7 +80,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
           <div className="flex items-center gap-2 text-sm text-nv-text-muted mb-2">
             <Link href="/projects" className="hover:text-white transition-colors">Projets</Link>
             <span>/</span>
-            <Link href={`/clients/${project.clientId}`} className="hover:text-white transition-colors">{project.client.name}</Link>
+            <Link href={`/clients/${project.clientId}`} className="hover:text-white transition-colors">{project.client?.name ?? '—'}</Link>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-2xl font-bold text-white">{project.title}</h1>
@@ -125,12 +125,12 @@ export default async function ProjectDetailPage({ params }: PageProps) {
         </div>
         <DeliverableTimeline
           projectId={project.id}
-          initialDeliverables={project.deliverables.map(d => ({
+          initialDeliverables={(project.deliverables ?? []).map(d => ({
             ...d,
             month: d.month?.toISOString().slice(0, 7) ?? null,
             completedAt: d.completedAt?.toISOString() ?? null,
           }))}
-          teamMembers={project.members.map(m => ({ id: m.user.id, name: m.user.name, avatar: m.user.avatar }))}
+          teamMembers={(project.members ?? []).map(m => ({ id: m.user?.id ?? '', name: m.user?.name ?? '', avatar: m.user?.avatar ?? null }))}
         />
       </div>
 
@@ -138,7 +138,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: Team + Onboarding detail */}
         <div className="space-y-4">
-          <ProjectTeam members={project.members} projectId={project.id} allUsers={allTeamMembers} />
+          <ProjectTeam members={project.members ?? []} projectId={project.id} allUsers={allTeamMembers} />
           {project.deliveryLink && (
             <Card>
               <CardContent className="p-4">
@@ -162,8 +162,8 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                 <CardTitle className="flex items-center gap-2">
                   <CheckSquare size={16} className="text-primary" />
                   Tâches actives
-                  {project.tasks.length > 0 && (
-                    <span className="text-xs font-normal text-nv-text-faint">({project.tasks.length})</span>
+                  {(project.tasks?.length ?? 0) > 0 && (
+                    <span className="text-xs font-normal text-nv-text-faint">({project.tasks?.length})</span>
                   )}
                 </CardTitle>
                 <Link href={`/tasks?projectId=${project.id}`}
@@ -173,7 +173,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
               </div>
             </CardHeader>
             <CardContent>
-              {project.tasks.length === 0 ? (
+              {(project.tasks?.length ?? 0) === 0 ? (
                 <div className="text-center py-4">
                   <p className="text-sm text-nv-text-muted mb-2">Aucune tâche active</p>
                   <Link href={`/tasks?projectId=${project.id}`}
@@ -183,7 +183,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                 </div>
               ) : (
                 <div className="space-y-1.5">
-                  {project.tasks.map((task) => (
+                  {(project.tasks ?? []).map((task) => (
                     <div key={task.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/3 transition-colors">
                       <div className={cn('w-1.5 h-5 rounded-full shrink-0', taskPriorityColor[task.priority] || 'bg-gray-400')} />
                       <div className="flex-1 min-w-0">
@@ -205,7 +205,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
 
           {/* Comments */}
           <ProjectComments
-            comments={project.comments.map(c => ({
+            comments={(project.comments ?? []).map(c => ({
               ...c,
               mentions: (c as { mentions?: string[] }).mentions ?? [],
               createdAt: c.createdAt.toISOString(),

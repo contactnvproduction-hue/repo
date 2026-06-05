@@ -137,15 +137,17 @@ export default async function FinancePage() {
   const currentMRR = mrrForecast[0]?.mrr ?? 0
   const mrrAnnuel = mrrForecast.reduce((s, m) => s + m.mrr, 0)
 
-  // Retainers actifs (endDate > now)
+  // Retainers actifs (endDate > now) — on filtre aussi les retainers sans client lié (mock DB)
   const activeRetainers = allRetainers.filter(r => {
+    if (!r.client) return false
     const end = new Date(r.startDate)
     end.setMonth(end.getMonth() + r.durationMonths)
     return end > now
   })
 
-  // Alertes fin de contrat (≤ 15 jours)
+  // Alertes fin de contrat (≤ 15 jours) — on filtre les retainers sans client
   const retainersEndingSoon = allRetainers
+    .filter(r => r.client)
     .map(r => {
       const end = new Date(r.startDate)
       end.setMonth(end.getMonth() + r.durationMonths)
@@ -216,10 +218,10 @@ export default async function FinancePage() {
           </div>
           <div className="space-y-2">
             {retainersEndingSoon.map(r => (
-              <Link key={r.id} href={`/clients/${r.client.id}`}
+              <Link key={r.id} href={`/clients/${r.client?.id ?? ''}`}
                 className="flex items-center justify-between p-2.5 rounded-lg bg-amber-400/5 border border-amber-400/15 hover:border-amber-400/35 hover:bg-amber-400/10 transition-colors">
                 <div>
-                  <p className="text-sm font-medium text-white">{r.client.name}</p>
+                  <p className="text-sm font-medium text-white">{r.client?.name ?? '—'}</p>
                   <p className="text-xs text-nv-text-muted">{r.description} · fin le {r.endDate.toLocaleDateString('fr-FR')}</p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -251,14 +253,14 @@ export default async function FinancePage() {
               end.setMonth(end.getMonth() + r.durationMonths)
               const monthsDone = Math.floor((now.getTime() - new Date(r.startDate).getTime()) / (30.5 * 86_400_000))
               return (
-                <Link key={r.id} href={`/clients/${r.client.id}`}
+                <Link key={r.id} href={`/clients/${r.client?.id ?? ''}`}
                   className="flex items-center justify-between p-2.5 rounded-lg border border-nv-border hover:border-primary/30 hover:bg-white/3 transition-colors">
                   <div className="flex items-center gap-2.5">
                     <div className="w-7 h-7 rounded-full bg-primary/15 flex items-center justify-center text-xs font-bold text-primary shrink-0">
-                      {r.client.name.charAt(0)}
+                      {r.client?.name?.charAt(0) ?? '?'}
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-white">{r.client.name}</p>
+                      <p className="text-sm font-medium text-white">{r.client?.name ?? '—'}</p>
                       <p className="text-[10px] text-nv-text-muted">{r.description} · mois {Math.min(monthsDone + 1, r.durationMonths)}/{r.durationMonths}</p>
                     </div>
                   </div>
@@ -378,7 +380,7 @@ export default async function FinancePage() {
               : recentPayments.map((p) => (
                 <div key={p.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-white/3 transition-colors">
                   <div>
-                    <p className="text-sm text-white">{p.invoice.client.name}</p>
+                    <p className="text-sm text-white">{p.invoice?.client?.name ?? '—'}</p>
                     <p className="text-xs text-nv-text-muted">{formatDate(p.date)} · {p.method}</p>
                   </div>
                   <p className="text-sm font-medium text-emerald-400">{formatCurrency(p.amount)}</p>

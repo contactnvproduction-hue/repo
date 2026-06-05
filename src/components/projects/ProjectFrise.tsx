@@ -71,16 +71,16 @@ export function ProjectFrise({ project }: { project: Project }) {
           {/* Avatar */}
           <div className="w-10 h-10 rounded-full shrink-0 overflow-hidden border-2 flex items-center justify-center"
             style={{ borderColor: `${statusColor}40`, backgroundColor: `${statusColor}15` }}>
-            {project.client.avatar
-              ? <img src={project.client.avatar} alt={project.client.name} className="w-full h-full object-cover" />
+            {project.client?.avatar
+              ? <img src={project.client.avatar} alt={project.client.name ?? ''} className="w-full h-full object-cover" />
               : <span className="text-sm font-bold" style={{ color: statusColor }}>
-                  {project.client.name.charAt(0).toUpperCase()}
+                  {project.client?.name?.charAt(0)?.toUpperCase() ?? '?'}
                 </span>
             }
           </div>
           {/* Info */}
           <div className="min-w-0">
-            <p className="text-xs font-semibold text-white truncate">{project.client.name}</p>
+            <p className="text-xs font-semibold text-white truncate">{project.client?.name ?? '—'}</p>
             <p className="text-[10px] text-nv-text-muted truncate">{project.title}</p>
             <div className="flex items-center gap-1 mt-0.5">
               <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: statusColor }} />
@@ -180,15 +180,15 @@ export function ProjectFrise({ project }: { project: Project }) {
             </button>
           </div>
           {/* Team */}
-          {project.members.length > 0 && (
+          {(project.members?.length ?? 0) > 0 && (
             <div className="flex -space-x-1.5">
-              {project.members.slice(0, 4).map(m => (
-                <div key={m.user.id}
+              {project.members?.slice(0, 4).map(m => (
+                <div key={m.user?.id ?? Math.random()}
                   className="w-5 h-5 rounded-full bg-primary/20 border border-nv-dark flex items-center justify-center"
-                  title={m.user.name}>
-                  {m.user.avatar
-                    ? <img src={m.user.avatar} alt={m.user.name} className="w-full h-full rounded-full object-cover" />
-                    : <span className="text-[7px] font-bold text-primary">{m.user.name.charAt(0)}</span>
+                  title={m.user?.name ?? ''}>
+                  {m.user?.avatar
+                    ? <img src={m.user.avatar} alt={m.user.name ?? ''} className="w-full h-full rounded-full object-cover" />
+                    : <span className="text-[7px] font-bold text-primary">{m.user?.name?.charAt(0) ?? '?'}</span>
                   }
                 </div>
               ))}

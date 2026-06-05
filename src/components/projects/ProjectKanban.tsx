@@ -46,8 +46,8 @@ export function ProjectKanban({ projects, columns }: { projects: Project[]; colu
                 {colProjects.map((project) => {
                   const days = daysUntil(project.deadline)
                   const overdue = project.deadline && isOverdue(project.deadline)
-                  const onboardingDone = project.onboardingSteps.filter((s) => s.completed).length
-                  const onboardingTotal = project.onboardingSteps.length
+                  const onboardingDone = (project.onboardingSteps ?? []).filter((s) => s.completed).length
+                  const onboardingTotal = (project.onboardingSteps ?? []).length
                   return (
                     <Link key={project.id} href={`/projects/${project.id}`}
                       className="block bg-nv-card border border-nv-border rounded-xl p-4 hover:border-nv-border-light hover:shadow-lg transition-all group">
@@ -69,7 +69,7 @@ export function ProjectKanban({ projects, columns }: { projects: Project[]; colu
                         )}
                       </div>
                       <p className="text-sm font-semibold text-white group-hover:text-primary transition-colors mb-1 line-clamp-2">{project.title}</p>
-                      <p className="text-xs text-nv-text-muted mb-3">{project.client.name}</p>
+                      <p className="text-xs text-nv-text-muted mb-3">{project.client?.name ?? '—'}</p>
                       {onboardingTotal > 0 && (
                         <div className="mb-3">
                           <div className="flex justify-between text-[10px] text-nv-text-faint mb-1">
@@ -83,16 +83,16 @@ export function ProjectKanban({ projects, columns }: { projects: Project[]; colu
                       )}
                       <div className="flex items-center justify-between">
                         <div className="flex -space-x-1.5">
-                          {project.members.slice(0, 3).map((m) => (
-                            <div key={m.user.id} className="w-6 h-6 rounded-full bg-primary/20 border-2 border-nv-card flex items-center justify-center" title={m.user.name}>
-                              {m.user.avatar
-                                ? <img src={m.user.avatar} alt={m.user.name} className="w-full h-full rounded-full object-cover" />
-                                : <span className="text-[8px] font-bold text-primary">{m.user.name.charAt(0)}</span>}
+                          {(project.members ?? []).slice(0, 3).map((m) => (
+                            <div key={m.user?.id ?? Math.random()} className="w-6 h-6 rounded-full bg-primary/20 border-2 border-nv-card flex items-center justify-center" title={m.user?.name ?? ''}>
+                              {m.user?.avatar
+                                ? <img src={m.user.avatar} alt={m.user.name ?? ''} className="w-full h-full rounded-full object-cover" />
+                                : <span className="text-[8px] font-bold text-primary">{m.user?.name?.charAt(0) ?? '?'}</span>}
                             </div>
                           ))}
-                          {project.members.length > 3 && (
+                          {(project.members?.length ?? 0) > 3 && (
                             <div className="w-6 h-6 rounded-full bg-nv-border border-2 border-nv-card flex items-center justify-center">
-                              <span className="text-[8px] text-nv-text-muted">+{project.members.length - 3}</span>
+                              <span className="text-[8px] text-nv-text-muted">+{(project.members?.length ?? 0) - 3}</span>
                             </div>
                           )}
                         </div>

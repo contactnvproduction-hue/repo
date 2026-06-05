@@ -95,9 +95,9 @@ export default async function TeamPage() {
                   <p className="text-xs text-nv-text-muted mb-2">Projets actifs ({user.assignedProjects.length})</p>
                   <div className="space-y-1">
                     {user.assignedProjects.slice(0, 3).map((pm) => (
-                      <div key={pm.project.id} className="flex items-center gap-1.5">
+                      <div key={pm.project?.id ?? pm.id ?? Math.random()} className="flex items-center gap-1.5">
                         <div className="w-1 h-1 rounded-full bg-primary shrink-0" />
-                        <p className="text-xs text-nv-text truncate">{pm.project.title}</p>
+                        <p className="text-xs text-nv-text truncate">{pm.project?.title ?? '—'}</p>
                       </div>
                     ))}
                     {user.assignedProjects.length > 3 && (

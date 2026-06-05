@@ -138,7 +138,7 @@ export default async function ClientsPage({ searchParams }: PageProps) {
 
                   {/* Projets */}
                   <div className="col-span-2">
-                    <span className="text-sm text-nv-text-muted">{client._count.projects} projet{client._count.projects !== 1 ? 's' : ''}</span>
+                    <span className="text-sm text-nv-text-muted">{client._count?.projects ?? 0} projet{(client._count?.projects ?? 0) !== 1 ? 's' : ''}</span>
                   </div>
 
                   {/* Date */}

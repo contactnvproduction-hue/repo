@@ -77,8 +77,8 @@ export default async function QuotesPage() {
                   <p className="text-sm font-mono text-white group-hover:text-primary transition-colors">{q.number}</p>
                 </div>
                 <div className="col-span-3 min-w-0">
-                  <p className="text-sm font-medium text-white truncate">{q.client.name}</p>
-                  {q.client.company && <p className="text-xs text-nv-text-muted truncate">{q.client.company}</p>}
+                  <p className="text-sm font-medium text-white truncate">{q.client?.name ?? '—'}</p>
+                  {q.client?.company && <p className="text-xs text-nv-text-muted truncate">{q.client.company}</p>}
                 </div>
                 <div className="col-span-3 min-w-0">
                   {q.project

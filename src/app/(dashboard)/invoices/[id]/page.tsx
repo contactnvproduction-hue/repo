@@ -87,8 +87,8 @@ export default async function InvoiceDetailPage({ params }: PageProps) {
             <Link href={`/clients/${invoice.clientId}`} className="flex items-center gap-2 hover:text-primary transition-colors">
               <Building2 size={16} className="text-nv-text-muted" />
               <div>
-                <p className="text-sm font-medium text-white">{invoice.client.name}</p>
-                {invoice.client.company && <p className="text-xs text-nv-text-muted">{invoice.client.company}</p>}
+                <p className="text-sm font-medium text-white">{invoice.client?.name ?? '—'}</p>
+                {invoice.client?.company && <p className="text-xs text-nv-text-muted">{invoice.client.company}</p>}
               </div>
             </Link>
           </CardContent>
@@ -144,7 +144,7 @@ export default async function InvoiceDetailPage({ params }: PageProps) {
       </Card>
 
       {/* Paiements */}
-      <PaymentManager invoiceId={invoice.id} payments={invoice.payments} totalTTC={invoice.totalTTC} amountPaid={invoice.amountPaid} />
+      <PaymentManager invoiceId={invoice.id} payments={invoice.payments ?? []} totalTTC={invoice.totalTTC} amountPaid={invoice.amountPaid} />
 
       <BillingExtras id={invoice.id} type="invoice" initialPdfUrl={invoice.pdfUrl} initialChecked={invoice.paid} totalTTC={invoice.totalTTC} />
     </div>

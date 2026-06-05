@@ -203,21 +203,21 @@ async function getDashboardData(userId: string) {
     ceoMeetingSoon: ceoMeetingSoon ? { ...ceoMeetingSoon, date: ceoMeetingSoon.date.toISOString() } : null,
     upcomingMeetings: upcomingCeoMeetings.map(m => ({ id: m.id, title: m.title, date: m.date.toISOString() })),
     checkinDone: !!todayCheckin,
-    activeRetainers: activeRetainers.map(r => ({
+    activeRetainers: activeRetainers.filter(r => r.client).map(r => ({
       id: r.id,
-      clientId: r.client.id,
-      clientName: r.client.name,
-      clientCompany: r.client.company,
+      clientId: r.client!.id,
+      clientName: r.client!.name,
+      clientCompany: r.client!.company,
       monthlyAmount: r.monthlyAmount,
       durationMonths: r.durationMonths,
       startDate: r.startDate.toISOString(),
       description: r.description,
     })),
-    retainersEndingSoon: retainersEndingSoon.map(r => ({
+    retainersEndingSoon: retainersEndingSoon.filter(r => r.client).map(r => ({
       id: r.id,
-      clientId: r.client.id,
-      clientName: r.client.name,
-      clientCompany: r.client.company,
+      clientId: r.client!.id,
+      clientName: r.client!.name,
+      clientCompany: r.client!.company,
       monthlyAmount: r.monthlyAmount,
       daysLeft: r.daysLeft,
       endDate: r.endDate,
@@ -606,7 +606,7 @@ export default async function DashboardPage() {
                     className="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 transition-colors group"
                   >
                     <div className="min-w-0">
-                      <p className="text-sm text-white truncate">{inv.client.name}</p>
+                      <p className="text-sm text-white truncate">{inv.client?.name ?? '—'}</p>
                       <p className="text-xs text-nv-text-muted">{inv.number}</p>
                     </div>
                     <div className="text-right shrink-0">
@@ -680,7 +680,7 @@ export default async function DashboardPage() {
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-white truncate">{project.title}</p>
-                      <p className="text-xs text-nv-text-muted">{project.client.name}</p>
+                      <p className="text-xs text-nv-text-muted">{project.client?.name ?? '—'}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 shrink-0">

@@ -73,11 +73,11 @@ export default async function QuoteDetailPage({ params }: PageProps) {
             <Link href={`/clients/${quote.clientId}`} className="flex items-center gap-2 hover:text-primary transition-colors">
               <Building2 size={15} className="text-nv-text-muted shrink-0" />
               <div>
-                <p className="text-sm font-medium text-white">{quote.client.name}</p>
-                {quote.client.company && <p className="text-xs text-nv-text-muted">{quote.client.company}</p>}
+                <p className="text-sm font-medium text-white">{quote.client?.name ?? '—'}</p>
+                {quote.client?.company && <p className="text-xs text-nv-text-muted">{quote.client.company}</p>}
               </div>
             </Link>
-            {quote.client.email && <p className="text-xs text-nv-text-muted mt-2">{quote.client.email}</p>}
+            {quote.client?.email && <p className="text-xs text-nv-text-muted mt-2">{quote.client.email}</p>}
           </CardContent>
         </Card>
 

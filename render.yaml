@@ -28,6 +28,8 @@ services:
         value: https://new-vision-dashboard-9468.onrender.com
       - key: NODE_ENV
         value: production
+      - key: NEXT_PUBLIC_SIGNATURE_URL
+        value: https://new-vision-dashboard-9468.onrender.com/nv-signature.html
 
   # ─── BASE DE DONNÉES POSTGRESQL ──────────────────────────────────────────
 databases:

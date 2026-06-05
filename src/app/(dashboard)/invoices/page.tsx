@@ -83,8 +83,8 @@ export default async function InvoicesPage() {
                     <p className="text-sm font-mono text-white group-hover:text-primary transition-colors">{inv.number}</p>
                   </div>
                   <div className="col-span-3 min-w-0">
-                    <p className="text-sm font-medium text-white truncate">{inv.client.name}</p>
-                    {inv.client.company && <p className="text-xs text-nv-text-muted truncate">{inv.client.company}</p>}
+                    <p className="text-sm font-medium text-white truncate">{inv.client?.name ?? '—'}</p>
+                    {inv.client?.company && <p className="text-xs text-nv-text-muted truncate">{inv.client.company}</p>}
                   </div>
                   <div className="col-span-2">
                     <p className="text-sm font-medium text-white">{formatCurrency(inv.totalTTC)}</p>

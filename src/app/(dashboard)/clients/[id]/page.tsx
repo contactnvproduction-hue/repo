@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import {
   Building2, Mail, Phone, MapPin, FileText, Receipt,
-  FolderKanban, Plus,
+  FolderKanban, Plus, ClipboardList,
   Hash, TrendingUp, StickyNote, Bell, RepeatIcon,
 } from 'lucide-react'
 import { ClientActions } from '@/components/clients/ClientActions'
@@ -122,13 +122,13 @@ export default async function ClientDetailPage({ params }: PageProps) {
 
   // MRR actuel et LTV contractée
   const now = new Date()
-  const activeMRR = client.retainers.reduce((sum, r) => {
+  const activeMRR = (client.retainers ?? []).reduce((sum, r) => {
     const start = new Date(r.startDate)
     const end = new Date(r.startDate)
     end.setMonth(end.getMonth() + r.durationMonths)
     return now >= start && now < end ? sum + r.monthlyAmount : sum
   }, 0)
-  const ltvContractée = client.retainers.reduce((sum, r) => sum + r.monthlyAmount * r.durationMonths, 0)
+  const ltvContractée = (client.retainers ?? []).reduce((sum, r) => sum + r.monthlyAmount * r.durationMonths, 0)
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -191,7 +191,7 @@ export default async function ClientDetailPage({ params }: PageProps) {
         </div>
         <div className="bg-nv-card border border-nv-border rounded-xl p-4">
           <div className="flex items-center gap-2 text-nv-text-muted text-xs mb-2"><FolderKanban size={14} />Projets</div>
-          <p className="text-xl font-bold text-white">{client.projects.length}</p>
+          <p className="text-xl font-bold text-white">{(client.projects ?? []).length}</p>
         </div>
       </div>
 
@@ -269,7 +269,7 @@ export default async function ClientDetailPage({ params }: PageProps) {
           {/* Historique interactions */}
           <ClientInteractions
             clientId={client.id}
-            initialInteractions={client.interactions.map(i => ({
+            initialInteractions={(client.interactions ?? []).map(i => ({
               ...i,
               date: i.date.toISOString(),
               createdAt: i.createdAt.toISOString(),
@@ -284,18 +284,23 @@ export default async function ClientDetailPage({ params }: PageProps) {
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2"><FolderKanban size={16} className="text-primary" />Projets ({client.projects.length})</CardTitle>
-                <Link href={`/projects/new?clientId=${client.id}`} className="text-xs text-primary hover:underline flex items-center gap-1">
-                  <Plus size={12} />Nouveau
-                </Link>
+                <CardTitle className="flex items-center gap-2"><FolderKanban size={16} className="text-primary" />Projets ({(client.projects ?? []).length})</CardTitle>
+                <div className="flex items-center gap-2">
+                  <Link href={`/clients/${client.id}/brief`} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary/10 border border-primary/20 text-xs text-primary hover:bg-primary/20 transition-colors">
+                    <ClipboardList size={11} />Brief PDF
+                  </Link>
+                  <Link href={`/projects/new?clientId=${client.id}`} className="text-xs text-primary hover:underline flex items-center gap-1">
+                    <Plus size={12} />Nouveau
+                  </Link>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
-              {client.projects.length === 0 ? (
+              {(client.projects ?? []).length === 0 ? (
                 <p className="text-sm text-nv-text-muted">Aucun projet</p>
               ) : (
                 <div className="space-y-2">
-                  {client.projects.map((p) => (
+                  {(client.projects ?? []).map((p) => (
                     <Link key={p.id} href={`/projects/${p.id}`} className="flex items-center justify-between p-3 rounded-lg border border-nv-border hover:border-nv-border-light hover:bg-white/3 transition-colors group">
                       <div>
                         <div className="flex items-center gap-2 mb-0.5">
@@ -307,7 +312,7 @@ export default async function ClientDetailPage({ params }: PageProps) {
                           )}
                         </div>
                         <p className="text-sm font-medium text-white group-hover:text-primary transition-colors">{p.title}</p>
-                        <p className="text-xs text-nv-text-muted">{p._count.tasks} tâche{p._count.tasks !== 1 ? 's' : ''} • {p.deadline ? `Deadline ${formatDate(p.deadline)}` : 'Pas de deadline'}</p>
+                        <p className="text-xs text-nv-text-muted">{p._count?.tasks ?? 0} tâche{(p._count?.tasks ?? 0) !== 1 ? 's' : ''} • {p.deadline ? `Deadline ${formatDate(p.deadline)}` : 'Pas de deadline'}</p>
                       </div>
                       <Badge variant={projectStatusBadge[p.status] || 'muted'}>{projectStatusLabel[p.status]}</Badge>
                     </Link>
@@ -328,11 +333,11 @@ export default async function ClientDetailPage({ params }: PageProps) {
               </div>
             </CardHeader>
             <CardContent>
-              {client.quotes.length === 0 ? (
+              {(client.quotes ?? []).length === 0 ? (
                 <p className="text-sm text-nv-text-muted">Aucun devis</p>
               ) : (
                 <div className="space-y-2">
-                  {client.quotes.map((q) => (
+                  {(client.quotes ?? []).map((q) => (
                     <Link key={q.id} href={`/quotes/${q.id}`} className="flex items-center justify-between p-3 rounded-lg border border-nv-border hover:border-nv-border-light hover:bg-white/3 transition-colors">
                       <div>
                         <p className="text-sm font-medium text-white">{q.number}</p>
@@ -360,12 +365,12 @@ export default async function ClientDetailPage({ params }: PageProps) {
               </div>
             </CardHeader>
             <CardContent>
-              {client.invoices.length === 0 ? (
+              {(client.invoices ?? []).length === 0 ? (
                 <p className="text-sm text-nv-text-muted">Aucune facture</p>
               ) : (
                 <div className="space-y-2">
-                  {client.invoices.map((inv) => {
-                    const paid = inv.payments.reduce((s, p) => s + (p.confirmed ? p.amount : 0), 0)
+                  {(client.invoices ?? []).map((inv) => {
+                    const paid = (inv.payments ?? []).reduce((s, p) => s + (p.confirmed ? p.amount : 0), 0)
                     return (
                       <Link key={inv.id} href={`/invoices/${inv.id}`} className="flex items-center justify-between p-3 rounded-lg border border-nv-border hover:border-nv-border-light hover:bg-white/3 transition-colors">
                         <div>
@@ -395,7 +400,7 @@ export default async function ClientDetailPage({ params }: PageProps) {
             <CardContent>
               <ClientSocialKPIs
                 clientId={client.id}
-                initialKpis={client.socialKpis.map(k => ({
+                initialKpis={(client.socialKpis ?? []).map(k => ({
                   ...k,
                   month: k.month.toISOString(),
                   screenshotDate: k.screenshotDate?.toISOString() ?? null,
@@ -415,7 +420,7 @@ export default async function ClientDetailPage({ params }: PageProps) {
             <CardContent>
               <ClientRetainerManager
                 clientId={client.id}
-                initialRetainers={client.retainers.map(r => ({
+                initialRetainers={(client.retainers ?? []).map(r => ({
                   ...r,
                   startDate: r.startDate.toISOString(),
                   createdAt: r.createdAt.toISOString(),
@@ -435,7 +440,7 @@ export default async function ClientDetailPage({ params }: PageProps) {
             <CardContent>
               <ClientNotes
                 clientId={client.id}
-                initialNotes={client.clientNotes.map((n) => ({
+                initialNotes={(client.clientNotes ?? []).map((n) => ({
                   ...n,
                   createdAt: n.createdAt.toISOString(),
                 }))}

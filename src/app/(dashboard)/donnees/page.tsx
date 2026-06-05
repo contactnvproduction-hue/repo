@@ -22,7 +22,7 @@ export default async function DonneesPage() {
   const enrichedKpis = kpis.map(k => ({
     ...k,
     month: k.month.toISOString(),
-    clientName: k.client.company || k.client.name,
+    clientName: k.client?.company || k.client?.name || '—',
   }))
 
   return (
