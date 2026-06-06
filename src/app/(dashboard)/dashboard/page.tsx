@@ -7,12 +7,13 @@ import { Badge } from '@/components/ui/badge'
 import {
   TrendingUp, Users, FolderKanban, Receipt, Clock,
   AlertTriangle, CheckCircle2, ArrowRight, Bell, Crosshair, PhoneCall, UserCheck, RepeatIcon, Briefcase, Calendar,
-  AlertCircle, RefreshCw,
+  AlertCircle,
 } from 'lucide-react'
 import Link from 'next/link'
 import { DashboardCharts } from '@/components/dashboard/DashboardCharts'
 import { LeadFollowUpModal } from '@/components/dashboard/LeadFollowUpModal'
 import { DailyCheckinModal } from '@/components/dashboard/DailyCheckinModal'
+import { MrrSection } from '@/components/dashboard/MrrSection'
 
 function todayStr() { return new Date().toISOString().slice(0, 10) }
 
@@ -40,6 +41,7 @@ async function getDashboardData(userId: string) {
     allRetainers,
     upcomingCeoMeetings,
     todayCheckin,
+    allClientInvoices,
   ] = await Promise.all([
     // CA du mois (factures payées)
     prisma.payment.aggregate({
@@ -136,6 +138,15 @@ async function getDashboardData(userId: string) {
     prisma.userDailyCheckin.findFirst({
       where: { userId, date: todayStr() },
     }),
+    // Factures (toutes) pour le filtre "payé ce mois" des retainers MRR
+    prisma.invoice.findMany({
+      where: {
+        status: { in: ['EN_ATTENTE', 'PARTIELLEMENT_PAYÉE', 'EN_RETARD', 'PAYÉE'] },
+        type:   { in: ['TOTALE', 'SOLDE'] },
+      },
+      orderBy: { createdAt: 'desc' },
+      select:  { id: true, clientId: true, status: true, totalTTC: true },
+    }),
   ])
 
   const caMonthVal = caMonth._sum.amount || 0
@@ -170,6 +181,14 @@ async function getDashboardData(userId: string) {
     ? nextMeeting
     : null
 
+  // Index : dernière facture (tous statuts) par client → pour filtrer les payés
+  const latestInvoiceByClient = new Map<string, typeof allClientInvoices[0]>()
+  for (const inv of allClientInvoices) {
+    if (!latestInvoiceByClient.has(inv.clientId)) {
+      latestInvoiceByClient.set(inv.clientId, inv) // déjà trié desc → premier = plus récent
+    }
+  }
+
   // Retainers actifs + alertes fin de contrat (15 jours)
   const activeRetainers = allRetainers.filter(r => {
     const end = new Date(r.startDate)
@@ -203,16 +222,25 @@ async function getDashboardData(userId: string) {
     ceoMeetingSoon: ceoMeetingSoon ? { ...ceoMeetingSoon, date: ceoMeetingSoon.date.toISOString() } : null,
     upcomingMeetings: upcomingCeoMeetings.map(m => ({ id: m.id, title: m.title, date: m.date.toISOString() })),
     checkinDone: !!todayCheckin,
-    activeRetainers: activeRetainers.filter(r => r.client).map(r => ({
-      id: r.id,
-      clientId: r.client!.id,
-      clientName: r.client!.name,
-      clientCompany: r.client!.company,
-      monthlyAmount: r.monthlyAmount,
-      durationMonths: r.durationMonths,
-      startDate: r.startDate.toISOString(),
-      description: r.description,
-    })),
+    // Seulement les retainers dont le client n'a PAS encore payé sa dernière facture
+    activeRetainers: activeRetainers.filter(r => r.client).filter(r => {
+      const latestInv = latestInvoiceByClient.get(r.client!.id)
+      return !latestInv || latestInv.status !== 'PAYÉE'
+    }).map(r => {
+      const inv = latestInvoiceByClient.get(r.client!.id) ?? null
+      return {
+        id:            r.id,
+        clientId:      r.client!.id,
+        clientName:    r.client!.name,
+        clientCompany: r.client!.company,
+        monthlyAmount: r.monthlyAmount,
+        durationMonths: r.durationMonths,
+        startDate:     r.startDate.toISOString(),
+        description:   r.description,
+        invoiceId:     inv?.id ?? null,
+        invoiceTTC:    inv?.totalTTC ?? r.monthlyAmount,
+      }
+    }),
     retainersEndingSoon: retainersEndingSoon.filter(r => r.client).map(r => ({
       id: r.id,
       clientId: r.client!.id,
@@ -454,49 +482,8 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      {/* ── Clients MRR actifs — à facturer ce mois ── */}
-      {data.activeRetainers.length > 0 && (
-        <div className="rounded-xl border border-nv-border bg-nv-card p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <RefreshCw size={14} className="text-primary" />
-              <p className="text-sm font-semibold text-white">Clients MRR — À facturer ce mois</p>
-              <span className="text-xs px-2 py-0.5 bg-primary/15 text-primary rounded-full font-medium">{data.activeRetainers.length}</span>
-            </div>
-            <Link href="/finance" className="text-xs text-nv-text-muted hover:text-primary flex items-center gap-1 transition-colors">
-              Finance <ArrowRight size={11} />
-            </Link>
-          </div>
-          <div className="space-y-1.5">
-            {data.activeRetainers.map(r => {
-              const end = new Date(r.startDate)
-              end.setMonth(end.getMonth() + r.durationMonths)
-              return (
-                <Link key={r.id} href={`/clients/${r.clientId}`}
-                  className="flex items-center justify-between p-2.5 rounded-lg border border-nv-border hover:border-primary/30 hover:bg-white/3 transition-colors group">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary shrink-0">
-                      {r.clientName.charAt(0)}
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-white">{r.clientName}</p>
-                      <p className="text-[10px] text-nv-text-muted">{r.description}</p>
-                    </div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-sm font-semibold text-emerald-400">
-                      {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(r.monthlyAmount)}
-                    </p>
-                    <p className="text-[10px] text-nv-text-muted">
-                      jusqu&apos;au {end.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
-                    </p>
-                  </div>
-                </Link>
-              )
-            })}
-          </div>
-        </div>
-      )}
+      {/* ── Clients MRR actifs — à facturer ce mois (filtre auto si payé) ── */}
+      <MrrSection retainers={data.activeRetainers} />
 
       {/* Réunions CEO à venir */}
       {data.upcomingMeetings.length > 0 && (

@@ -4,7 +4,8 @@ import { Target, FileSignature, ExternalLink, CheckCircle2, Clock } from 'lucide
 import { AcquisitionBoard } from '@/components/acquisition/AcquisitionBoard'
 import Link from 'next/link'
 
-const SIGNATURE_PLATFORM = process.env.NEXT_PUBLIC_SIGNATURE_URL || 'https://nv-contrats.netlify.app'
+const SIGNATURE_PLATFORM = process.env.NEXT_PUBLIC_SIGNATURE_URL
+  || `${process.env.NEXT_PUBLIC_APP_URL || 'https://new-vision-dashboard-9468.onrender.com'}/nv-signature.html`
 
 export default async function AcquisitionPage() {
   const session = await auth()
