@@ -17,14 +17,18 @@ export async function proxy(req: NextRequest) {
 
   const isSecure = nextUrl.protocol === 'https:'
 
-  const isAuthPage       = nextUrl.pathname.startsWith('/login')
-  const isApiAuthRoute   = nextUrl.pathname.startsWith('/api/auth')
-  const isPublicApiRoute = nextUrl.pathname.startsWith('/api/public')
-  const isHealthRoute    = nextUrl.pathname === '/api/health'
-  const isStaticAsset    = nextUrl.pathname.startsWith('/api/settings/public')
+  const isAuthPage          = nextUrl.pathname.startsWith('/login')
+  const isApiAuthRoute      = nextUrl.pathname.startsWith('/api/auth')
+  const isPublicApiRoute    = nextUrl.pathname.startsWith('/api/public')
+  const isHealthRoute       = nextUrl.pathname === '/api/health'
+  const isStaticAsset       = nextUrl.pathname.startsWith('/api/settings/public')
+  // Plateforme de signature : page HTML publique + API contrats (appelée par les clients)
+  const isSignaturePage     = nextUrl.pathname === '/nv-signature.html'
+  const isContractsApi      = nextUrl.pathname.startsWith('/api/contracts')
 
   // Always allow through
-  if (isApiAuthRoute || isPublicApiRoute || isHealthRoute || isStaticAsset) {
+  if (isApiAuthRoute || isPublicApiRoute || isHealthRoute || isStaticAsset
+      || isSignaturePage || isContractsApi) {
     return NextResponse.next()
   }
 

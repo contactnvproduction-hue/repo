@@ -5,7 +5,7 @@ import { AcquisitionBoard } from '@/components/acquisition/AcquisitionBoard'
 import Link from 'next/link'
 
 const SIGNATURE_PLATFORM = process.env.NEXT_PUBLIC_SIGNATURE_URL
-  || `${process.env.NEXT_PUBLIC_APP_URL || 'https://new-vision-dashboard-9468.onrender.com'}/nv-signature.html`
+  || 'https://new-vision-dashboard-9468.onrender.com/nv-signature.html'
 
 export default async function AcquisitionPage() {
   const session = await auth()
