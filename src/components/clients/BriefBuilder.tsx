@@ -4,8 +4,8 @@ import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, Plus, Trash2, Download, FileText,
-  Link as LinkIcon, Palette, Youtube, Instagram,
-  Linkedin, Globe, Tv2, ChevronDown, ChevronUp,
+  Link as LinkIcon, Palette,
+  Globe, Tv2, ChevronDown, ChevronUp,
 } from 'lucide-react'
 import Link from 'next/link'
 
