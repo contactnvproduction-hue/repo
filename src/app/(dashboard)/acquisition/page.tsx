@@ -1,23 +1,21 @@
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
-import { headers } from 'next/headers'
 import { Target, FileSignature, ExternalLink, CheckCircle2, Clock } from 'lucide-react'
 import { AcquisitionBoard } from '@/components/acquisition/AcquisitionBoard'
 import Link from 'next/link'
+
+// Plateforme de signature hébergée sur Netlify (site statique dédié)
+// API Render : CORS * → les appels cross-origin fonctionnent sans restriction
+const NETLIFY_SIGNATURE = 'https://newvision-contrat.netlify.app'
 
 export default async function AcquisitionPage() {
   const session = await auth()
   if (!session?.user) return null
 
-  // URL construite dynamiquement depuis le serveur — aucune dépendance env var
-  const h = await headers()
-  const host  = h.get('host') || 'new-vision-dashboard-9468.onrender.com'
-  const proto = h.get('x-forwarded-proto') || (host.startsWith('localhost') ? 'http' : 'https')
-  const APP_URL = `${proto}://${host}`
-  // Page admin (création de contrat) = HTML sans paramètre
-  const SIGNATURE_ADMIN = `${APP_URL}/nv-signature.html`
-  // Lien client propre : /contrat/CODE
-  const contractUrl = (code: string) => `${APP_URL}/contrat/${code}`
+  // Page admin (création de contrat) = Netlify sans paramètre
+  const SIGNATURE_ADMIN = NETLIFY_SIGNATURE
+  // Lien client : Netlify?c=CODE
+  const contractUrl = (code: string) => `${NETLIFY_SIGNATURE}?c=${code}`
 
   // Contrats signés
   const signedContracts = await prisma.signedContract.findMany({
