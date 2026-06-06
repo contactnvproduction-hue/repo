@@ -22,13 +22,14 @@ export async function proxy(req: NextRequest) {
   const isPublicApiRoute    = nextUrl.pathname.startsWith('/api/public')
   const isHealthRoute       = nextUrl.pathname === '/api/health'
   const isStaticAsset       = nextUrl.pathname.startsWith('/api/settings/public')
-  // Plateforme de signature : page HTML publique + API contrats (appelée par les clients)
+  // Plateforme de signature : page HTML publique + route /contrat/CODE + API contrats
   const isSignaturePage     = nextUrl.pathname === '/nv-signature.html'
+  const isContratRoute      = nextUrl.pathname.startsWith('/contrat/')
   const isContractsApi      = nextUrl.pathname.startsWith('/api/contracts')
 
   // Always allow through
   if (isApiAuthRoute || isPublicApiRoute || isHealthRoute || isStaticAsset
-      || isSignaturePage || isContractsApi) {
+      || isSignaturePage || isContratRoute || isContractsApi) {
     return NextResponse.next()
   }
 

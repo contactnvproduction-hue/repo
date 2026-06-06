@@ -1,15 +1,23 @@
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { headers } from 'next/headers'
 import { Target, FileSignature, ExternalLink, CheckCircle2, Clock } from 'lucide-react'
 import { AcquisitionBoard } from '@/components/acquisition/AcquisitionBoard'
 import Link from 'next/link'
 
-const SIGNATURE_PLATFORM = process.env.NEXT_PUBLIC_SIGNATURE_URL
-  || 'https://new-vision-dashboard-9468.onrender.com/nv-signature.html'
-
 export default async function AcquisitionPage() {
   const session = await auth()
   if (!session?.user) return null
+
+  // URL construite dynamiquement depuis le serveur — aucune dépendance env var
+  const h = await headers()
+  const host  = h.get('host') || 'new-vision-dashboard-9468.onrender.com'
+  const proto = h.get('x-forwarded-proto') || (host.startsWith('localhost') ? 'http' : 'https')
+  const APP_URL = `${proto}://${host}`
+  // Page admin (création de contrat) = HTML sans paramètre
+  const SIGNATURE_ADMIN = `${APP_URL}/nv-signature.html`
+  // Lien client propre : /contrat/CODE
+  const contractUrl = (code: string) => `${APP_URL}/contrat/${code}`
 
   // Contrats signés
   const signedContracts = await prisma.signedContract.findMany({
@@ -71,7 +79,7 @@ export default async function AcquisitionPage() {
             Tracker de leads — suivez vos prospects de la prospection à la signature
           </p>
         </div>
-        <a href={SIGNATURE_PLATFORM} target="_blank" rel="noopener noreferrer"
+        <a href={SIGNATURE_ADMIN} target="_blank" rel="noopener noreferrer"
           className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary/15 hover:bg-primary/25 border border-primary/30 text-primary text-sm font-medium rounded-xl transition-colors">
           <FileSignature size={15} />
           Plateforme de signature
@@ -93,7 +101,7 @@ export default async function AcquisitionPage() {
               const isSigned = c.status === 'SIGNED'
               const amount = c.missionType === 'MRR' ? c.monthlyAmount : c.totalAmount
               const amountLabel = c.missionType === 'MRR' ? '/mois' : 'one-shot'
-              const contractUrl = `${SIGNATURE_PLATFORM}?c=${c.shortCode}`
+              const cUrl = contractUrl(c.shortCode)
               return (
                 <div key={c.id} className={`flex items-center justify-between p-3 rounded-xl border transition-colors ${isSigned ? 'border-emerald-500/20 bg-emerald-500/3' : 'border-nv-border bg-nv-bg'}`}>
                   <div className="flex items-center gap-3 min-w-0">
@@ -118,7 +126,7 @@ export default async function AcquisitionPage() {
                     )}
                     <div className="flex items-center gap-1.5">
                       <span className="text-[10px] font-mono text-nv-text-muted bg-nv-border px-1.5 py-0.5 rounded">{c.shortCode}</span>
-                      <a href={contractUrl} target="_blank" rel="noopener noreferrer"
+                      <a href={cUrl} target="_blank" rel="noopener noreferrer"
                         className="p-1.5 text-nv-text-muted hover:text-primary transition-colors">
                         <ExternalLink size={12} />
                       </a>
