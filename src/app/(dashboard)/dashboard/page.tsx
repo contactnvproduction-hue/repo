@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import {
   TrendingUp, Users, FolderKanban, Receipt, Clock,
   AlertTriangle, CheckCircle2, ArrowRight, Bell, Crosshair, PhoneCall, UserCheck, RepeatIcon, Briefcase, Calendar,
-  AlertCircle,
+  AlertCircle, Phone,
 } from 'lucide-react'
 import Link from 'next/link'
 import { DashboardCharts } from '@/components/dashboard/DashboardCharts'
@@ -41,6 +41,7 @@ async function getDashboardData(userId: string) {
     allRetainers,
     upcomingCeoMeetings,
     todayCheckin,
+    upcomingBilans,
     allClientInvoices,
   ] = await Promise.all([
     // CA du mois (factures payées)
@@ -137,6 +138,15 @@ async function getDashboardData(userId: string) {
     // Daily checkin du jour
     prisma.userDailyCheckin.findFirst({
       where: { userId, date: todayStr() },
+    }),
+    // Bilans planifiés dans les 7 prochains jours
+    prisma.client.findMany({
+      where: {
+        status: 'ACTIF',
+        nextBilanDate: { gte: now, lte: new Date(now.getTime() + 7 * 86_400_000) },
+      },
+      select: { id: true, name: true, company: true, nextBilanDate: true },
+      orderBy: { nextBilanDate: 'asc' },
     }),
     // Factures (toutes) pour le filtre "payé ce mois" des retainers MRR
     prisma.invoice.findMany({
@@ -254,6 +264,12 @@ async function getDashboardData(userId: string) {
       ...l,
       followUpDate: l.followUpDate!.toISOString(),
       isToday: l.followUpDate! >= todayStart && l.followUpDate! < todayEnd,
+    })),
+    upcomingBilans: upcomingBilans.map(c => ({
+      id: c.id,
+      name: c.name,
+      company: c.company,
+      nextBilanDate: c.nextBilanDate!.toISOString(),
     })),
   }
 }
@@ -522,6 +538,52 @@ export default async function DashboardPage() {
                       {daysUntilMeeting <= 0 ? "Aujourd'hui" : daysUntilMeeting === 1 ? 'Demain' : `Dans ${daysUntilMeeting}j`}
                     </span>
                     <ArrowRight size={13} className="text-nv-text-muted opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                </Link>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Bilans mensuels à venir */}
+      {data.upcomingBilans.length > 0 && (
+        <div className="rounded-xl border border-blue-400/30 bg-blue-400/5 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-7 h-7 rounded-full bg-blue-400/20 flex items-center justify-center">
+              <Phone size={13} className="text-blue-400" />
+            </div>
+            <p className="text-sm font-semibold text-blue-300">
+              {data.upcomingBilans.length} bilan{data.upcomingBilans.length > 1 ? 's' : ''} mensuel{data.upcomingBilans.length > 1 ? 's' : ''} cette semaine
+            </p>
+            <Link href="/clients" className="ml-auto text-xs text-nv-text-muted hover:text-white transition-colors flex items-center gap-1">
+              Clients <ArrowRight size={11} />
+            </Link>
+          </div>
+          <div className="space-y-2">
+            {data.upcomingBilans.map(c => {
+              const d = new Date(c.nextBilanDate)
+              const daysLeft = Math.ceil((d.getTime() - Date.now()) / 86_400_000)
+              return (
+                <Link key={c.id} href={`/clients/${c.id}`}
+                  className="flex items-center justify-between p-2.5 rounded-lg bg-blue-400/5 border border-blue-400/10 hover:border-blue-400/30 hover:bg-blue-400/10 transition-colors group">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-full bg-blue-400/20 flex items-center justify-center text-xs font-bold text-blue-400 shrink-0">
+                      {c.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-white">{c.name}</p>
+                      {c.company && <p className="text-xs text-nv-text-muted">{c.company}</p>}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs text-blue-300">
+                      {d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })}
+                    </span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${daysLeft <= 1 ? 'bg-blue-400/30 text-blue-200' : 'bg-blue-400/15 text-blue-300'}`}>
+                      {daysLeft <= 0 ? "Aujourd'hui" : daysLeft === 1 ? 'Demain' : `Dans ${daysLeft}j`}
+                    </span>
+                    <ArrowRight size={13} className="text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>
                 </Link>
               )

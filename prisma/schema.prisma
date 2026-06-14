@@ -87,9 +87,11 @@ model Client {
   type        ClientType   @default(PARTICULIER)
   status      ClientStatus @default(PROSPECT)
   source      ClientSource @default(AUTRE)
-  relanceDate DateTime?
+  relanceDate         DateTime?
   notes               String?
   onboardingChecklist Json?
+  lastBilanDate       DateTime?  // Date du dernier bilan mensuel effectué
+  nextBilanDate       DateTime?  // Prochain bilan programmé
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
@@ -903,6 +905,7 @@ model SocialKPI {
   comments       Int?
   shares         Int?
   engagement     Float?
+  revenue        Float?     // CA généré ce mois (pour corrélation croissance/CA)
   screenshotUrl  String?
   screenshotDate DateTime?
   createdAt      DateTime       @default(now())

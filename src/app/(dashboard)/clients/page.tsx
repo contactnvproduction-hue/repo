@@ -4,7 +4,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { formatDate } from '@/lib/utils'
-import { Users, Plus, Building2, User, Briefcase, Mail, Phone } from 'lucide-react'
+import { Users, Plus, Building2, User, Briefcase, Mail, Phone, Archive, AlertCircle } from 'lucide-react'
 import { ClientsHeader } from '@/components/clients/ClientsHeader'
 import { ClientRowActions } from '@/components/clients/ClientRowActions'
 
@@ -29,7 +29,22 @@ const typeIcon = {
 }
 
 interface PageProps {
-  searchParams: Promise<{ search?: string; status?: string; type?: string }>
+  searchParams: Promise<{ search?: string; status?: string; type?: string; archived?: string }>
+}
+
+// Calcule si un client actif a besoin d'un bilan ce mois
+function needsBilan(lastBilanDate: Date | null, nextBilanDate: Date | null): boolean {
+  const now = new Date()
+  const dayOfMonth = now.getDate()
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+  const isEndOfMonth = dayOfMonth >= daysInMonth - 9 // 10 derniers jours du mois
+
+  if (!isEndOfMonth) return false
+  if (nextBilanDate && nextBilanDate >= now) return false // déjà planifié dans le futur
+
+  const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+  if (!lastBilanDate) return true // jamais fait
+  return lastBilanDate < firstOfMonth // pas fait ce mois-ci
 }
 
 export default async function ClientsPage({ searchParams }: PageProps) {
@@ -37,7 +52,8 @@ export default async function ClientsPage({ searchParams }: PageProps) {
   if (!session?.user) return null
 
   const sp = await searchParams
-  const { search = '', status = '', type = '' } = sp
+  const { search = '', status = '', type = '', archived = '' } = sp
+  const showArchived = archived === '1'
 
   const clients = await prisma.client.findMany({
     where: {
@@ -49,22 +65,33 @@ export default async function ClientsPage({ searchParams }: PageProps) {
             { email: { contains: search, mode: 'insensitive' } },
           ],
         } : {},
-        status ? { status: status as any } : {},
+        // Par défaut : masque les archivés sauf si filtre explicite ou toggle
+        status
+          ? { status: status as any }
+          : showArchived
+            ? {}
+            : { status: { not: 'ARCHIVÉ' as any } },
         type ? { type: type as any } : {},
       ],
     },
     select: {
       id: true, name: true, company: true, email: true, phone: true,
       type: true, status: true, avatar: true, createdAt: true,
+      lastBilanDate: true, nextBilanDate: true,
       _count: { select: { projects: true, invoices: true } },
     },
     orderBy: { updatedAt: 'desc' },
   })
 
+  const [totalCount, archivedCount] = await Promise.all([
+    prisma.client.count({ where: { status: { not: 'ARCHIVÉ' as any } } }),
+    prisma.client.count({ where: { status: 'ARCHIVÉ' as any } }),
+  ])
   const stats = {
-    total: await prisma.client.count(),
+    total: totalCount,
     actifs: await prisma.client.count({ where: { status: 'ACTIF' } }),
     prospects: await prisma.client.count({ where: { status: 'PROSPECT' } }),
+    archivés: archivedCount,
   }
 
   return (
@@ -74,6 +101,24 @@ export default async function ClientsPage({ searchParams }: PageProps) {
       {/* Filtres & liste */}
       <Card>
         <CardContent className="p-0">
+          {/* Barre filtre archivés */}
+          <div className="px-6 py-3 border-b border-nv-border flex items-center justify-between">
+            <div className="text-xs text-nv-text-muted">
+              {clients.length} client{clients.length !== 1 ? 's' : ''} affiché{clients.length !== 1 ? 's' : ''}
+            </div>
+            <Link
+              href={showArchived ? '/clients' : '/clients?archived=1'}
+              className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+                showArchived
+                  ? 'bg-gray-400/15 border-gray-400/30 text-gray-300'
+                  : 'border-nv-border text-nv-text-muted hover:text-white hover:border-nv-border-light'
+              }`}
+            >
+              <Archive size={12} />
+              {showArchived ? 'Masquer les archivés' : `Voir les archivés (${stats.archivés})`}
+            </Link>
+          </div>
+
           {/* Table header */}
           <div className="px-6 py-3 border-b border-nv-border grid grid-cols-12 gap-4 text-xs font-medium text-nv-text-muted uppercase tracking-wide">
             <div className="col-span-4">Client</div>
@@ -89,11 +134,11 @@ export default async function ClientsPage({ searchParams }: PageProps) {
             <div className="text-center py-16 text-nv-text-muted">
               <Users size={40} className="mx-auto mb-3 opacity-30" />
               <p className="text-sm">Aucun client trouvé</p>
-              <p className="text-xs mt-1">Créez votre premier client en cliquant sur le bouton +</p>
             </div>
           ) : (
             clients.map((client) => {
               const TypeIcon = typeIcon[client.type] || User
+              const alertBilan = client.status === 'ACTIF' && needsBilan(client.lastBilanDate, client.nextBilanDate)
               return (
                 <Link
                   key={client.id}
@@ -102,16 +147,28 @@ export default async function ClientsPage({ searchParams }: PageProps) {
                 >
                   {/* Nom */}
                   <div className="col-span-4 flex items-center gap-3 min-w-0">
-                    <div className="w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 overflow-hidden">
-                      {client.avatar ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={client.avatar} alt={client.name} className="w-full h-full object-cover" />
-                      ) : (
-                        <span className="text-sm font-bold text-primary">{client.name.charAt(0).toUpperCase()}</span>
+                    <div className="relative w-9 h-9 shrink-0">
+                      <div className="w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center overflow-hidden">
+                        {client.avatar ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={client.avatar} alt={client.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="text-sm font-bold text-primary">{client.name.charAt(0).toUpperCase()}</span>
+                        )}
+                      </div>
+                      {alertBilan && (
+                        <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full border-2 border-nv-bg flex items-center justify-center" title="Bilan mensuel non calé" />
                       )}
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-white group-hover:text-primary transition-colors truncate">{client.name}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-white group-hover:text-primary transition-colors truncate">{client.name}</p>
+                        {alertBilan && (
+                          <span className="shrink-0 flex items-center gap-1 text-[10px] font-semibold text-red-400 bg-red-400/10 border border-red-400/20 px-1.5 py-0.5 rounded-full">
+                            <AlertCircle size={9} />Bilan
+                          </span>
+                        )}
+                      </div>
                       {client.company && <p className="text-xs text-nv-text-muted truncate">{client.company}</p>}
                       <div className="flex items-center gap-3 mt-0.5">
                         {client.email && <span className="text-xs text-nv-text-faint flex items-center gap-1"><Mail size={10} />{client.email}</span>}

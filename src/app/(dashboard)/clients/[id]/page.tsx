@@ -17,6 +17,7 @@ import { ClientSocialKPIs } from '@/components/clients/ClientSocialKPIs'
 import { DeleteButton } from '@/components/ui/DeleteButton'
 import { ClientInteractions } from '@/components/clients/ClientInteractions'
 import { ClientRetainerManager } from '@/components/clients/ClientRetainerManager'
+import { ClientBilanSection } from '@/components/clients/ClientBilanSection'
 
 const statusBadge: Record<string, 'success' | 'info' | 'warning' | 'muted'> = {
   ACTIF: 'success', PROSPECT: 'info', EN_PAUSE: 'warning', ARCHIVÉ: 'muted',
@@ -265,6 +266,16 @@ export default async function ClientDetailPage({ params }: PageProps) {
               </div>
             </CardContent>
           </Card>
+
+          {/* Bilan mensuel */}
+          {client.status === 'ACTIF' && (
+            <ClientBilanSection
+              clientId={client.id}
+              clientName={client.name}
+              lastBilanDate={client.lastBilanDate?.toISOString() ?? null}
+              nextBilanDate={client.nextBilanDate?.toISOString() ?? null}
+            />
+          )}
 
           {/* Historique interactions */}
           <ClientInteractions
