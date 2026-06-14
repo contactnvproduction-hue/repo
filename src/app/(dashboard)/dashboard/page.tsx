@@ -42,7 +42,6 @@ async function getDashboardData(userId: string) {
     upcomingCeoMeetings,
     todayCheckin,
     upcomingBilans,
-    bilansMissingFollowUp,
     allClientInvoices,
   ] = await Promise.all([
     // CA du mois (factures payées)
@@ -148,26 +147,6 @@ async function getDashboardData(userId: string) {
       },
       select: { id: true, name: true, company: true, nextBilanDate: true },
       orderBy: { nextBilanDate: 'asc' },
-    }),
-    // Clients actifs sans bilan calé (pas de nextBilanDate futur et pas fait ce mois)
-    prisma.client.findMany({
-      where: {
-        status: 'ACTIF',
-        OR: [
-          { nextBilanDate: null },
-          { nextBilanDate: { lt: now } },
-        ],
-        AND: [
-          {
-            OR: [
-              { lastBilanDate: null },
-              { lastBilanDate: { lt: startOfMonth } },
-            ],
-          },
-        ],
-      },
-      select: { id: true, name: true, company: true, lastBilanDate: true },
-      orderBy: { name: 'asc' },
     }),
     // Factures (toutes) pour le filtre "payé ce mois" des retainers MRR
     prisma.invoice.findMany({
@@ -291,11 +270,6 @@ async function getDashboardData(userId: string) {
       name: c.name,
       company: c.company,
       nextBilanDate: c.nextBilanDate!.toISOString(),
-    })),
-    bilansMissingFollowUp: bilansMissingFollowUp.map(c => ({
-      id: c.id,
-      name: c.name,
-      company: c.company,
     })),
   }
 }
@@ -450,45 +424,6 @@ export default async function DashboardPage() {
                 </Link>
               )
             })}
-          </div>
-        </div>
-      )}
-
-      {/* Banner bilans non calés */}
-      {data.bilansMissingFollowUp.length > 0 && (
-        <div className="rounded-xl border border-red-500/40 bg-red-500/5 p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-7 h-7 rounded-full bg-red-500/20 flex items-center justify-center shrink-0">
-              <Phone size={13} className="text-red-400" />
-            </div>
-            <p className="text-sm font-semibold text-red-300">
-              {data.bilansMissingFollowUp.length} client{data.bilansMissingFollowUp.length > 1 ? 's' : ''} — follow-up à planifier
-            </p>
-            <Link href="/clients" className="ml-auto text-xs text-nv-text-muted hover:text-white transition-colors flex items-center gap-1">
-              Clients <ArrowRight size={11} />
-            </Link>
-          </div>
-          <div className="space-y-2">
-            {data.bilansMissingFollowUp.map(c => (
-              <Link key={c.id} href={`/clients/${c.id}`}
-                className="flex items-center justify-between p-2.5 rounded-lg bg-red-500/5 border border-red-500/10 hover:border-red-500/30 hover:bg-red-500/10 transition-colors group">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-7 h-7 rounded-full bg-red-500/20 flex items-center justify-center text-xs font-bold text-red-400 shrink-0">
-                    {c.name.charAt(0).toUpperCase()}
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-white">{c.name}</p>
-                    {c.company && <p className="text-xs text-nv-text-muted">{c.company}</p>}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-500/20 text-red-300">
-                    Bilan non calé
-                  </span>
-                  <ArrowRight size={13} className="text-red-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </div>
-              </Link>
-            ))}
           </div>
         </div>
       )}

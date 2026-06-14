@@ -4,7 +4,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { formatDate } from '@/lib/utils'
-import { Users, Plus, Building2, User, Briefcase, Mail, Phone, Archive, AlertCircle } from 'lucide-react'
+import { Users, Plus, Building2, User, Briefcase, Mail, Phone, Archive, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { ClientsHeader } from '@/components/clients/ClientsHeader'
 import { ClientRowActions } from '@/components/clients/ClientRowActions'
 
@@ -33,18 +33,17 @@ interface PageProps {
 }
 
 // Calcule si un client actif a besoin d'un bilan ce mois
-function needsBilan(lastBilanDate: Date | null, nextBilanDate: Date | null): boolean {
+// Retourne 'scheduled' (vert), 'overdue' (rouge) ou null (rien à afficher)
+function bilanChip(status: string, lastBilanDate: Date | null, nextBilanDate: Date | null): 'scheduled' | 'overdue' | null {
+  if (status !== 'ACTIF') return null
   const now = new Date()
-  const dayOfMonth = now.getDate()
-  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
-  const isEndOfMonth = dayOfMonth >= daysInMonth - 9 // 10 derniers jours du mois
-
-  if (!isEndOfMonth) return false
-  if (nextBilanDate && nextBilanDate >= now) return false // déjà planifié dans le futur
-
   const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-  if (!lastBilanDate) return true // jamais fait
-  return lastBilanDate < firstOfMonth // pas fait ce mois-ci
+  // Call planifié dans le futur → vert
+  if (nextBilanDate && nextBilanDate >= now) return 'scheduled'
+  // Bilan déjà fait ce mois → rien
+  if (lastBilanDate && lastBilanDate >= firstOfMonth) return null
+  // Pas planifié, pas fait ce mois → rouge
+  return 'overdue'
 }
 
 export default async function ClientsPage({ searchParams }: PageProps) {
@@ -138,7 +137,7 @@ export default async function ClientsPage({ searchParams }: PageProps) {
           ) : (
             clients.map((client) => {
               const TypeIcon = typeIcon[client.type] || User
-              const alertBilan = client.status === 'ACTIF' && needsBilan(client.lastBilanDate, client.nextBilanDate)
+              const chip = bilanChip(client.status, client.lastBilanDate, client.nextBilanDate)
               return (
                 <Link
                   key={client.id}
@@ -147,28 +146,26 @@ export default async function ClientsPage({ searchParams }: PageProps) {
                 >
                   {/* Nom */}
                   <div className="col-span-4 flex items-center gap-3 min-w-0">
-                    <div className="relative w-9 h-9 shrink-0">
-                      <div className="w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center overflow-hidden">
-                        {client.avatar ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={client.avatar} alt={client.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <span className="text-sm font-bold text-primary">{client.name.charAt(0).toUpperCase()}</span>
-                        )}
-                      </div>
-                      {alertBilan && (
-                        <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full border-2 border-nv-bg flex items-center justify-center" title="Bilan mensuel non calé" />
+                    <div className="w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center overflow-hidden shrink-0">
+                      {client.avatar ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={client.avatar} alt={client.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-sm font-bold text-primary">{client.name.charAt(0).toUpperCase()}</span>
                       )}
                     </div>
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium text-white group-hover:text-primary transition-colors truncate">{client.name}</p>
-                        {alertBilan && (
-                          <span className="shrink-0 flex items-center gap-1 text-[10px] font-semibold text-red-400 bg-red-400/10 border border-red-400/20 px-1.5 py-0.5 rounded-full">
-                            <AlertCircle size={9} />Bilan
-                          </span>
-                        )}
-                      </div>
+                      {chip === 'overdue' && (
+                        <span className="inline-flex items-center gap-1 text-[9px] font-semibold text-red-400 bg-red-400/10 border border-red-400/20 px-1.5 py-0.5 rounded-full mb-0.5">
+                          <AlertCircle size={8} />Follow-up à planifier
+                        </span>
+                      )}
+                      {chip === 'scheduled' && (
+                        <span className="inline-flex items-center gap-1 text-[9px] font-semibold text-emerald-400 bg-emerald-400/10 border border-emerald-400/20 px-1.5 py-0.5 rounded-full mb-0.5">
+                          <CheckCircle2 size={8} />Follow-up validé
+                        </span>
+                      )}
+                      <p className="text-sm font-medium text-white group-hover:text-primary transition-colors truncate">{client.name}</p>
                       {client.company && <p className="text-xs text-nv-text-muted truncate">{client.company}</p>}
                       <div className="flex items-center gap-3 mt-0.5">
                         {client.email && <span className="text-xs text-nv-text-faint flex items-center gap-1"><Mail size={10} />{client.email}</span>}
