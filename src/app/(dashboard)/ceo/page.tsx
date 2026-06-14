@@ -1,6 +1,6 @@
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
-import { Briefcase, TrendingUp, CheckCircle2, Calendar } from 'lucide-react'
+import { Briefcase, TrendingUp, CheckCircle2, Calendar, ExternalLink, MessageSquare, LayoutDashboard } from 'lucide-react'
 import { CeoManager } from '@/components/ceo/CeoManager'
 
 export default async function CeoPage() {
@@ -48,12 +48,36 @@ export default async function CeoPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-          <Briefcase size={24} className="text-primary" />
-          Espace CEO
-        </h1>
-        <p className="text-sm text-nv-text-muted mt-1">Pilotage stratégique — réunions, sujets & actions</p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+            <Briefcase size={24} className="text-primary" />
+            Espace CEO
+          </h1>
+          <p className="text-sm text-nv-text-muted mt-1">Pilotage stratégique — réunions, sujets & actions</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <a
+            href="https://nvp-feedback.netlify.app"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 px-3 py-2 rounded-lg border border-nv-border bg-nv-card text-sm text-nv-text-muted hover:text-white hover:border-nv-border-light transition-colors"
+          >
+            <MessageSquare size={14} className="text-primary" />
+            Formulaire client
+            <ExternalLink size={11} className="opacity-50" />
+          </a>
+          <a
+            href="https://nvp-feedback.netlify.app/admin"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 px-3 py-2 rounded-lg border border-primary/30 bg-primary/10 text-sm text-primary hover:bg-primary/20 transition-colors"
+          >
+            <LayoutDashboard size={14} />
+            Dashboard feedbacks
+            <ExternalLink size={11} className="opacity-50" />
+          </a>
+        </div>
       </div>
 
       {/* KPIs */}
