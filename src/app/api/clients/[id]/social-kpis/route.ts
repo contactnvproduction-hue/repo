@@ -14,6 +14,7 @@ const schema = z.object({
   comments: z.number().optional(),
   shares: z.number().optional(),
   engagement: z.number().optional(),
+  revenue: z.number().optional(),
   screenshotUrl: z.string().optional(),
   screenshotDate: z.string().optional(),
 })
@@ -60,6 +61,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       comments: result.data.comments,
       shares: result.data.shares,
       engagement: result.data.engagement,
+      revenue: result.data.revenue,
       screenshotUrl: result.data.screenshotUrl,
       screenshotDate: result.data.screenshotDate ? new Date(result.data.screenshotDate) : undefined,
     },
@@ -75,6 +77,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       comments: result.data.comments,
       shares: result.data.shares,
       engagement: result.data.engagement,
+      revenue: result.data.revenue,
       screenshotUrl: result.data.screenshotUrl,
       screenshotDate: result.data.screenshotDate ? new Date(result.data.screenshotDate) : undefined,
     },

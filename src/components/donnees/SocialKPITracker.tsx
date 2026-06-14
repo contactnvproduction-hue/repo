@@ -1,10 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, Legend,
+  Tooltip, ResponsiveContainer,
 } from 'recharts'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,6 +13,7 @@ import { Modal } from '@/components/ui/modal'
 import {
   Plus, TrendingUp, TrendingDown, Users, Eye, Heart, Camera,
   Play, Minus, Search, Loader2, Edit2, Trash2, ChevronLeft, BarChart3,
+  EuroIcon, Share2, X, Download,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -28,6 +29,7 @@ interface SocialKPI {
   likes: number | null
   comments: number | null
   engagement: number | null
+  revenue: number | null
   clientName: string
 }
 
@@ -54,6 +56,9 @@ const PLATFORM_URL_PLACEHOLDER: Record<string, string> = {
   FACEBOOK:  'https://www.facebook.com/nom-page',
 }
 
+type Period = 'all' | 'ytd' | '3m' | '30d'
+const PERIOD_LABELS: Record<Period, string> = { all: 'Tout', ytd: 'Depuis jan.', '3m': '3 mois', '30d': '30 j' }
+
 function parseSubCount(raw: string | null): number {
   if (!raw) return 0
   const clean = raw.replace(/\s+/g, '').replace(/,/g, '.')
@@ -73,6 +78,24 @@ function formatK(n: number) {
   return String(n)
 }
 
+function formatEur(n: number) {
+  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n)
+}
+
+function filterByPeriod(kpis: SocialKPI[], period: Period): SocialKPI[] {
+  if (period === 'all') return kpis
+  const now = new Date()
+  let from: Date
+  if (period === 'ytd') {
+    from = new Date(now.getFullYear(), 0, 1)
+  } else if (period === '3m') {
+    from = new Date(now.getFullYear(), now.getMonth() - 2, 1)
+  } else {
+    from = new Date(now.getTime() - 30 * 86_400_000)
+  }
+  return kpis.filter(k => new Date(k.month) >= from)
+}
+
 function GrowthBadge({ pct }: { pct: number | null }) {
   if (pct === null) return null
   const isPos = pct > 0
@@ -85,6 +108,210 @@ function GrowthBadge({ pct }: { pct: number | null }) {
   )
 }
 
+// ─── Infographic modal ──────────────────────────────────────────────────────────
+
+interface InfographicProps {
+  clientId: string
+  platform: string
+  clients: Client[]
+  kpis: SocialKPI[]
+  period: Period
+  onClose: () => void
+}
+
+function InfographicModal({ clientId, platform, clients, kpis, period, onClose }: InfographicProps) {
+  const ref = useRef<HTMLDivElement>(null)
+  const client = clients.find(c => c.id === clientId)
+  const clientName = client?.company || client?.name || ''
+  const cfg = PLATFORM_CONFIG[platform]
+
+  const snapshots = filterByPeriod(
+    kpis.filter(k => k.clientId === clientId && k.platform === platform),
+    period,
+  ).sort((a, b) => new Date(a.month).getTime() - new Date(b.month).getTime())
+
+  if (snapshots.length === 0) return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-nv-card border border-nv-border rounded-2xl p-8 text-center" onClick={e => e.stopPropagation()}>
+        <p className="text-nv-text-muted">Aucune donnée disponible pour cette période.</p>
+        <button onClick={onClose} className="mt-4 text-sm text-primary hover:underline">Fermer</button>
+      </div>
+    </div>
+  )
+
+  const latest = snapshots[snapshots.length - 1]
+  const prev = snapshots.length >= 2 ? snapshots[snapshots.length - 2] : null
+  const growthPct = prev && prev.followers > 0
+    ? ((latest.followers - prev.followers) / prev.followers) * 100
+    : null
+  const followerDelta = prev ? latest.followers - prev.followers : null
+
+  const first = snapshots[0]
+  const totalGrowthPct = first && first.followers > 0
+    ? ((latest.followers - first.followers) / first.followers) * 100
+    : null
+
+  const chartData = snapshots.map(k => ({
+    month: new Date(k.month).toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' }),
+    Abonnés: k.followers,
+    CA: k.revenue ?? 0,
+  }))
+
+  const hasRevenue = snapshots.some(k => k.revenue != null && k.revenue > 0)
+  const totalRevenue = snapshots.reduce((s, k) => s + (k.revenue ?? 0), 0)
+
+  const handleDownload = async () => {
+    if (!ref.current) return
+    try {
+      const { default: html2canvas } = await import('html2canvas')
+      const canvas = await html2canvas(ref.current, { backgroundColor: '#0f0f0f', scale: 2 })
+      const link = document.createElement('a')
+      link.download = `${clientName}-${platform}-resultats.png`
+      link.href = canvas.toDataURL('image/png')
+      link.click()
+    } catch {
+      toast.error('Export indisponible — faites une capture d\'écran')
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="w-full max-w-md" onClick={e => e.stopPropagation()}>
+        {/* Action bar */}
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs text-white/60">Aperçu infographie — capture ou exporte</p>
+          <div className="flex items-center gap-2">
+            <button onClick={handleDownload}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors">
+              <Download size={12} />Export PNG
+            </button>
+            <button onClick={onClose} className="p-1.5 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors">
+              <X size={15} />
+            </button>
+          </div>
+        </div>
+
+        {/* The card */}
+        <div ref={ref} className="rounded-2xl overflow-hidden" style={{ background: '#0f0f0f' }}>
+          {/* Gradient header */}
+          <div className="relative p-6 pb-4" style={{
+            background: `linear-gradient(135deg, ${cfg?.color || '#e8b84b'}18, transparent 60%)`,
+            borderBottom: `1px solid ${cfg?.color || '#e8b84b'}20`,
+          }}>
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-6 h-6 rounded-full flex items-center justify-center" style={{ background: `${cfg?.color || '#e8b84b'}25` }}>
+                    <span style={{ color: cfg?.color || '#e8b84b', fontSize: 11, fontWeight: 700 }}>
+                      {clientName.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                  <span className="text-white/70 text-xs font-medium">{clientName}</span>
+                </div>
+                <p className="text-white font-semibold text-sm">{latest.handle || cfg?.label || platform}</p>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{
+                  background: `${cfg?.color || '#e8b84b'}20`,
+                  color: cfg?.color || '#e8b84b',
+                  border: `1px solid ${cfg?.color || '#e8b84b'}30`,
+                }}>
+                  {cfg?.label || platform}
+                </span>
+                <p className="text-white/40 text-[10px] mt-1">
+                  {new Date(latest.month).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}
+                </p>
+              </div>
+            </div>
+
+            {/* Main metric */}
+            <div className="flex items-end justify-between">
+              <div>
+                <p className="text-white/50 text-xs mb-0.5">Abonnés</p>
+                <p className="text-white font-bold" style={{ fontSize: 36, lineHeight: 1 }}>
+                  {formatK(latest.followers)}
+                </p>
+              </div>
+              <div className="text-right">
+                <GrowthBadge pct={growthPct} />
+                {followerDelta !== null && (
+                  <p className="text-white/40 text-xs">
+                    {followerDelta >= 0 ? '+' : ''}{followerDelta.toLocaleString('fr-FR')} ce mois
+                  </p>
+                )}
+                {totalGrowthPct !== null && snapshots.length > 2 && (
+                  <p className="text-white/30 text-[10px] mt-0.5">
+                    {totalGrowthPct >= 0 ? '+' : ''}{totalGrowthPct.toFixed(1)}% sur la période
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Chart */}
+          {chartData.length > 1 && (
+            <div className="px-6 pt-4 pb-2">
+              <ResponsiveContainer width="100%" height={100}>
+                <AreaChart data={chartData} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="infoGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={cfg?.color || '#e8b84b'} stopOpacity={0.4} />
+                      <stop offset="95%" stopColor={cfg?.color || '#e8b84b'} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <Area type="monotone" dataKey="Abonnés" stroke={cfg?.color || '#e8b84b'} strokeWidth={2}
+                    fill="url(#infoGrad)" dot={false} />
+                  <XAxis dataKey="month" tick={{ fill: '#444', fontSize: 9 }} axisLine={false} tickLine={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {/* Stats grid */}
+          <div className="px-6 pb-4 grid grid-cols-3 gap-3">
+            <div className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.04)' }}>
+              <p className="text-white/40 text-[10px] mb-1">Vues</p>
+              <p className="text-white font-semibold text-sm">{latest.views != null ? formatK(latest.views) : '—'}</p>
+            </div>
+            <div className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.04)' }}>
+              <p className="text-white/40 text-[10px] mb-1">Likes</p>
+              <p className="text-white font-semibold text-sm">{latest.likes != null ? formatK(latest.likes) : '—'}</p>
+            </div>
+            <div className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.04)' }}>
+              <p className="text-white/40 text-[10px] mb-1">Engagement</p>
+              <p className="font-semibold text-sm" style={{ color: cfg?.color || '#e8b84b' }}>
+                {latest.engagement != null ? `${latest.engagement.toFixed(2)}%` : '—'}
+              </p>
+            </div>
+          </div>
+
+          {/* Revenue (if available) */}
+          {hasRevenue && (
+            <div className="mx-6 mb-5 rounded-xl p-3 flex items-center justify-between" style={{
+              background: 'rgba(16,185,129,0.08)',
+              border: '1px solid rgba(16,185,129,0.2)',
+            }}>
+              <div className="flex items-center gap-2">
+                <EuroIcon size={13} color="#10b981" />
+                <span className="text-emerald-300/80 text-xs">CA période</span>
+              </div>
+              <p className="text-emerald-400 font-bold text-sm">{formatEur(totalRevenue)}</p>
+            </div>
+          )}
+
+          {/* Footer brand */}
+          <div className="px-6 py-3 flex items-center justify-between" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+            <span className="text-white/20 text-[10px]">New Vision Production</span>
+            <span className="text-white/20 text-[10px]">
+              {PERIOD_LABELS[period]} · {new Date().toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' })}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── ClientDetailView ──────────────────────────────────────────────────────────
 
 interface ClientDetailViewProps {
@@ -92,69 +319,68 @@ interface ClientDetailViewProps {
   platform: string
   clients: Client[]
   kpis: SocialKPI[]
+  period: Period
   onBack: () => void
   onEdit: (kpi: SocialKPI) => void
   onDelete: (id: string) => void
   onAddSnapshot: (clientId: string, platform: string) => void
+  onOpenInfographic: (clientId: string, platform: string) => void
 }
 
-function ClientDetailView({ clientId, platform, clients, kpis, onBack, onEdit, onDelete, onAddSnapshot }: ClientDetailViewProps) {
+function ClientDetailView({ clientId, platform, clients, kpis, period, onBack, onEdit, onDelete, onAddSnapshot, onOpenInfographic }: ClientDetailViewProps) {
   const client = clients.find(c => c.id === clientId)
   const clientName = client?.company || client?.name || ''
 
-  // All platforms that have data for this client
   const clientPlatforms = Array.from(new Set(kpis.filter(k => k.clientId === clientId).map(k => k.platform)))
   const [activePlatform, setActivePlatform] = useState(platform)
 
-  // All snapshots for this client + selected platform, sorted by month asc
-  const snapshots = kpis
+  const allSnapshots = kpis
     .filter(k => k.clientId === clientId && k.platform === activePlatform)
     .sort((a, b) => new Date(a.month).getTime() - new Date(b.month).getTime())
+
+  const snapshots = filterByPeriod(allSnapshots, period)
 
   const chartData = snapshots.map(k => ({
     month: new Date(k.month).toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' }),
     Abonnés: k.followers,
-    Vues: k.views || 0,
-    Engagement: k.engagement ? parseFloat(k.engagement.toFixed(2)) : 0,
+    CA: k.revenue ?? 0,
   }))
 
   const platformColor = PLATFORM_CONFIG[activePlatform]?.color || '#e8b84b'
+  const hasRevenue = snapshots.some(k => k.revenue != null && k.revenue > 0)
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3 flex-wrap">
-        <button
-          onClick={onBack}
-          className="flex items-center gap-1.5 text-sm text-nv-text-muted hover:text-white transition-colors"
-        >
-          <ChevronLeft size={16} />
-          Retour
+        <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-nv-text-muted hover:text-white transition-colors">
+          <ChevronLeft size={16} />Retour
         </button>
         <div className="h-4 w-px bg-nv-border" />
         <h2 className="text-sm font-semibold text-white">{clientName}</h2>
-        {/* Platform tabs */}
         <div className="flex gap-1 ml-2 flex-wrap">
           {clientPlatforms.map(p => {
             const cfg = PLATFORM_CONFIG[p]
             return (
-              <button
-                key={p}
-                onClick={() => setActivePlatform(p)}
+              <button key={p} onClick={() => setActivePlatform(p)}
                 className="text-xs px-2.5 py-1 rounded-lg transition-colors"
                 style={activePlatform === p
                   ? { backgroundColor: `${cfg?.color || '#e8b84b'}20`, color: cfg?.color || '#e8b84b', border: `1px solid ${cfg?.color || '#e8b84b'}40` }
-                  : { color: '#666', border: '1px solid transparent' }
-                }
-              >
+                  : { color: '#666', border: '1px solid transparent' }}>
                 {cfg?.label || p}
               </button>
             )
           })}
         </div>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={() => onOpenInfographic(clientId, activePlatform)}
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-nv-border text-nv-text-muted hover:text-white hover:border-nv-border-light transition-colors"
+          >
+            <Share2 size={12} />Infographie
+          </button>
           <Button size="sm" onClick={() => onAddSnapshot(clientId, activePlatform)}>
-            <Plus size={13} />Ajouter un snapshot
+            <Plus size={13} />Ajouter
           </Button>
         </div>
       </div>
@@ -163,7 +389,7 @@ function ClientDetailView({ clientId, platform, clients, kpis, onBack, onEdit, o
       <div className="bg-nv-card border border-nv-border rounded-xl p-5">
         <div className="flex items-center gap-2 mb-4">
           <BarChart3 size={14} className="text-primary" />
-          <h3 className="text-sm font-semibold text-white">Évolution complète</h3>
+          <h3 className="text-sm font-semibold text-white">Évolution — {PERIOD_LABELS[period]}</h3>
         </div>
         {chartData.length > 1 ? (
           <ResponsiveContainer width="100%" height={240}>
@@ -182,18 +408,17 @@ function ClientDetailView({ clientId, platform, clients, kpis, onBack, onEdit, o
                 labelStyle={{ color: '#fff', marginBottom: 4 }}
                 formatter={(v: unknown) => [(v as number).toLocaleString('fr-FR'), 'Abonnés']}
               />
-              <Area
-                type="monotone" dataKey="Abonnés"
-                stroke={platformColor}
-                strokeWidth={2} fill="url(#colorFollowersDetail)"
-                dot={{ r: 4, fill: platformColor }}
-                activeDot={{ r: 5 }}
-              />
+              <Area type="monotone" dataKey="Abonnés" stroke={platformColor} strokeWidth={2}
+                fill="url(#colorFollowersDetail)" dot={{ r: 4, fill: platformColor }} activeDot={{ r: 5 }} />
             </AreaChart>
           </ResponsiveContainer>
         ) : (
           <div className="h-[240px] flex items-center justify-center text-nv-text-muted text-sm">
-            {chartData.length === 1 ? 'Ajoutez un 2e mois pour voir l\'évolution' : 'Aucune donnée pour cette plateforme'}
+            {allSnapshots.length === 0
+              ? 'Aucun snapshot pour cette plateforme'
+              : chartData.length === 1
+                ? 'Ajoutez un 2e mois pour voir l\'évolution'
+                : 'Aucune donnée sur cette période'}
           </div>
         )}
       </div>
@@ -203,7 +428,7 @@ function ClientDetailView({ clientId, platform, clients, kpis, onBack, onEdit, o
         <div className="px-5 py-4 border-b border-nv-border">
           <h3 className="text-sm font-semibold text-white">Tous les snapshots</h3>
         </div>
-        {snapshots.length === 0 ? (
+        {allSnapshots.length === 0 ? (
           <div className="py-12 text-center text-nv-text-muted text-sm">Aucun snapshot enregistré</div>
         ) : (
           <div className="overflow-x-auto">
@@ -216,12 +441,13 @@ function ClientDetailView({ clientId, platform, clients, kpis, onBack, onEdit, o
                   <th className="text-right px-4 py-3 text-xs font-medium text-nv-text-muted">Likes</th>
                   <th className="text-right px-4 py-3 text-xs font-medium text-nv-text-muted">Comments</th>
                   <th className="text-right px-4 py-3 text-xs font-medium text-nv-text-muted">Engagement</th>
+                  {hasRevenue && <th className="text-right px-4 py-3 text-xs font-medium text-emerald-400/70">CA</th>}
                   <th className="text-right px-5 py-3 text-xs font-medium text-nv-text-muted">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {snapshots.map((k, i) => (
-                  <tr key={k.id} className={`border-b border-nv-border/30 hover:bg-white/[0.02] transition-colors ${i === snapshots.length - 1 ? 'border-b-0' : ''}`}>
+                {allSnapshots.map((k, i) => (
+                  <tr key={k.id} className={`border-b border-nv-border/30 hover:bg-white/[0.02] transition-colors ${i === allSnapshots.length - 1 ? 'border-b-0' : ''}`}>
                     <td className="px-5 py-3 text-white font-medium">
                       {new Date(k.month).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}
                     </td>
@@ -232,20 +458,19 @@ function ClientDetailView({ clientId, platform, clients, kpis, onBack, onEdit, o
                     <td className="px-4 py-3 text-right text-primary font-medium">
                       {k.engagement != null ? `${k.engagement.toFixed(2)}%` : '—'}
                     </td>
+                    {hasRevenue && (
+                      <td className="px-4 py-3 text-right text-emerald-400 font-medium">
+                        {k.revenue != null ? formatEur(k.revenue) : '—'}
+                      </td>
+                    )}
                     <td className="px-5 py-3">
                       <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => onEdit(k)}
-                          className="p-1.5 rounded-lg text-nv-text-muted hover:text-white hover:bg-white/10 transition-colors"
-                          title="Modifier"
-                        >
+                        <button onClick={() => onEdit(k)}
+                          className="p-1.5 rounded-lg text-nv-text-muted hover:text-white hover:bg-white/10 transition-colors">
                           <Edit2 size={13} />
                         </button>
-                        <button
-                          onClick={() => onDelete(k.id)}
-                          className="p-1.5 rounded-lg text-nv-text-muted hover:text-red-400 hover:bg-red-400/10 transition-colors"
-                          title="Supprimer"
-                        >
+                        <button onClick={() => onDelete(k.id)}
+                          className="p-1.5 rounded-lg text-nv-text-muted hover:text-red-400 hover:bg-red-400/10 transition-colors">
                           <Trash2 size={13} />
                         </button>
                       </div>
@@ -268,12 +493,14 @@ export function SocialKPITracker({ clients, allKpis: initialKpis }: Props) {
   const [kpis, setKpis] = useState(initialKpis)
   const [selectedClient, setSelectedClient] = useState(clients[0]?.id || '')
   const [selectedPlatform, setSelectedPlatform] = useState<string>('INSTAGRAM')
+  const [period, setPeriod] = useState<Period>('all')
   const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(false)
   const [scanLoading, setScanLoading] = useState(false)
   const [scanMsg, setScanMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
   const [detailView, setDetailView] = useState<{ clientId: string; platform: string } | null>(null)
   const [editingKpi, setEditingKpi] = useState<SocialKPI | null>(null)
+  const [infographic, setInfographic] = useState<{ clientId: string; platform: string } | null>(null)
   const [form, setForm] = useState({
     clientId: clients[0]?.id || '',
     platform: 'INSTAGRAM',
@@ -284,6 +511,7 @@ export function SocialKPITracker({ clients, allKpis: initialKpis }: Props) {
     views: '',
     likes: '',
     comments: '',
+    revenue: '',
   })
 
   // Latest KPI per client per platform
@@ -309,25 +537,24 @@ export function SocialKPITracker({ clients, allKpis: initialKpis }: Props) {
 
   const latestList = Object.values(latestByKey)
 
-  // Per-client per-platform history for chart
-  const clientPlatformKpis = kpis
-    .filter(k => k.clientId === selectedClient && k.platform === selectedPlatform)
-    .sort((a, b) => new Date(a.month).getTime() - new Date(b.month).getTime())
+  // Filtered snapshots for the selected client/platform/period
+  const clientPlatformKpis = filterByPeriod(
+    kpis.filter(k => k.clientId === selectedClient && k.platform === selectedPlatform),
+    period,
+  ).sort((a, b) => new Date(a.month).getTime() - new Date(b.month).getTime())
 
   const chartData = clientPlatformKpis.map(k => ({
     month: new Date(k.month).toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' }),
     Abonnés: k.followers,
-    Vues: k.views || 0,
+    CA: k.revenue ?? 0,
     Engagement: k.engagement ? parseFloat(k.engagement.toFixed(2)) : 0,
   }))
 
-  // Multi-client follower comparison for selected platform
   const multiClientData = clients.map(c => {
     const latest = latestByKey[`${c.id}-${selectedPlatform}`]
     return { name: (c.company || c.name).substring(0, 14), Abonnés: latest?.followers || 0 }
   }).filter(d => d.Abonnés > 0).sort((a, b) => b.Abonnés - a.Abonnés).slice(0, 8)
 
-  // Total followers across all platforms/clients
   const totalFollowers = latestList.reduce((s, k) => s + k.followers, 0)
   const totalClients = new Set(latestList.map(k => k.clientId)).size
   const totalPlatforms = latestList.length
@@ -344,6 +571,7 @@ export function SocialKPITracker({ clients, allKpis: initialKpis }: Props) {
       views: '',
       likes: '',
       comments: '',
+      revenue: '',
     })
     setScanMsg(null)
     setShowModal(true)
@@ -361,16 +589,13 @@ export function SocialKPITracker({ clients, allKpis: initialKpis }: Props) {
       views: kpi.views != null ? String(kpi.views) : '',
       likes: kpi.likes != null ? String(kpi.likes) : '',
       comments: kpi.comments != null ? String(kpi.comments) : '',
+      revenue: kpi.revenue != null ? String(kpi.revenue) : '',
     })
     setScanMsg(null)
     setShowModal(true)
   }
 
-  const closeModal = () => {
-    setShowModal(false)
-    setEditingKpi(null)
-    setScanMsg(null)
-  }
+  const closeModal = () => { setShowModal(false); setEditingKpi(null); setScanMsg(null) }
 
   const handleDeleteKpi = async (id: string) => {
     if (!confirm('Supprimer ce snapshot ?')) return
@@ -379,9 +604,7 @@ export function SocialKPITracker({ clients, allKpis: initialKpis }: Props) {
       if (!res.ok) { toast.error('Erreur lors de la suppression'); return }
       setKpis(prev => prev.filter(k => k.id !== id))
       toast.success('Snapshot supprimé')
-    } catch {
-      toast.error('Erreur réseau')
-    }
+    } catch { toast.error('Erreur réseau') }
   }
 
   const handleScan = async () => {
@@ -395,10 +618,7 @@ export function SocialKPITracker({ clients, allKpis: initialKpis }: Props) {
         body: JSON.stringify({ url: form.channelUrl.trim(), platform: form.platform }),
       })
       const data = await res.json()
-      if (!res.ok || data.error) {
-        setScanMsg({ type: 'err', text: data.error || 'Scan impossible' })
-        return
-      }
+      if (!res.ok || data.error) { setScanMsg({ type: 'err', text: data.error || 'Scan impossible' }); return }
       const followers = parseSubCount(data.subscribersRaw)
       setForm(prev => ({
         ...prev,
@@ -409,9 +629,7 @@ export function SocialKPITracker({ clients, allKpis: initialKpis }: Props) {
       setScanMsg({ type: 'ok', text: `Scan OK — ${data.name ?? data.handle ?? ''}${followers > 0 ? ` · ${formatK(followers)} abonnés` : ''}` })
     } catch {
       setScanMsg({ type: 'err', text: 'Erreur réseau lors du scan' })
-    } finally {
-      setScanLoading(false)
-    }
+    } finally { setScanLoading(false) }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -422,8 +640,9 @@ export function SocialKPITracker({ clients, allKpis: initialKpis }: Props) {
         ? ((Number(form.likes || 0) + Number(form.comments || 0)) / Number(form.followers)) * 100
         : undefined
 
+      const revenueVal = form.revenue ? Number(form.revenue) : undefined
+
       if (editingKpi) {
-        // PATCH existing KPI
         const res = await fetch(`/api/social-kpis/${editingKpi.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -435,6 +654,7 @@ export function SocialKPITracker({ clients, allKpis: initialKpis }: Props) {
             handle: form.handle || undefined,
             channelUrl: form.channelUrl || undefined,
             engagement,
+            revenue: revenueVal,
           }),
         })
         if (!res.ok) { toast.error('Erreur'); return }
@@ -448,7 +668,6 @@ export function SocialKPITracker({ clients, allKpis: initialKpis }: Props) {
         closeModal()
         router.refresh()
       } else {
-        // POST new KPI
         const res = await fetch(`/api/clients/${form.clientId}/social-kpis`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -462,6 +681,7 @@ export function SocialKPITracker({ clients, allKpis: initialKpis }: Props) {
             likes: form.likes ? Number(form.likes) : undefined,
             comments: form.comments ? Number(form.comments) : undefined,
             engagement,
+            revenue: revenueVal,
           }),
         })
         if (!res.ok) { toast.error('Erreur'); return }
@@ -479,278 +699,311 @@ export function SocialKPITracker({ clients, allKpis: initialKpis }: Props) {
     finally { setLoading(false) }
   }
 
+  // ─── Period filter ──────────────────────────────────────────────────────────
+
+  const PeriodFilter = () => (
+    <div className="flex items-center gap-1 bg-nv-dark border border-nv-border rounded-lg p-0.5">
+      {(Object.keys(PERIOD_LABELS) as Period[]).map(p => (
+        <button key={p} onClick={() => setPeriod(p)}
+          className={`text-xs px-3 py-1 rounded-md transition-colors ${period === p ? 'bg-nv-card text-white font-medium' : 'text-nv-text-muted hover:text-white'}`}>
+          {PERIOD_LABELS[p]}
+        </button>
+      ))}
+    </div>
+  )
+
   // ─── Main view ─────────────────────────────────────────────────────────────
 
   return (
     <>
+      {infographic && (
+        <InfographicModal
+          clientId={infographic.clientId}
+          platform={infographic.platform}
+          clients={clients}
+          kpis={kpis}
+          period={period}
+          onClose={() => setInfographic(null)}
+        />
+      )}
+
       {detailView ? (
         <ClientDetailView
           clientId={detailView.clientId}
           platform={detailView.platform}
           clients={clients}
           kpis={kpis}
+          period={period}
           onBack={() => setDetailView(null)}
           onEdit={openEditModal}
           onDelete={handleDeleteKpi}
           onAddSnapshot={(clientId, platform) => openCreateModal(clientId, platform)}
+          onOpenInfographic={(clientId, platform) => setInfographic({ clientId, platform })}
         />
       ) : (
       <div className="space-y-6">
-      {/* Global overview */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-nv-card border border-nv-border rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <Users size={14} className="text-primary" />
-            <span className="text-xs text-nv-text-muted">Total abonnés suivis</span>
-          </div>
-          <p className="text-2xl font-bold text-white">{formatK(totalFollowers)}</p>
-        </div>
-        <div className="bg-nv-card border border-nv-border rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <Camera size={14} className="text-emerald-400" />
-            <span className="text-xs text-nv-text-muted">Clients trackés</span>
-          </div>
-          <p className="text-2xl font-bold text-white">{totalClients}</p>
-        </div>
-        <div className="bg-nv-card border border-nv-border rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <Play size={14} className="text-blue-400" />
-            <span className="text-xs text-nv-text-muted">Comptes suivis</span>
-          </div>
-          <p className="text-2xl font-bold text-white">{totalPlatforms}</p>
-        </div>
-      </div>
-
-      {/* Header actions */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-white">KPIs par client</h2>
-        <Button size="sm" onClick={() => openCreateModal()}>
-          <Plus size={13} />Saisir KPI
-        </Button>
-      </div>
-
-      {/* Cards — latest KPI per client/platform with growth */}
-      {latestList.length === 0 ? (
-        <div className="text-center py-16 text-nv-text-muted">
-          <TrendingUp size={36} className="mx-auto mb-3 opacity-30" />
-          <p className="text-sm">Aucun KPI enregistré. Commencez par saisir les données de vos clients.</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-          {latestList.map(kpi => {
-            const cfg = PLATFORM_CONFIG[kpi.platform]
-            const prev = prevByKey[`${kpi.clientId}-${kpi.platform}`]
-            const growthPct = prev && prev.followers > 0
-              ? ((kpi.followers - prev.followers) / prev.followers) * 100
-              : null
-            const followerDelta = prev ? kpi.followers - prev.followers : null
-
-            return (
-              <div key={`${kpi.clientId}-${kpi.platform}`}
-                className="group relative bg-nv-card border border-nv-border rounded-xl p-4 hover:border-nv-border-light transition-colors">
-
-                {/* Edit / Delete hover actions */}
-                <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button
-                    onClick={() => openEditModal(kpi)}
-                    className="p-1.5 rounded-lg text-nv-text-muted hover:text-white hover:bg-white/10 transition-colors"
-                    title="Modifier"
-                  >
-                    <Edit2 size={13} />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteKpi(kpi.id)}
-                    className="p-1.5 rounded-lg text-nv-text-muted hover:text-red-400 hover:bg-red-400/10 transition-colors"
-                    title="Supprimer"
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-
-                <div className="flex items-start justify-between mb-3 pr-16">
-                  <div className="min-w-0">
-                    <p className="text-xs text-nv-text-muted truncate">{kpi.clientName}</p>
-                    <p className="text-sm font-semibold text-white truncate">{kpi.handle || cfg?.label || kpi.platform}</p>
-                  </div>
-                  <span className={`shrink-0 text-xs font-medium px-2 py-0.5 rounded-full ${cfg?.bg || 'bg-white/5'} ${cfg?.textColor || 'text-white'}`}>
-                    {cfg?.label || kpi.platform}
-                  </span>
-                </div>
-
-                <div className="flex items-end justify-between">
-                  <div>
-                    <p className="text-2xl font-bold text-white">{formatK(kpi.followers)}</p>
-                    <p className="text-xs text-nv-text-muted">abonnés</p>
-                  </div>
-                  <div className="text-right">
-                    <GrowthBadge pct={growthPct} />
-                    {followerDelta !== null && (
-                      <p className="text-xs text-nv-text-faint">
-                        {followerDelta >= 0 ? '+' : ''}{followerDelta.toLocaleString('fr-FR')}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-nv-border/50">
-                  <div>
-                    <div className="flex items-center gap-1 mb-0.5">
-                      <Eye size={10} className="text-nv-text-faint" />
-                      <p className="text-xs text-nv-text-faint">Vues</p>
-                    </div>
-                    <p className="text-xs font-medium text-white">{kpi.views != null ? formatK(kpi.views) : '—'}</p>
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-1 mb-0.5">
-                      <Heart size={10} className="text-nv-text-faint" />
-                      <p className="text-xs text-nv-text-faint">Likes</p>
-                    </div>
-                    <p className="text-xs font-medium text-white">{kpi.likes != null ? formatK(kpi.likes) : '—'}</p>
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-1 mb-0.5">
-                      <TrendingUp size={10} className="text-nv-text-faint" />
-                      <p className="text-xs text-nv-text-faint">Engage</p>
-                    </div>
-                    <p className="text-xs font-medium text-primary">
-                      {kpi.engagement != null ? `${kpi.engagement.toFixed(2)}%` : '—'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between mt-2">
-                  <p className="text-xs text-nv-text-faint">
-                    {new Date(kpi.month).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}
-                  </p>
-                  <button
-                    onClick={() => setDetailView({ clientId: kpi.clientId, platform: kpi.platform })}
-                    className="text-xs text-nv-text-muted hover:text-primary transition-colors"
-                  >
-                    Voir historique →
-                  </button>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      {/* Detailed chart */}
-      {clients.length > 0 && (
-        <div className="bg-nv-card border border-nv-border rounded-xl p-5 space-y-4">
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <h2 className="text-sm font-semibold text-white">Évolution mensuelle</h2>
-            <div className="flex items-center gap-2 flex-wrap">
-              <select
-                value={selectedClient}
-                onChange={e => setSelectedClient(e.target.value)}
-                className="text-sm px-3 py-1.5 bg-nv-dark border border-nv-border rounded-lg text-nv-text-muted focus:border-primary outline-none"
-              >
-                {clients.map(c => <option key={c.id} value={c.id}>{c.company || c.name}</option>)}
-              </select>
-              <div className="flex gap-1">
-                {Object.entries(PLATFORM_CONFIG).map(([platform, cfg]) => (
-                  <button key={platform}
-                    onClick={() => setSelectedPlatform(platform)}
-                    className="text-xs px-2.5 py-1 rounded-lg transition-colors"
-                    style={selectedPlatform === platform
-                      ? { backgroundColor: `${cfg.color}20`, color: cfg.color, border: `1px solid ${cfg.color}40` }
-                      : { color: '#666', border: '1px solid transparent' }
-                    }>
-                    {cfg.label}
-                  </button>
-                ))}
-              </div>
+        {/* Global overview */}
+        <div className="grid grid-cols-3 gap-4">
+          <div className="bg-nv-card border border-nv-border rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Users size={14} className="text-primary" />
+              <span className="text-xs text-nv-text-muted">Total abonnés suivis</span>
             </div>
+            <p className="text-2xl font-bold text-white">{formatK(totalFollowers)}</p>
           </div>
+          <div className="bg-nv-card border border-nv-border rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Camera size={14} className="text-emerald-400" />
+              <span className="text-xs text-nv-text-muted">Clients trackés</span>
+            </div>
+            <p className="text-2xl font-bold text-white">{totalClients}</p>
+          </div>
+          <div className="bg-nv-card border border-nv-border rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Play size={14} className="text-blue-400" />
+              <span className="text-xs text-nv-text-muted">Comptes suivis</span>
+            </div>
+            <p className="text-2xl font-bold text-white">{totalPlatforms}</p>
+          </div>
+        </div>
 
-          {chartData.length > 1 ? (
-            <div className="space-y-4">
-              <ResponsiveContainer width="100%" height={220}>
-                <AreaChart data={chartData} margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="colorFollowers" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={PLATFORM_CONFIG[selectedPlatform]?.color || '#e8b84b'} stopOpacity={0.3} />
-                      <stop offset="95%" stopColor={PLATFORM_CONFIG[selectedPlatform]?.color || '#e8b84b'} stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" />
-                  <XAxis dataKey="month" tick={{ fill: '#666', fontSize: 11 }} />
-                  <YAxis tick={{ fill: '#666', fontSize: 11 }} tickFormatter={formatK} />
-                  <Tooltip
-                    contentStyle={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8 }}
-                    labelStyle={{ color: '#fff', marginBottom: 4 }}
-                    formatter={(v: unknown) => [(v as number).toLocaleString('fr-FR'), 'Abonnés']}
-                  />
-                  <Area
-                    type="monotone" dataKey="Abonnés"
-                    stroke={PLATFORM_CONFIG[selectedPlatform]?.color || '#e8b84b'}
-                    strokeWidth={2} fill="url(#colorFollowers)"
-                    dot={{ r: 4, fill: PLATFORM_CONFIG[selectedPlatform]?.color || '#e8b84b' }}
-                    activeDot={{ r: 5 }}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
+        {/* Header actions */}
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-3">
+            <h2 className="text-sm font-semibold text-white">KPIs par client</h2>
+            <PeriodFilter />
+          </div>
+          <Button size="sm" onClick={() => openCreateModal()}>
+            <Plus size={13} />Saisir KPI
+          </Button>
+        </div>
 
-              {chartData.length >= 2 && (() => {
-                const last = chartData[chartData.length - 1]
-                const prev = chartData[chartData.length - 2]
-                const delta = last.Abonnés - prev.Abonnés
-                const pct = prev.Abonnés > 0 ? ((delta / prev.Abonnés) * 100) : 0
-                return (
-                  <div className="flex items-center gap-4 text-sm">
-                    <span className="text-nv-text-muted">Dernier mois :</span>
-                    <GrowthBadge pct={pct} />
-                    <span className="text-nv-text-faint text-xs">
-                      {delta >= 0 ? '+' : ''}{delta.toLocaleString('fr-FR')} abonnés
-                      ({prev.Abonnés.toLocaleString('fr-FR')} → {last.Abonnés.toLocaleString('fr-FR')})
+        {/* Cards */}
+        {latestList.length === 0 ? (
+          <div className="text-center py-16 text-nv-text-muted">
+            <TrendingUp size={36} className="mx-auto mb-3 opacity-30" />
+            <p className="text-sm">Aucun KPI enregistré. Commencez par saisir les données de vos clients.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {latestList.map(kpi => {
+              const cfg = PLATFORM_CONFIG[kpi.platform]
+              const prev = prevByKey[`${kpi.clientId}-${kpi.platform}`]
+              const growthPct = prev && prev.followers > 0
+                ? ((kpi.followers - prev.followers) / prev.followers) * 100
+                : null
+              const followerDelta = prev ? kpi.followers - prev.followers : null
+
+              return (
+                <div key={`${kpi.clientId}-${kpi.platform}`}
+                  className="group relative bg-nv-card border border-nv-border rounded-xl p-4 hover:border-nv-border-light transition-colors">
+
+                  {/* Hover actions */}
+                  <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => setInfographic({ clientId: kpi.clientId, platform: kpi.platform })}
+                      className="p-1.5 rounded-lg text-nv-text-muted hover:text-primary hover:bg-primary/10 transition-colors" title="Infographie">
+                      <Share2 size={12} />
+                    </button>
+                    <button onClick={() => openEditModal(kpi)}
+                      className="p-1.5 rounded-lg text-nv-text-muted hover:text-white hover:bg-white/10 transition-colors" title="Modifier">
+                      <Edit2 size={13} />
+                    </button>
+                    <button onClick={() => handleDeleteKpi(kpi.id)}
+                      className="p-1.5 rounded-lg text-nv-text-muted hover:text-red-400 hover:bg-red-400/10 transition-colors" title="Supprimer">
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+
+                  <div className="flex items-start justify-between mb-3 pr-20">
+                    <div className="min-w-0">
+                      <p className="text-xs text-nv-text-muted truncate">{kpi.clientName}</p>
+                      <p className="text-sm font-semibold text-white truncate">{kpi.handle || cfg?.label || kpi.platform}</p>
+                    </div>
+                    <span className={`shrink-0 text-xs font-medium px-2 py-0.5 rounded-full ${cfg?.bg || 'bg-white/5'} ${cfg?.textColor || 'text-white'}`}>
+                      {cfg?.label || kpi.platform}
                     </span>
-                    {last.Engagement > 0 && (
-                      <span className="ml-auto text-xs text-primary font-medium">
-                        Engagement : {last.Engagement}%
-                      </span>
-                    )}
                   </div>
-                )
-              })()}
-            </div>
-          ) : (
-            <div className="h-[220px] flex items-center justify-center text-nv-text-muted text-sm">
-              {chartData.length === 1 ? 'Ajoutez un 2e mois pour voir l\'évolution' : 'Aucune donnée pour ce client / cette plateforme'}
-            </div>
-          )}
-        </div>
-      )}
 
-      {/* Multi-client comparison */}
-      {multiClientData.length > 1 && (
-        <div className="bg-nv-card border border-nv-border rounded-xl p-5">
-          <h2 className="text-sm font-semibold text-white mb-4">
-            Comparaison clients — {PLATFORM_CONFIG[selectedPlatform]?.label || selectedPlatform}
-          </h2>
-          <ResponsiveContainer width="100%" height={180}>
-            <BarChart data={multiClientData} layout="vertical" margin={{ top: 0, right: 8, left: 8, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" horizontal={false} />
-              <XAxis type="number" tick={{ fill: '#666', fontSize: 11 }} tickFormatter={formatK} />
-              <YAxis type="category" dataKey="name" tick={{ fill: '#999', fontSize: 11 }} width={80} />
-              <Tooltip
-                contentStyle={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8 }}
-                formatter={(v: unknown) => [(v as number).toLocaleString('fr-FR'), 'Abonnés']}
-              />
-              <Bar dataKey="Abonnés" fill={PLATFORM_CONFIG[selectedPlatform]?.color || '#e8b84b'} radius={[0, 4, 4, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
+                  <div className="flex items-end justify-between">
+                    <div>
+                      <p className="text-2xl font-bold text-white">{formatK(kpi.followers)}</p>
+                      <p className="text-xs text-nv-text-muted">abonnés</p>
+                    </div>
+                    <div className="text-right">
+                      <GrowthBadge pct={growthPct} />
+                      {followerDelta !== null && (
+                        <p className="text-xs text-nv-text-faint">
+                          {followerDelta >= 0 ? '+' : ''}{followerDelta.toLocaleString('fr-FR')}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-nv-border/50">
+                    <div>
+                      <div className="flex items-center gap-1 mb-0.5">
+                        <Eye size={10} className="text-nv-text-faint" />
+                        <p className="text-xs text-nv-text-faint">Vues</p>
+                      </div>
+                      <p className="text-xs font-medium text-white">{kpi.views != null ? formatK(kpi.views) : '—'}</p>
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1 mb-0.5">
+                        <Heart size={10} className="text-nv-text-faint" />
+                        <p className="text-xs text-nv-text-faint">Likes</p>
+                      </div>
+                      <p className="text-xs font-medium text-white">{kpi.likes != null ? formatK(kpi.likes) : '—'}</p>
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1 mb-0.5">
+                        <TrendingUp size={10} className="text-nv-text-faint" />
+                        <p className="text-xs text-nv-text-faint">Engage</p>
+                      </div>
+                      <p className="text-xs font-medium text-primary">
+                        {kpi.engagement != null ? `${kpi.engagement.toFixed(2)}%` : '—'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {kpi.revenue != null && kpi.revenue > 0 && (
+                    <div className="mt-2 pt-2 border-t border-nv-border/30 flex items-center justify-between">
+                      <div className="flex items-center gap-1 text-xs text-emerald-400/70">
+                        <EuroIcon size={10} />CA ce mois
+                      </div>
+                      <p className="text-xs font-semibold text-emerald-400">{formatEur(kpi.revenue)}</p>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between mt-2">
+                    <p className="text-xs text-nv-text-faint">
+                      {new Date(kpi.month).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}
+                    </p>
+                    <button onClick={() => setDetailView({ clientId: kpi.clientId, platform: kpi.platform })}
+                      className="text-xs text-nv-text-muted hover:text-primary transition-colors">
+                      Voir historique →
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Detailed chart */}
+        {clients.length > 0 && (
+          <div className="bg-nv-card border border-nv-border rounded-xl p-5 space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <h2 className="text-sm font-semibold text-white">Évolution mensuelle</h2>
+              <div className="flex items-center gap-2 flex-wrap">
+                <select
+                  value={selectedClient}
+                  onChange={e => setSelectedClient(e.target.value)}
+                  className="text-sm px-3 py-1.5 bg-nv-dark border border-nv-border rounded-lg text-nv-text-muted focus:border-primary outline-none"
+                >
+                  {clients.map(c => <option key={c.id} value={c.id}>{c.company || c.name}</option>)}
+                </select>
+                <div className="flex gap-1">
+                  {Object.entries(PLATFORM_CONFIG).map(([platform, cfg]) => (
+                    <button key={platform} onClick={() => setSelectedPlatform(platform)}
+                      className="text-xs px-2.5 py-1 rounded-lg transition-colors"
+                      style={selectedPlatform === platform
+                        ? { backgroundColor: `${cfg.color}20`, color: cfg.color, border: `1px solid ${cfg.color}40` }
+                        : { color: '#666', border: '1px solid transparent' }}>
+                      {cfg.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {chartData.length > 1 ? (
+              <div className="space-y-4">
+                <ResponsiveContainer width="100%" height={220}>
+                  <AreaChart data={chartData} margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorFollowers" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={PLATFORM_CONFIG[selectedPlatform]?.color || '#e8b84b'} stopOpacity={0.3} />
+                        <stop offset="95%" stopColor={PLATFORM_CONFIG[selectedPlatform]?.color || '#e8b84b'} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" />
+                    <XAxis dataKey="month" tick={{ fill: '#666', fontSize: 11 }} />
+                    <YAxis tick={{ fill: '#666', fontSize: 11 }} tickFormatter={formatK} />
+                    <Tooltip
+                      contentStyle={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8 }}
+                      labelStyle={{ color: '#fff', marginBottom: 4 }}
+                      formatter={(v: unknown) => [(v as number).toLocaleString('fr-FR'), 'Abonnés']}
+                    />
+                    <Area type="monotone" dataKey="Abonnés"
+                      stroke={PLATFORM_CONFIG[selectedPlatform]?.color || '#e8b84b'}
+                      strokeWidth={2} fill="url(#colorFollowers)"
+                      dot={{ r: 4, fill: PLATFORM_CONFIG[selectedPlatform]?.color || '#e8b84b' }}
+                      activeDot={{ r: 5 }}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+
+                {chartData.length >= 2 && (() => {
+                  const last = chartData[chartData.length - 1]
+                  const prev = chartData[chartData.length - 2]
+                  const delta = last.Abonnés - prev.Abonnés
+                  const pct = prev.Abonnés > 0 ? ((delta / prev.Abonnés) * 100) : 0
+                  return (
+                    <div className="flex items-center gap-4 text-sm flex-wrap">
+                      <span className="text-nv-text-muted">Dernier mois :</span>
+                      <GrowthBadge pct={pct} />
+                      <span className="text-nv-text-faint text-xs">
+                        {delta >= 0 ? '+' : ''}{delta.toLocaleString('fr-FR')} abonnés
+                        ({prev.Abonnés.toLocaleString('fr-FR')} → {last.Abonnés.toLocaleString('fr-FR')})
+                      </span>
+                      {last.Engagement > 0 && (
+                        <span className="text-xs text-primary font-medium">
+                          Engagement : {last.Engagement}%
+                        </span>
+                      )}
+                      <button
+                        onClick={() => setInfographic({ clientId: selectedClient, platform: selectedPlatform })}
+                        className="ml-auto flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg border border-nv-border text-nv-text-muted hover:text-primary hover:border-primary/40 transition-colors"
+                      >
+                        <Share2 size={11} />Infographie
+                      </button>
+                    </div>
+                  )
+                })()}
+              </div>
+            ) : (
+              <div className="h-[220px] flex items-center justify-center text-nv-text-muted text-sm">
+                {chartData.length === 1 ? 'Ajoutez un 2e mois pour voir l\'évolution' : 'Aucune donnée pour ce client / cette plateforme'}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Multi-client comparison */}
+        {multiClientData.length > 1 && (
+          <div className="bg-nv-card border border-nv-border rounded-xl p-5">
+            <h2 className="text-sm font-semibold text-white mb-4">
+              Comparaison clients — {PLATFORM_CONFIG[selectedPlatform]?.label || selectedPlatform}
+            </h2>
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={multiClientData} layout="vertical" margin={{ top: 0, right: 8, left: 8, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" horizontal={false} />
+                <XAxis type="number" tick={{ fill: '#666', fontSize: 11 }} tickFormatter={formatK} />
+                <YAxis type="category" dataKey="name" tick={{ fill: '#999', fontSize: 11 }} width={80} />
+                <Tooltip
+                  contentStyle={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8 }}
+                  formatter={(v: unknown) => [(v as number).toLocaleString('fr-FR'), 'Abonnés']}
+                />
+                <Bar dataKey="Abonnés" fill={PLATFORM_CONFIG[selectedPlatform]?.color || '#e8b84b'} radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </div>
       )}
 
       {/* Modal — create or edit */}
-      <Modal
-        open={showModal}
-        onClose={closeModal}
-        title={editingKpi ? 'Modifier le snapshot' : 'Saisir un KPI social'}
-      >
+      <Modal open={showModal} onClose={closeModal} title={editingKpi ? 'Modifier le snapshot' : 'Saisir un KPI social'}>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <Select
@@ -769,11 +1022,10 @@ export function SocialKPITracker({ clients, allKpis: initialKpis }: Props) {
             />
           </div>
 
-          {/* URL du profil + scan automatique — tous les réseaux */}
+          {/* URL scan */}
           <div>
             <label className="block text-xs font-medium text-nv-text-muted mb-1.5">
-              URL du profil{' '}
-              <span className="text-nv-text-faint font-normal">(scan auto du mois en cours)</span>
+              URL du profil <span className="text-nv-text-faint font-normal">(scan auto)</span>
             </label>
             <div className="flex gap-2">
               <input
@@ -789,16 +1041,12 @@ export function SocialKPITracker({ clients, allKpis: initialKpis }: Props) {
                 disabled={scanLoading || !form.channelUrl.trim()}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary/20 border border-primary/30 text-primary text-sm font-medium hover:bg-primary/30 disabled:opacity-50 transition-colors shrink-0"
               >
-                {scanLoading
-                  ? <Loader2 size={13} className="animate-spin" />
-                  : <Search size={13} />}
+                {scanLoading ? <Loader2 size={13} className="animate-spin" /> : <Search size={13} />}
                 Scan
               </button>
             </div>
             {scanMsg && (
-              <p className={`text-xs mt-1.5 ${scanMsg.type === 'ok' ? 'text-emerald-400' : 'text-red-400'}`}>
-                {scanMsg.text}
-              </p>
+              <p className={`text-xs mt-1.5 ${scanMsg.type === 'ok' ? 'text-emerald-400' : 'text-red-400'}`}>{scanMsg.text}</p>
             )}
           </div>
 
@@ -814,7 +1062,20 @@ export function SocialKPITracker({ clients, allKpis: initialKpis }: Props) {
             <Input label="Likes" type="number" value={form.likes} onChange={e => setForm({ ...form, likes: e.target.value })} />
             <Input label="Commentaires" type="number" value={form.comments} onChange={e => setForm({ ...form, comments: e.target.value })} />
           </div>
-          <p className="text-xs text-nv-text-faint">Taux d&apos;engagement calculé automatiquement : (likes + commentaires) / abonnés × 100</p>
+
+          {/* Revenue */}
+          <div>
+            <Input
+              label="CA généré ce mois (€)"
+              type="number"
+              value={form.revenue}
+              onChange={e => setForm({ ...form, revenue: e.target.value })}
+              placeholder="0"
+            />
+            <p className="text-xs text-nv-text-faint mt-1">Pour la corrélation croissance / chiffre d&apos;affaires</p>
+          </div>
+
+          <p className="text-xs text-nv-text-faint">Taux d&apos;engagement calculé auto : (likes + commentaires) / abonnés × 100</p>
           <div className="flex justify-end gap-3">
             <Button type="button" variant="outline" onClick={closeModal}>Annuler</Button>
             <Button type="submit" loading={loading}>{editingKpi ? 'Mettre à jour' : 'Enregistrer'}</Button>

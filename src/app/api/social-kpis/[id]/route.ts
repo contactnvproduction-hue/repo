@@ -8,7 +8,7 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   const { id } = await params
-  const { followers, views, likes, comments, handle, channelUrl, engagement } = await req.json()
+  const { followers, views, likes, comments, handle, channelUrl, engagement, revenue } = await req.json()
 
   const updated = await prisma.socialKPI.update({
     where: { id },
@@ -20,6 +20,7 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
       ...(handle !== undefined && { handle: handle || null }),
       ...(channelUrl !== undefined && { channelUrl: channelUrl || null }),
       ...(engagement !== undefined && { engagement: engagement !== null ? Number(engagement) : null }),
+      ...(revenue !== undefined && { revenue: revenue !== null && revenue !== '' ? Number(revenue) : null }),
     },
   })
   return NextResponse.json(updated)
