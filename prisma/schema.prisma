@@ -45,6 +45,7 @@ model User {
   projectComments   ProjectComment[]   @relation("ProjectCommentAuthor")
   availability      TeamAvailability[]
   dailyCheckins     UserDailyCheckin[]
+  dailyFollowUps    DailyClientFollowUp[]
 
   @@map("users")
 }
@@ -808,6 +809,23 @@ model ClientCharge {
   updatedAt DateTime @updatedAt
 
   @@map("client_charges")
+}
+
+// ─── SUIVI QUOTIDIEN CLIENT (relances équipe) ─────────────────────────────────
+
+model DailyClientFollowUp {
+  id          String   @id @default(cuid())
+  memberName  String   // Nom du membre (saisi sur la page externe)
+  userId      String?  // Lien optionnel vers un User du dashboard
+  date        String   // "2026-06-20" — 1 par client par jour (multiple autorisé)
+  clientName  String   // Client relancé (texte libre)
+  types       String[] // ["relance_client", "avancement_livrable", ...]
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("daily_client_follow_ups")
 }
 
 // ─── DAILY CHECKIN ───────────────────────────────────────────────────────────

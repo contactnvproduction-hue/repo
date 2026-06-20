@@ -6,6 +6,7 @@ import { Users2 } from 'lucide-react'
 import { TeamManager } from '@/components/team/TeamManager'
 import { TeamAvailabilityEditor } from '@/components/team/TeamAvailabilityEditor'
 import { DeleteButton } from '@/components/ui/DeleteButton'
+import { DailyFollowUpSection } from '@/components/team/DailyFollowUpSection'
 
 const roleLabel: Record<string, string> = {
   ADMIN: 'Administrateur', MANAGER: 'Manager', MONTEUR: 'Monteur',
@@ -20,7 +21,9 @@ export default async function TeamPage() {
   const session = await auth()
   if (!session?.user) return null
 
-  const [users, availabilities] = await Promise.all([
+  const todayStr = new Date().toISOString().slice(0, 10)
+
+  const [users, availabilities, todayFollowUps] = await Promise.all([
     prisma.user.findMany({
       include: {
         assignedProjects: {
@@ -30,9 +33,12 @@ export default async function TeamPage() {
       },
       orderBy: { name: 'asc' },
     }),
-    // Récupérer toutes les disponibilités, on prend la plus récente par utilisateur
     prisma.teamAvailability.findMany({
       orderBy: { weekStart: 'desc' },
+    }),
+    prisma.dailyClientFollowUp.findMany({
+      where: { date: todayStr },
+      orderBy: { createdAt: 'desc' },
     }),
   ])
 
@@ -58,6 +64,20 @@ export default async function TeamPage() {
         </div>
         {isAdmin && <TeamManager />}
       </div>
+
+      <DailyFollowUpSection
+        members={users.map(u => ({ id: u.id, name: u.name, role: u.role, avatar: u.avatar }))}
+        todayStr={todayStr}
+        initialToday={todayFollowUps.map(e => ({
+          id: e.id,
+          memberName: e.memberName,
+          date: e.date,
+          clientName: e.clientName,
+          types: e.types,
+          notes: e.notes,
+          createdAt: e.createdAt.toISOString(),
+        }))}
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {users.map((user) => (
