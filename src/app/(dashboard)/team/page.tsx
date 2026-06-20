@@ -66,17 +66,18 @@ export default async function TeamPage() {
       </div>
 
       <DailyFollowUpSection
-        members={users.map(u => ({ id: u.id, name: u.name, role: u.role, avatar: u.avatar }))}
+        members={users.map(u => ({ id: u.id, name: u.name, role: u.role, avatar: u.avatar, includeInSuivi: u.includeInSuivi }))}
         todayStr={todayStr}
         initialToday={todayFollowUps.map(e => ({
           id: e.id,
           memberName: e.memberName,
           date: e.date,
-          clientName: e.clientName,
+          clientNames: e.clientNames,
           types: e.types,
           notes: e.notes,
           createdAt: e.createdAt.toISOString(),
         }))}
+        isAdmin={isAdmin}
       />
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">

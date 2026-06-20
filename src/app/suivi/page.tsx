@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { CheckCircle2, Loader2, Plus, ChevronDown } from 'lucide-react'
+import { CheckCircle2, Loader2, Plus, ChevronDown, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const FOLLOW_UP_TYPES = [
@@ -21,12 +21,13 @@ export default function SuiviPage() {
   const [members, setMembers] = useState<Member[]>([])
   const [loadingMembers, setLoadingMembers] = useState(true)
   const [memberName, setMemberName] = useState('')
-  const [clientName, setClientName] = useState('')
+  const [clientNames, setClientNames] = useState<string[]>([''])
   const [types, setTypes] = useState<string[]>([])
   const [notes, setNotes] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [success, setSuccess] = useState(false)
   const [submittedCount, setSubmittedCount] = useState(0)
+  const [lastClients, setLastClients] = useState<string[]>([])
 
   useEffect(() => {
     fetch('/api/suivi/members')
@@ -39,19 +40,32 @@ export default function SuiviPage() {
     setTypes(prev => prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id])
   }
 
+  const addClient = () => setClientNames(prev => [...prev, ''])
+  const removeClient = (i: number) => setClientNames(prev => prev.filter((_, idx) => idx !== i))
+  const updateClient = (i: number, val: string) => setClientNames(prev => prev.map((c, idx) => idx === i ? val : c))
+
+  const filledClients = clientNames.filter(c => c.trim().length > 0)
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!memberName.trim()) { toast.error('Sélectionne ton prénom'); return }
-    if (!clientName.trim()) { toast.error('Indique le client relancé'); return }
+    if (filledClients.length === 0) { toast.error('Indique au moins un client relancé'); return }
     if (types.length === 0) { toast.error('Coche au moins une action'); return }
     setSubmitting(true)
     try {
       const res = await fetch('/api/suivi', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ memberName: memberName.trim(), date: todayISO(), clientName: clientName.trim(), types, notes: notes.trim() || undefined }),
+        body: JSON.stringify({
+          memberName: memberName.trim(),
+          date: todayISO(),
+          clientNames: filledClients,
+          types,
+          notes: notes.trim() || undefined,
+        }),
       })
       if (!res.ok) throw new Error()
+      setLastClients(filledClients)
       setSuccess(true)
       setSubmittedCount(c => c + 1)
     } catch {
@@ -62,7 +76,7 @@ export default function SuiviPage() {
   }
 
   const handleAnother = () => {
-    setClientName('')
+    setClientNames([''])
     setTypes([])
     setNotes('')
     setSuccess(false)
@@ -78,13 +92,19 @@ export default function SuiviPage() {
           <CheckCircle2 size={36} className="text-emerald-400" />
         </div>
         <h2 className="text-2xl font-black text-white mb-2">C&apos;est envoyé !</h2>
-        <p className="text-nv-text-muted text-sm mb-1">
-          Relance <span className="text-white font-medium">{clientName}</span> enregistrée
+        <p className="text-nv-text-muted text-sm mb-0.5">
+          {lastClients.length === 1
+            ? <>Relance <span className="text-white font-medium">{lastClients[0]}</span> enregistrée</>
+            : <><span className="text-white font-medium">{lastClients.length} clients</span> relancés enregistrés</>
+          }
         </p>
+        {lastClients.length > 1 && (
+          <p className="text-xs text-nv-text-faint mb-0.5">{lastClients.join(', ')}</p>
+        )}
         <p className="text-nv-text-faint text-xs mb-8 capitalize">{today}</p>
         {submittedCount > 0 && (
           <p className="text-xs text-emerald-400 mb-6 font-medium">
-            {submittedCount} relance{submittedCount > 1 ? 's' : ''} soumise{submittedCount > 1 ? 's' : ''} aujourd&apos;hui
+            {submittedCount} rapport{submittedCount > 1 ? 's' : ''} soumis aujourd&apos;hui
           </p>
         )}
         <button
@@ -94,7 +114,7 @@ export default function SuiviPage() {
           <Plus size={15} />
           Ajouter une autre relance
         </button>
-        <p className="text-xs text-nv-text-faint mt-8">Tu peux fermer cette page</p>
+        <p className="text-xs text-white/20 mt-8">Tu peux fermer cette page</p>
       </div>
     )
   }
@@ -138,19 +158,42 @@ export default function SuiviPage() {
           )}
         </div>
 
-        {/* Quel client ? */}
+        {/* Quels clients ? */}
         <div>
           <label className="block text-xs font-semibold text-white/50 uppercase tracking-widest mb-2">
-            Client relancé *
+            Client(s) relancé(s) *
           </label>
-          <input
-            type="text"
-            value={clientName}
-            onChange={e => setClientName(e.target.value)}
-            placeholder="Nom du client…"
-            className="w-full px-4 py-3 bg-white/5 border border-white/12 rounded-xl text-white text-sm placeholder:text-white/20 focus:outline-none focus:border-[#e8b84b]/40"
-            autoCapitalize="words"
-          />
+          <div className="space-y-2">
+            {clientNames.map((name, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={name}
+                  onChange={e => updateClient(i, e.target.value)}
+                  placeholder={`Client ${i + 1}…`}
+                  className="flex-1 px-4 py-3 bg-white/5 border border-white/12 rounded-xl text-white text-sm placeholder:text-white/20 focus:outline-none focus:border-[#e8b84b]/40"
+                  autoCapitalize="words"
+                />
+                {clientNames.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => removeClient(i)}
+                    className="w-10 h-10 shrink-0 flex items-center justify-center rounded-xl bg-white/5 border border-white/10 text-white/40 hover:text-white/70 hover:border-white/20 transition-all"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={addClient}
+            className="mt-2 flex items-center gap-1.5 text-xs text-white/40 hover:text-white/70 transition-colors px-1 py-1"
+          >
+            <Plus size={12} />
+            Ajouter un client
+          </button>
         </div>
 
         {/* Qu'est-ce que tu as fait ? */}
@@ -203,12 +246,12 @@ export default function SuiviPage() {
         {/* Submit */}
         <button
           type="submit"
-          disabled={submitting || !memberName || !clientName || types.length === 0}
+          disabled={submitting || !memberName || filledClients.length === 0 || types.length === 0}
           className="w-full py-3.5 rounded-xl text-sm font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           style={{ background: '#e8b84b', color: '#000' }}
         >
           {submitting ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
-          {submitting ? 'Envoi…' : 'Valider la relance'}
+          {submitting ? 'Envoi…' : `Valider la relance${filledClients.length > 1 ? ` (${filledClients.length} clients)` : ''}`}
         </button>
 
         <p className="text-center text-xs text-white/20 pb-4">

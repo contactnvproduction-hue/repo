@@ -28,9 +28,10 @@ model User {
   role         UserRole  @default(COMMERCIAL)
   avatar       String?
   specialty    String?
-  disponible   Boolean   @default(true)
-  phone        String?
-  hasLogin     Boolean   @default(true)
+  disponible      Boolean   @default(true)
+  phone           String?
+  hasLogin        Boolean   @default(true)
+  includeInSuivi  Boolean   @default(true)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
@@ -818,7 +819,7 @@ model DailyClientFollowUp {
   memberName  String   // Nom du membre (saisi sur la page externe)
   userId      String?  // Lien optionnel vers un User du dashboard
   date        String   // "2026-06-20" — 1 par client par jour (multiple autorisé)
-  clientName  String   // Client relancé (texte libre)
+  clientNames String[] // Clients relancés (texte libre, multiple)
   types       String[] // ["relance_client", "avancement_livrable", ...]
   notes       String?
   createdAt   DateTime @default(now())

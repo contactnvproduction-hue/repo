@@ -11,6 +11,7 @@ const updateSchema = z.object({
   role: z.enum(['ADMIN', 'MANAGER', 'MONTEUR', 'VIDÉASTE', 'PHOTOGRAPHE', 'COMMERCIAL']).optional(),
   phone: z.string().optional().nullable(),
   specialty: z.string().optional().nullable(),
+  includeInSuivi: z.boolean().optional(),
 })
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

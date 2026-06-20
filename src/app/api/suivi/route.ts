@@ -8,7 +8,7 @@ const FOLLOW_UP_TYPES = ['relance_client', 'avancement_livrable', 'avancement_pr
 const createSchema = z.object({
   memberName: z.string().min(1),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  clientName: z.string().min(1),
+  clientNames: z.array(z.string().min(1)).min(1),
   types: z.array(z.enum(FOLLOW_UP_TYPES)).min(1),
   notes: z.string().optional(),
 })
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
       memberName: result.data.memberName,
       userId: user?.id ?? null,
       date: result.data.date,
-      clientName: result.data.clientName,
+      clientNames: result.data.clientNames,
       types: result.data.types,
       notes: result.data.notes,
     },
