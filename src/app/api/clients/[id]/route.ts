@@ -16,6 +16,7 @@ const updateClientSchema = z.object({
   source: z.enum(['INSTAGRAM', 'YOUTUBE', 'BOUCHE_A_OREILLE', 'GOOGLE', 'SITE_WEB', 'RECOMMANDATION', 'LINKEDIN', 'AUTRE']).optional(),
   notes: z.string().optional(),
   relanceDate: z.string().optional().nullable(),
+  followUpEnabled: z.boolean().optional(),
 })
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

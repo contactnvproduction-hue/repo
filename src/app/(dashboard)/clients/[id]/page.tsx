@@ -18,6 +18,7 @@ import { DeleteButton } from '@/components/ui/DeleteButton'
 import { ClientInteractions } from '@/components/clients/ClientInteractions'
 import { ClientRetainerManager } from '@/components/clients/ClientRetainerManager'
 import { ClientBilanSection } from '@/components/clients/ClientBilanSection'
+import { ClientChargesSection } from '@/components/clients/ClientChargesSection'
 
 const statusBadge: Record<string, 'success' | 'info' | 'warning' | 'muted'> = {
   ACTIF: 'success', PROSPECT: 'info', EN_PAUSE: 'warning', ARCHIVÉ: 'muted',
@@ -103,12 +104,22 @@ export default async function ClientDetailPage({ params }: PageProps) {
         retainers: {
           orderBy: { startDate: 'asc' },
         },
+        charges: {
+          orderBy: [{ month: 'desc' }, { createdAt: 'asc' }],
+        },
       },
     }),
     prisma.user.findMany({ select: { id: true, name: true }, orderBy: { name: 'asc' } }),
   ])
 
   if (!client) notFound()
+
+  // Retainer actif ?
+  const hasActiveRetainer = (client.retainers ?? []).some(r => {
+    const end = new Date(r.startDate)
+    end.setMonth(end.getMonth() + r.durationMonths)
+    return now < end
+  })
 
   // Calcul CA total ce client
   const totalCA = await prisma.payment.aggregate({
@@ -267,15 +278,27 @@ export default async function ClientDetailPage({ params }: PageProps) {
             </CardContent>
           </Card>
 
-          {/* Bilan mensuel */}
+          {/* Suivi mensuel */}
           {client.status === 'ACTIF' && (
             <ClientBilanSection
               clientId={client.id}
               clientName={client.name}
               lastBilanDate={client.lastBilanDate?.toISOString() ?? null}
               nextBilanDate={client.nextBilanDate?.toISOString() ?? null}
+              followUpEnabled={client.followUpEnabled}
+              hasActiveRetainer={hasActiveRetainer}
             />
           )}
+
+          {/* Charges client */}
+          <ClientChargesSection
+            clientId={client.id}
+            initialCharges={(client.charges ?? []).map(c => ({
+              ...c,
+              month: c.month.toISOString(),
+              createdAt: c.createdAt.toISOString(),
+            }))}
+          />
 
           {/* Historique interactions */}
           <ClientInteractions

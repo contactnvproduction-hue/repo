@@ -32,17 +32,25 @@ interface PageProps {
   searchParams: Promise<{ search?: string; status?: string; type?: string; archived?: string }>
 }
 
-// Calcule si un client actif a besoin d'un bilan ce mois
-// Retourne 'scheduled' (vert), 'overdue' (rouge) ou null (rien à afficher)
-function bilanChip(status: string, lastBilanDate: Date | null, nextBilanDate: Date | null): 'scheduled' | 'overdue' | null {
+// Chip affiché seulement pour les clients avec retainer actif OU followUpEnabled
+function bilanChip(
+  status: string,
+  lastBilanDate: Date | null,
+  nextBilanDate: Date | null,
+  followUpEnabled: boolean,
+  retainers: Array<{ startDate: Date; durationMonths: number }>,
+): 'scheduled' | 'overdue' | null {
   if (status !== 'ACTIF') return null
   const now = new Date()
+  const hasActiveRetainer = retainers.some(r => {
+    const end = new Date(r.startDate)
+    end.setMonth(end.getMonth() + r.durationMonths)
+    return end > now
+  })
+  if (!hasActiveRetainer && !followUpEnabled) return null
   const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-  // Call planifié dans le futur → vert
   if (nextBilanDate && nextBilanDate >= now) return 'scheduled'
-  // Bilan déjà fait ce mois → rien
   if (lastBilanDate && lastBilanDate >= firstOfMonth) return null
-  // Pas planifié, pas fait ce mois → rouge
   return 'overdue'
 }
 
@@ -76,7 +84,8 @@ export default async function ClientsPage({ searchParams }: PageProps) {
     select: {
       id: true, name: true, company: true, email: true, phone: true,
       type: true, status: true, avatar: true, createdAt: true,
-      lastBilanDate: true, nextBilanDate: true,
+      lastBilanDate: true, nextBilanDate: true, followUpEnabled: true,
+      retainers: { select: { startDate: true, durationMonths: true } },
       _count: { select: { projects: true, invoices: true } },
     },
     orderBy: { updatedAt: 'desc' },
@@ -137,7 +146,7 @@ export default async function ClientsPage({ searchParams }: PageProps) {
           ) : (
             clients.map((client) => {
               const TypeIcon = typeIcon[client.type] || User
-              const chip = bilanChip(client.status, client.lastBilanDate, client.nextBilanDate)
+              const chip = bilanChip(client.status, client.lastBilanDate, client.nextBilanDate, client.followUpEnabled, client.retainers)
               return (
                 <Link
                   key={client.id}

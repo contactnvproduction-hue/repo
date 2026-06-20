@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -104,10 +104,195 @@ function GrowthBadge({ pct, size = 'md' }: { pct: number | null; size?: 'sm' | '
 
 // ─── Infographic modal ──────────────────────────────────────────────────────────
 
+function drawInfographicCanvas(params: {
+  clientName: string; handle: string | null; platform: string
+  cfg: { label: string; color: string } | undefined
+  followers: number; growthPct: number | null; followerDelta: number | null; totalGrowthPct: number | null
+  views: number | null; likes: number | null; engagement: number | null
+  hasRevenue: boolean; totalRevenue: number
+  chartData: Array<{ month: string; Abonnés: number }>
+}): HTMLCanvasElement {
+  const { clientName, handle, platform, cfg, followers, growthPct, followerDelta, totalGrowthPct,
+          views, likes, engagement, hasRevenue, totalRevenue, chartData } = params
+  const color = cfg?.color || '#e8b84b'
+  const platformLabel = cfg?.label || platform
+
+  // Layout
+  const W = 800
+  const CHART_H = chartData.length > 1 ? 130 : 0
+  const REV_H = hasRevenue ? 68 : 0
+  const H = 580 + CHART_H + REV_H
+  const canvas = document.createElement('canvas')
+  canvas.width = W
+  canvas.height = H
+  const ctx = canvas.getContext('2d')!
+
+  const hexA = (hex: string, a: number) => {
+    const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16)
+    return `rgba(${r},${g},${b},${a})`
+  }
+  const rr = (x: number, y: number, w: number, h: number, r: number) => {
+    ctx.beginPath()
+    ctx.moveTo(x + r, y)
+    ctx.lineTo(x + w - r, y); ctx.arcTo(x + w, y, x + w, y + r, r)
+    ctx.lineTo(x + w, y + h - r); ctx.arcTo(x + w, y + h, x + w - r, y + h, r)
+    ctx.lineTo(x + r, y + h); ctx.arcTo(x, y + h, x, y + h - r, r)
+    ctx.lineTo(x, y + r); ctx.arcTo(x, y, x + r, y, r)
+    ctx.closePath()
+  }
+  const SAN = '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+
+  // Background
+  ctx.fillStyle = '#0a0a0a'; ctx.fillRect(0, 0, W, H)
+
+  // Border
+  rr(1, 1, W - 2, H - 2, 20)
+  ctx.strokeStyle = hexA(color, 0.18); ctx.lineWidth = 1.5; ctx.stroke()
+
+  // Top gradient
+  const bg = ctx.createLinearGradient(0, 0, W, H * 0.6)
+  bg.addColorStop(0, hexA(color, 0.12)); bg.addColorStop(1, hexA(color, 0))
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H)
+
+  // Top accent line
+  const ln = ctx.createLinearGradient(0, 0, W * 0.65, 0)
+  ln.addColorStop(0, color); ln.addColorStop(1, hexA(color, 0))
+  ctx.fillStyle = ln; ctx.fillRect(0, 0, W, 3)
+
+  const PX = 56
+  // Client name
+  ctx.fillStyle = hexA('#ffffff', 0.32)
+  ctx.font = `600 18px ${SAN}`
+  ctx.fillText(clientName.toUpperCase(), PX, 58)
+
+  // Platform badge
+  const badgeLabel = platformLabel
+  ctx.font = `bold 16px ${SAN}`
+  const bW = ctx.measureText(badgeLabel).width + 40
+  const bX = W - PX - bW, bY = 38
+  rr(bX, bY, bW, 34, 17); ctx.fillStyle = hexA(color, 0.15); ctx.fill()
+  rr(bX, bY, bW, 34, 17); ctx.strokeStyle = hexA(color, 0.35); ctx.lineWidth = 1; ctx.stroke()
+  ctx.fillStyle = color; ctx.textAlign = 'center'
+  ctx.fillText(badgeLabel, bX + bW / 2, bY + 22); ctx.textAlign = 'left'
+
+  // Handle
+  ctx.fillStyle = '#ffffff'; ctx.font = `bold 32px ${SAN}`
+  ctx.fillText(handle || platformLabel, PX, 106)
+
+  // Abonnés label
+  ctx.fillStyle = hexA('#ffffff', 0.28); ctx.font = `400 18px ${SAN}`
+  ctx.fillText('Abonnés', PX, 142)
+
+  // Big number
+  ctx.fillStyle = '#ffffff'; ctx.font = `900 86px ${SAN}`
+  ctx.fillText(formatK(followers), PX, 228)
+
+  // Growth
+  if (growthPct !== null) {
+    const pos = growthPct > 0
+    const txt = `${pos ? '+' : ''}${growthPct.toFixed(1)}%`
+    ctx.font = `bold 22px ${SAN}`
+    const gW = ctx.measureText(txt).width + 44
+    const gX = W - PX - gW, gY = 178
+    rr(gX, gY, gW, 36, 18)
+    ctx.fillStyle = pos ? hexA('#10b981', 0.12) : hexA('#ef4444', 0.12); ctx.fill()
+    ctx.fillStyle = pos ? '#10b981' : '#ef4444'
+    // arrow
+    ctx.beginPath()
+    const ax = gX + 14, ay = gY + 18
+    if (pos) { ctx.moveTo(ax, ay + 5); ctx.lineTo(ax + 6, ay - 4); ctx.lineTo(ax + 12, ay + 5) }
+    else { ctx.moveTo(ax, ay - 4); ctx.lineTo(ax + 6, ay + 5); ctx.lineTo(ax + 12, ay - 4) }
+    ctx.closePath(); ctx.fill()
+    ctx.font = `bold 21px ${SAN}`; ctx.fillText(txt, gX + 28, gY + 24)
+    if (followerDelta !== null) {
+      ctx.fillStyle = hexA('#ffffff', 0.22); ctx.font = `400 14px ${SAN}`; ctx.textAlign = 'right'
+      ctx.fillText(`${followerDelta >= 0 ? '+' : ''}${followerDelta.toLocaleString('fr-FR')}`, W - PX, gY + 52)
+    }
+    if (totalGrowthPct !== null && chartData.length > 2) {
+      ctx.fillStyle = hexA('#ffffff', 0.14); ctx.font = `400 13px ${SAN}`;
+      ctx.fillText(`${totalGrowthPct >= 0 ? '+' : ''}${totalGrowthPct.toFixed(1)}% total`, W - PX, gY + 68)
+    }
+    ctx.textAlign = 'left'
+  }
+
+  let cy = 252
+
+  // Chart
+  if (chartData.length > 1) {
+    const cX = PX, cY = cy + 8, cW = W - PX * 2, cH = 100
+    const vals = chartData.map(d => d['Abonnés'])
+    const mx = Math.max(...vals), mn = Math.min(...vals), rng = mx - mn || 1
+    const pts = chartData.map((d, i) => ({
+      x: cX + (i / (chartData.length - 1)) * cW,
+      y: cY + cH - ((d['Abonnés'] - mn) / rng) * (cH - 8),
+    }))
+    const fg = ctx.createLinearGradient(0, cY, 0, cY + cH)
+    fg.addColorStop(0, hexA(color, 0.28)); fg.addColorStop(1, hexA(color, 0))
+    ctx.beginPath(); ctx.moveTo(pts[0].x, cY + cH); ctx.lineTo(pts[0].x, pts[0].y)
+    for (let i = 1; i < pts.length; i++) {
+      const cp = (pts[i-1].x + pts[i].x) / 2
+      ctx.bezierCurveTo(cp, pts[i-1].y, cp, pts[i].y, pts[i].x, pts[i].y)
+    }
+    ctx.lineTo(pts[pts.length-1].x, cY + cH); ctx.closePath(); ctx.fillStyle = fg; ctx.fill()
+    ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y)
+    for (let i = 1; i < pts.length; i++) {
+      const cp = (pts[i-1].x + pts[i].x) / 2
+      ctx.bezierCurveTo(cp, pts[i-1].y, cp, pts[i].y, pts[i].x, pts[i].y)
+    }
+    ctx.strokeStyle = color; ctx.lineWidth = 2.5; ctx.stroke()
+    ctx.fillStyle = hexA('#ffffff', 0.25); ctx.font = `400 12px ${SAN}`
+    ctx.fillText(chartData[0].month, cX, cY + cH + 18)
+    ctx.textAlign = 'right'; ctx.fillText(chartData[chartData.length-1].month, W - PX, cY + cH + 18); ctx.textAlign = 'left'
+    cy = cY + cH + 26
+  }
+
+  // Stat boxes
+  cy += 12
+  const sW = (W - PX * 2 - 24) / 3
+  const stats = [
+    { label: 'Vues', val: views != null ? formatK(views) : '—', col: null },
+    { label: 'Likes', val: likes != null ? formatK(likes) : '—', col: null },
+    { label: 'Engage', val: engagement != null ? `${engagement.toFixed(2)}%` : '—', col: color },
+  ]
+  stats.forEach((s, i) => {
+    const sx = PX + i * (sW + 12)
+    rr(sx, cy, sW, 72, 12); ctx.fillStyle = hexA('#ffffff', 0.035); ctx.fill()
+    rr(sx, cy, sW, 72, 12); ctx.strokeStyle = hexA('#ffffff', 0.06); ctx.lineWidth = 1; ctx.stroke()
+    ctx.fillStyle = hexA('#ffffff', 0.25); ctx.font = `500 13px ${SAN}`; ctx.textAlign = 'center'
+    ctx.fillText(s.label, sx + sW / 2, cy + 24)
+    ctx.fillStyle = s.col || '#ffffff'; ctx.font = `bold 21px ${SAN}`
+    ctx.fillText(s.val, sx + sW / 2, cy + 53); ctx.textAlign = 'left'
+  })
+  cy += 72 + 14
+
+  // Revenue
+  if (hasRevenue) {
+    rr(PX, cy, W - PX * 2, 50, 12); ctx.fillStyle = hexA('#10b981', 0.08); ctx.fill()
+    rr(PX, cy, W - PX * 2, 50, 12); ctx.strokeStyle = hexA('#10b981', 0.2); ctx.lineWidth = 1; ctx.stroke()
+    ctx.fillStyle = hexA('#34d399', 0.7); ctx.font = `500 15px ${SAN}`; ctx.fillText('€  CA période', PX + 18, cy + 31)
+    const revTxt = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(totalRevenue)
+    ctx.fillStyle = '#10b981'; ctx.font = `bold 19px ${SAN}`; ctx.textAlign = 'right'
+    ctx.fillText(revTxt, W - PX - 18, cy + 31); ctx.textAlign = 'left'
+    cy += 50 + 14
+  }
+
+  // Divider
+  cy += 10
+  ctx.fillStyle = hexA('#ffffff', 0.05); ctx.fillRect(PX, cy, W - PX * 2, 1); cy += 20
+
+  // Footer
+  ctx.fillStyle = hexA('#ffffff', 0.18); ctx.font = `500 13px ${SAN}`
+  ctx.fillText('NEW VISION PRODUCTION', PX, cy)
+  ctx.textAlign = 'right'
+  ctx.fillText(new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }), W - PX, cy)
+  ctx.textAlign = 'left'
+
+  return canvas
+}
+
 function InfographicModal({ clientId, platform, clients, kpis, period, onClose }: {
   clientId: string; platform: string; clients: Client[]; kpis: SocialKPI[]; period: Period; onClose: () => void
 }) {
-  const ref = useRef<HTMLDivElement>(null)
   const client = clients.find(c => c.id === clientId)
   const clientName = client?.company || client?.name || ''
   const cfg = P[platform]
@@ -136,17 +321,20 @@ function InfographicModal({ clientId, platform, clients, kpis, period, onClose }
   const hasRevenue = snapshots.some(k => k.revenue != null && k.revenue > 0)
   const totalRevenue = snapshots.reduce((s, k) => s + (k.revenue ?? 0), 0)
 
-  const handleDownload = async () => {
-    if (!ref.current) return
+  const handleDownload = () => {
     try {
-      const { default: html2canvas } = await import('html2canvas')
-      const canvas = await html2canvas(ref.current, { backgroundColor: '#0a0a0a', scale: 2 })
+      const canvas = drawInfographicCanvas({
+        clientName, handle: latest.handle, platform, cfg,
+        followers: latest.followers, growthPct, followerDelta, totalGrowthPct,
+        views: latest.views, likes: latest.likes, engagement: latest.engagement,
+        hasRevenue, totalRevenue, chartData,
+      })
       const link = document.createElement('a')
       link.download = `${clientName}-${platform}-resultats.png`
       link.href = canvas.toDataURL('image/png')
       link.click()
     } catch {
-      toast.error('Export indisponible — faites une capture d\'écran')
+      toast.error('Export impossible')
     }
   }
 
@@ -164,7 +352,7 @@ function InfographicModal({ clientId, platform, clients, kpis, period, onClose }
             </button>
           </div>
         </div>
-        <div ref={ref} className="rounded-2xl overflow-hidden" style={{ background: '#0a0a0a', border: `1px solid ${cfg?.color || '#333'}30` }}>
+        <div className="rounded-2xl overflow-hidden" style={{ background: '#0a0a0a', border: `1px solid ${cfg?.color || '#333'}30` }}>
           <div className="relative p-6 pb-4" style={{ background: `linear-gradient(135deg, ${cfg?.color || '#e8b84b'}15 0%, transparent 70%)` }}>
             <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: `linear-gradient(90deg, ${cfg?.color || '#e8b84b'}, transparent)` }} />
             <div className="flex items-start justify-between mb-5">

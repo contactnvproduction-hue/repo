@@ -92,6 +92,7 @@ model Client {
   onboardingChecklist Json?
   lastBilanDate       DateTime?  // Date du dernier bilan mensuel effectué
   nextBilanDate       DateTime?  // Prochain bilan programmé
+  followUpEnabled     Boolean    @default(false) // Suivi mensuel opt-in (clients hors retainer)
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
@@ -105,6 +106,7 @@ model Client {
   clientNotes     ClientNote[]
   socialKpis      SocialKPI[]
   retainers       ClientRetainer[]
+  charges         ClientCharge[]
 
   @@map("clients")
 }
@@ -790,6 +792,22 @@ model ClientRetainer {
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@map("client_retainers")
+}
+
+// ─── CHARGES CLIENTS ─────────────────────────────────────────────────────────
+
+model ClientCharge {
+  id        String   @id @default(cuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  month     DateTime // premier jour du mois
+  category  String   // ex: "Frais déplacement", "Location studio"
+  amount    Float
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("client_charges")
 }
 
 // ─── DAILY CHECKIN ───────────────────────────────────────────────────────────
