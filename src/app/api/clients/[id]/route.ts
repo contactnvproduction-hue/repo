@@ -17,6 +17,7 @@ const updateClientSchema = z.object({
   notes: z.string().optional(),
   relanceDate: z.string().optional().nullable(),
   followUpEnabled: z.boolean().optional(),
+  adaNotes: z.record(z.string(), z.unknown()).optional().nullable(),
 })
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

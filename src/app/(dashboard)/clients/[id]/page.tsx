@@ -236,6 +236,10 @@ export default async function ClientDetailPage({ params }: PageProps) {
                   updatedAt: client.adaResponses[0].updatedAt.toISOString(),
                 }
               : null}
+            initialNotes={
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              (() => { const n = (client as any).adaNotes as { overrides?: Record<string,string>; extras?: { key:string; value:string }[] } | null; return n ? { overrides: n.overrides ?? {}, extras: n.extras ?? [] } : null })()
+            }
           />
 
           {/* Coordonnées */}

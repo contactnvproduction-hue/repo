@@ -110,6 +110,7 @@ model Client {
   retainers       ClientRetainer[]
   charges         ClientCharge[]
   adaResponses    AdaFormResponse[]
+  adaNotes        Json?
 
   @@map("clients")
 }
