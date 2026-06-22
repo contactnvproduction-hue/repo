@@ -142,37 +142,55 @@ function matchClient(
   const nomVal = nomCol ? (row[nomCol] || '') : ''
   const companyVal = companyCol ? (row[companyCol] || '') : ''
 
-  const nomTokens = tokens(nomVal, 3)  // tokens nom/prénom (min 3 chars)
-  const compTokens = tokens(companyVal, 3) // tokens marque
-
-  // Identifiants sociaux extraits de tout le formulaire
+  const nomTokens = tokens(nomVal, 3)
+  const compTokens = tokens(companyVal, 3)
   const socialIds = extractSocialIdentifiers(row)
+  const nomNoSpace = normalize(nomVal).replace(/\s+/g, '')
 
+  function nameMatches(client: { name: string }): boolean {
+    const cNameTokens = tokens(client.name, 3)
+    const cNameNoSpace = normalize(client.name).replace(/\s+/g, '')
+    // Match de-espacé exact ("Le Bot" → "Lebot")
+    if (nomNoSpace.length >= 4 && cNameNoSpace.length >= 4 && nomNoSpace === cNameNoSpace) return true
+    return nomTokens.some(t => cNameTokens.includes(t)) || cNameTokens.some(ct => nomTokens.includes(ct))
+  }
+
+  function companyMatches(client: { name: string; company?: string | null }): boolean {
+    const cNameTokens = tokens(client.name, 3)
+    const cCompTokens = client.company ? tokens(client.company, 3) : []
+    if (compTokens.length === 0) return false
+    if (compTokens.some(t => cCompTokens.includes(t)) || cCompTokens.some(ct => compTokens.includes(ct))) return true
+    if (compTokens.some(t => cNameTokens.includes(t)) || cNameTokens.some(ct => compTokens.includes(ct))) return true
+    return !!companyVal && normalize(client.name).split(' ').filter(w => w.length > 3).some(w => normalize(companyVal).includes(w))
+  }
+
+  // Passe 1 — Nom + Entreprise (haute confiance, évite les faux positifs sur prénom partagé)
+  for (const client of clients) {
+    if (nameMatches(client) && companyMatches(client)) {
+      return { clientId: client.id, matchedOn: `${nomVal} + ${companyVal}`, confidence: 'high' }
+    }
+  }
+
+  // Passe 2 — Nom seul
+  for (const client of clients) {
+    if (nameMatches(client)) {
+      return { clientId: client.id, matchedOn: nomVal, confidence: 'high' }
+    }
+  }
+
+  // Passe 3 — Entreprise seule
+  for (const client of clients) {
+    if (companyMatches(client)) {
+      return { clientId: client.id, matchedOn: companyVal, confidence: 'medium' }
+    }
+  }
+
+  // Passe 4 — Handles sociaux
   for (const client of clients) {
     const cNameTokens = tokens(client.name, 3)
     const cCompTokens = client.company ? tokens(client.company, 3) : []
-
-    // Niveau 1 — Token match sur Nom & Prénom (haute confiance)
-    const nameMatch = nomTokens.some(t => cNameTokens.includes(t))
-      || cNameTokens.some(ct => nomTokens.includes(ct))
-    if (nameMatch) return { clientId: client.id, matchedOn: nomVal, confidence: 'high' }
-
-    // Niveau 2 — Token match sur Marque / Entreprise
-    const compMatch = compTokens.length > 0 && (
-      compTokens.some(t => cNameTokens.includes(t) || cCompTokens.includes(t))
-      || cCompTokens.some(ct => compTokens.includes(ct))
-      || cNameTokens.some(ct => compTokens.includes(ct))
-    )
-    // Aussi vérifie si le nom complet du client est inclus dans la valeur entreprise
-    const nameInCompany = companyVal && normalize(client.name).split(' ')
-      .filter(w => w.length > 3)
-      .some(w => normalize(companyVal).includes(w))
-    if (compMatch || nameInCompany) return { clientId: client.id, matchedOn: companyVal, confidence: 'medium' }
-
-    // Niveau 3 — Social handle vs nom/marque client
     const allClientIds = [
-      ...cNameTokens,
-      ...cCompTokens,
+      ...cNameTokens, ...cCompTokens,
       normalize(client.name),
       ...(client.company ? [normalize(client.company)] : []),
     ]
@@ -180,13 +198,8 @@ function matchClient(
       if (socialId.length < 3) continue
       for (const cid of allClientIds) {
         if (cid.length < 3) continue
-        // Match exact OU inclusion (ex: "sapiens_co" contient "sapiens")
         if (socialId === cid || socialId.includes(cid) || cid.includes(socialId)) {
-          return {
-            clientId: client.id,
-            matchedOn: `handle:${socialId} → ${client.name}`,
-            confidence: 'low',
-          }
+          return { clientId: client.id, matchedOn: `handle:${socialId} → ${client.name}`, confidence: 'low' }
         }
       }
     }

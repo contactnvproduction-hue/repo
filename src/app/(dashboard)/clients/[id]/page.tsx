@@ -120,6 +120,8 @@ export default async function ClientDetailPage({ params }: PageProps) {
 
   if (!client) notFound()
 
+  const now = new Date()
+
   // Retainer actif ?
   const hasActiveRetainer = (client.retainers ?? []).some(r => {
     const end = new Date(r.startDate)
@@ -139,7 +141,6 @@ export default async function ClientDetailPage({ params }: PageProps) {
   const caTotal = totalCA._sum.amount || 0
 
   // MRR actuel et LTV contractée
-  const now = new Date()
   const activeMRR = (client.retainers ?? []).reduce((sum, r) => {
     const start = new Date(r.startDate)
     const end = new Date(r.startDate)
