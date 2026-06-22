@@ -211,9 +211,14 @@ function matchClient(
 // ── URL CSV ───────────────────────────────────────────────────────────────────
 
 function toCSVUrl(sheetIdOrUrl: string): string {
-  const m = sheetIdOrUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/)
-  const id = m ? m[1] : sheetIdOrUrl
-  return `https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv`
+  const s = sheetIdOrUrl.trim()
+  // URL Sheets complète : .../spreadsheets/d/ID/...
+  const fromUrl = s.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/)
+  if (fromUrl) return `https://docs.google.com/spreadsheets/d/${fromUrl[1]}/gviz/tq?tqx=out:csv`
+  // ID brut (pas d'URL, que des caractères autorisés, longueur typique d'un ID Google)
+  if (/^[a-zA-Z0-9_-]{20,}$/.test(s)) return `https://docs.google.com/spreadsheets/d/${s}/gviz/tq?tqx=out:csv`
+  // Tout le reste (URL Forms, URL invalide…) → fallback sur l'ID par défaut
+  return `https://docs.google.com/spreadsheets/d/${DEFAULT_SHEET_ID}/gviz/tq?tqx=out:csv`
 }
 
 // ── Sync ──────────────────────────────────────────────────────────────────────
