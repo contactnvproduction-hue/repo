@@ -68,7 +68,7 @@ export function ClientAdaSection({ clientId, initialResponse, hasSheetConfigured
             : <ChevronRight size={14} className="text-nv-text-muted shrink-0" />}
           <ClipboardList size={15} className="text-primary shrink-0" />
           <div>
-            <p className="text-sm font-semibold text-white">Info ADA</p>
+            <p className="text-sm font-semibold text-white">INFOS DA</p>
             <p className="text-xs text-nv-text-muted">
               {response
                 ? `Reçu le ${new Date(response.responseTimestamp).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}`

@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { DashboardShell } from '@/components/layout/DashboardShell'
+import { AdaAutoSync } from '@/components/AdaAutoSync'
 
 export default async function DashboardLayout({
   children,
@@ -24,6 +25,7 @@ export default async function DashboardLayout({
       user={session.user}
       notifCount={notifCount}
     >
+      <AdaAutoSync />
       {children}
     </DashboardShell>
   )

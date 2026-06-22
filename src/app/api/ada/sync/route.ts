@@ -12,9 +12,8 @@ export async function POST(req: NextRequest) {
 
   const result = await syncAdaForms(clientId)
 
-  // Invalide le cache de la fiche client concernée
+  // Invalide le cache de la fiche client si ciblée
   if (clientId) revalidatePath(`/clients/${clientId}`)
-  else revalidatePath('/clients', 'layout')
 
   return NextResponse.json(result)
 }

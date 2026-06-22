@@ -1,6 +1,9 @@
 import { prisma } from '@/lib/db'
 
-// ── CSV parser (compatible Google Sheets export) ──────────────────────────────
+// Sheet publique NVP — fallback si non configurée dans les paramètres
+const DEFAULT_SHEET_ID = '1zNfAZHSKOjSJBd1VDZ4Le_kVqwrBwhOemORU1M8CB4U'
+
+// ── CSV parser (compatible Google Sheets gviz/tq export) ─────────────────────
 
 function parseCSV(text: string): { headers: string[]; rows: Record<string, string>[] } {
   const lines = text.split(/\r?\n/).filter(l => l.trim())
@@ -35,7 +38,7 @@ function parseCSV(text: string): { headers: string[]; rows: Record<string, strin
   return { headers, rows }
 }
 
-// ── Normalisation pour matching ───────────────────────────────────────────────
+// ── Normalisation ─────────────────────────────────────────────────────────────
 
 function normalize(s: string): string {
   return s
@@ -46,55 +49,75 @@ function normalize(s: string): string {
     .trim()
 }
 
-function extractNameCandidates(row: Record<string, string>, headers: string[]): string[] {
-  const namePattern = /nom|prenom|prénom|name|entreprise|societe|société|client|raison|infopreneur/i
-  const nameHeaders = headers.filter(h => namePattern.test(h))
+function tokens(s: string): string[] {
+  return normalize(s).split(' ').filter(t => t.length > 1)
+}
 
-  const candidates = new Set<string>()
+// ── Matching client ───────────────────────────────────────────────────────────
+// Cherche dans les colonnes "Nom & Prénom" et "Marque / Entreprise"
 
-  // Champs identifiés comme "nom"
-  for (const h of nameHeaders) {
-    const val = (row[h] || '').trim()
-    if (val) {
-      candidates.add(normalize(val))
-      // Essaie aussi prénom + nom séparément si plusieurs mots
-      val.split(/[\s,]+/).filter(Boolean).forEach(p => candidates.add(normalize(p)))
+function findNameColumn(headers: string[]): string | null {
+  return headers.find(h => /nom.*pr[eé]nom|pr[eé]nom.*nom/i.test(h))
+    || headers.find(h => /^1[\.\s].*nom/i.test(h))
+    || headers.find(h => /^nom\b/i.test(h))
+    || null
+}
+
+function findCompanyColumn(headers: string[]): string | null {
+  return headers.find(h => /marque|entreprise|soci[eé]t[eé]|brand|company/i.test(h))
+    || headers.find(h => /^2[\.\s]/i.test(h))
+    || null
+}
+
+function matchClient(
+  row: Record<string, string>,
+  headers: string[],
+  clients: { id: string; name: string; company?: string | null }[]
+): { clientId: string; matchedOn: string } | null {
+  const nomCol = findNameColumn(headers)
+  const companyCol = findCompanyColumn(headers)
+
+  const nomVal = nomCol ? (row[nomCol] || '') : ''
+  const companyVal = companyCol ? (row[companyCol] || '') : ''
+
+  const nomTokens = tokens(nomVal)
+  const companyTokens = tokens(companyVal).filter(t => t.length > 2)
+
+  for (const client of clients) {
+    const clientTokens = tokens(client.name)
+    const clientCompanyTokens = client.company ? tokens(client.company).filter(t => t.length > 2) : []
+
+    // Match sur nom/prénom : au moins un token commun de longueur > 3
+    const nameMatch = nomTokens.some(t => t.length > 3 && clientTokens.some(ct => ct === t))
+      || clientTokens.some(ct => ct.length > 3 && nomTokens.some(t => t === ct))
+
+    if (nameMatch) return { clientId: client.id, matchedOn: nomVal }
+
+    // Match sur entreprise/marque
+    if (companyTokens.length > 0 && clientCompanyTokens.length > 0) {
+      const compMatch = companyTokens.some(t => clientCompanyTokens.some(ct => ct === t || ct.includes(t) || t.includes(ct)))
+      if (compMatch) return { clientId: client.id, matchedOn: companyVal }
+    }
+
+    // Fallback : nom du client dans la valeur de l'entreprise ou vice versa
+    if (companyVal) {
+      const normCompany = normalize(companyVal)
+      const normClientName = normalize(client.name)
+      if (normCompany.includes(normClientName) || normClientName.includes(normCompany)) {
+        return { clientId: client.id, matchedOn: companyVal }
+      }
     }
   }
 
-  // Fallback : 2e colonne (souvent le nom dans les Google Forms)
-  if (candidates.size === 0 && headers[1]) {
-    const val = (row[headers[1]] || '').trim()
-    if (val) candidates.add(normalize(val))
-  }
-
-  return [...candidates].filter(Boolean)
+  return null
 }
 
-function matchesClient(candidates: string[], clientName: string, clientCompany?: string | null): boolean {
-  const targets = [normalize(clientName)]
-  if (clientCompany) targets.push(normalize(clientCompany))
-  // Aussi les mots individuels (prénom seul peut suffire)
-  normalize(clientName).split(' ').filter(w => w.length > 2).forEach(w => targets.push(w))
+// ── URL CSV (format gviz — fiable sans redirect pour sheets publiques) ────────
 
-  for (const candidate of candidates) {
-    if (candidate.length < 3) continue
-    for (const target of targets) {
-      if (target.includes(candidate) || candidate.includes(target)) return true
-    }
-  }
-  return false
-}
-
-// ── URL Google Sheets → CSV ───────────────────────────────────────────────────
-
-function toCSVUrl(sheetUrl: string): string {
-  const idMatch = sheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/)
-  if (!idMatch) throw new Error('URL Google Sheets invalide')
-  const sheetId = idMatch[1]
-  const gidMatch = sheetUrl.match(/[#&?]gid=(\d+)/)
-  const gid = gidMatch ? gidMatch[1] : '0'
-  return `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`
+function toCSVUrl(sheetIdOrUrl: string): string {
+  const idMatch = sheetIdOrUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/)
+  const sheetId = idMatch ? idMatch[1] : sheetIdOrUrl
+  return `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv`
 }
 
 // ── Sync principal ────────────────────────────────────────────────────────────
@@ -103,23 +126,21 @@ export interface SyncResult {
   total: number
   matched: number
   unmatched: number
+  newEntries: number
   errors: string[]
 }
 
 export async function syncAdaForms(targetClientId?: string): Promise<SyncResult> {
-  const result: SyncResult = { total: 0, matched: 0, unmatched: 0, errors: [] }
+  const result: SyncResult = { total: 0, matched: 0, unmatched: 0, newEntries: 0, errors: [] }
 
-  // 1. Récupère l'URL de la sheet
+  // URL : priorité aux paramètres, fallback sur la sheet NVP
   const settings = await prisma.agencySetting.findFirst({ select: { adaSheetUrl: true } })
-  if (!settings?.adaSheetUrl) {
-    result.errors.push('Aucune Google Sheet configurée dans les paramètres')
-    return result
-  }
+  const sheetSource = settings?.adaSheetUrl || DEFAULT_SHEET_ID
+  const csvUrl = toCSVUrl(sheetSource)
 
-  // 2. Fetch CSV
+  // Fetch CSV
   let csvText: string
   try {
-    const csvUrl = toCSVUrl(settings.adaSheetUrl)
     const res = await fetch(csvUrl, { cache: 'no-store' })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     csvText = await res.text()
@@ -128,83 +149,69 @@ export async function syncAdaForms(targetClientId?: string): Promise<SyncResult>
     return result
   }
 
-  // 3. Parse
   const { headers, rows } = parseCSV(csvText)
   if (!headers.length) {
     result.errors.push('CSV vide ou mal formé')
     return result
   }
 
-  // 4. Charge tous les clients pour le matching
+  // Tous les clients (ou seulement le ciblé)
   const clients = await prisma.client.findMany({
     select: { id: true, name: true, company: true },
-    where: targetClientId ? { id: targetClientId } : {},
+    where: targetClientId ? { id: targetClientId } : undefined,
   })
 
-  // 5. Timestamp column (always first in Google Forms: "Horodateur" or "Timestamp")
-  const tsColumn = headers[0]
+  const tsColumn = headers[0] // "Horodateur"
 
-  // 6. Process each row
   for (const row of rows) {
     const timestamp = row[tsColumn]?.trim()
     if (!timestamp) continue
 
     result.total++
 
-    const candidates = extractNameCandidates(row, headers)
-    let matchedClientId: string | null = null
-    let matchedOn: string | null = null
+    const matchResult = matchClient(row, headers, clients)
 
-    for (const client of clients) {
-      if (matchesClient(candidates, client.name, client.company)) {
-        matchedClientId = client.id
-        matchedOn = candidates[0] || null
-        break
-      }
-    }
+    const existing = await prisma.adaFormResponse.findUnique({ where: { responseTimestamp: timestamp } })
+    if (!existing) result.newEntries++
 
-    // Upsert
     try {
       await prisma.adaFormResponse.upsert({
         where: { responseTimestamp: timestamp },
         update: {
-          clientId: matchedClientId,
-          matchedOn,
+          clientId: matchResult?.clientId ?? null,
+          matchedOn: matchResult?.matchedOn ?? null,
           data: row as object,
           updatedAt: new Date(),
         },
         create: {
           responseTimestamp: timestamp,
-          clientId: matchedClientId,
-          matchedOn,
+          clientId: matchResult?.clientId ?? null,
+          matchedOn: matchResult?.matchedOn ?? null,
           data: row as object,
         },
       })
-      if (matchedClientId) result.matched++
+      if (matchResult) result.matched++
       else result.unmatched++
     } catch (e) {
       result.errors.push(`Erreur ligne ${timestamp}: ${e}`)
     }
   }
 
-  // 7. Re-tente de matcher les réponses orphelines avec les clients existants
+  // Re-tente de matcher les orphelines avec tous les clients
   if (!targetClientId) {
-    const unmatched = await prisma.adaFormResponse.findMany({
+    const orphans = await prisma.adaFormResponse.findMany({
       where: { clientId: null },
-      select: { id: true, responseTimestamp: true, data: true },
+      select: { id: true, data: true },
     })
     const allClients = await prisma.client.findMany({ select: { id: true, name: true, company: true } })
-    for (const resp of unmatched) {
+    for (const resp of orphans) {
       const row = resp.data as Record<string, string>
-      const candidates = extractNameCandidates(row, headers)
-      for (const client of allClients) {
-        if (matchesClient(candidates, client.name, client.company)) {
-          await prisma.adaFormResponse.update({
-            where: { id: resp.id },
-            data: { clientId: client.id, matchedOn: candidates[0] || null },
-          })
-          break
-        }
+      const m = matchClient(row, headers, allClients)
+      if (m) {
+        await prisma.adaFormResponse.update({
+          where: { id: resp.id },
+          data: { clientId: m.clientId, matchedOn: m.matchedOn },
+        })
       }
     }
   }
