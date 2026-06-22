@@ -19,6 +19,7 @@ import { ClientInteractions } from '@/components/clients/ClientInteractions'
 import { ClientRetainerManager } from '@/components/clients/ClientRetainerManager'
 import { ClientBilanSection } from '@/components/clients/ClientBilanSection'
 import { ClientChargesSection } from '@/components/clients/ClientChargesSection'
+import { ClientAdaSection } from '@/components/clients/ClientAdaSection'
 
 const statusBadge: Record<string, 'success' | 'info' | 'warning' | 'muted'> = {
   ACTIF: 'success', PROSPECT: 'info', EN_PAUSE: 'warning', ARCHIVÉ: 'muted',
@@ -69,7 +70,7 @@ export default async function ClientDetailPage({ params }: PageProps) {
   const session = await auth()
   if (!session?.user) return null
 
-  const [client, allTeam] = await Promise.all([
+  const [client, allTeam, settings] = await Promise.all([
     prisma.client.findUnique({
       where: { id },
       include: {
@@ -107,9 +108,14 @@ export default async function ClientDetailPage({ params }: PageProps) {
         charges: {
           orderBy: [{ month: 'desc' }, { createdAt: 'asc' }],
         },
+        adaResponses: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
       },
     }),
     prisma.user.findMany({ select: { id: true, name: true }, orderBy: { name: 'asc' } }),
+    prisma.agencySetting.findFirst({ select: { adaSheetUrl: true } }),
   ])
 
   if (!client) notFound()
@@ -216,6 +222,21 @@ export default async function ClientDetailPage({ params }: PageProps) {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Colonne gauche - Infos */}
         <div className="space-y-4">
+          {/* Info ADA */}
+          <ClientAdaSection
+            clientId={client.id}
+            hasSheetConfigured={!!(settings?.adaSheetUrl)}
+            initialResponse={client.adaResponses?.[0]
+              ? {
+                  id: client.adaResponses[0].id,
+                  responseTimestamp: client.adaResponses[0].responseTimestamp,
+                  data: client.adaResponses[0].data as Record<string, string>,
+                  matchedOn: client.adaResponses[0].matchedOn,
+                  updatedAt: client.adaResponses[0].updatedAt.toISOString(),
+                }
+              : null}
+          />
+
           {/* Coordonnées */}
           <Card>
             <CardHeader>

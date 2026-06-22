@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Building2, FileText, CreditCard } from 'lucide-react'
+import { Building2, FileText, CreditCard, ClipboardList } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 interface AgencySetting {
@@ -22,6 +22,7 @@ interface AgencySetting {
   quotePrefix: string
   bankDetails?: string | null
   cgv?: string | null
+  adaSheetUrl?: string | null
 }
 
 export function SettingsForm({ settings }: { settings: AgencySetting }) {
@@ -40,6 +41,7 @@ export function SettingsForm({ settings }: { settings: AgencySetting }) {
     quotePrefix: settings.quotePrefix,
     bankDetails: settings.bankDetails || '',
     cgv: settings.cgv || '',
+    adaSheetUrl: settings.adaSheetUrl || '',
   })
 
   const handleSave = async (e: React.FormEvent) => {
@@ -49,7 +51,7 @@ export function SettingsForm({ settings }: { settings: AgencySetting }) {
       await fetch('/api/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, defaultVatRate: Number(form.defaultVatRate), youtubeApiKey: null }),
+        body: JSON.stringify({ ...form, defaultVatRate: Number(form.defaultVatRate), youtubeApiKey: null, adaSheetUrl: form.adaSheetUrl || null }),
       })
       toast.success('Paramètres enregistrés !')
       router.refresh()
@@ -108,6 +110,26 @@ export function SettingsForm({ settings }: { settings: AgencySetting }) {
               placeholder="IBAN : FR76 XXXX XXXX XXXX&#10;BIC : XXXXXXXX&#10;Banque : ..."
               className="w-full px-3 py-2 bg-nv-dark border border-nv-border rounded-lg text-white placeholder-nv-text-faint focus:border-primary outline-none text-sm resize-none" />
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Intégration ADA */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm flex items-center gap-2">
+            <ClipboardList size={14} />Formulaire ADA — Google Forms
+          </CardTitle>
+          <p className="text-xs text-nv-text-muted mt-1">
+            Lie ton Google Forms à une Google Sheet (onglet Réponses → icône Sheets), partage la feuille en lecture publique, et colle l&apos;URL ici.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <Input
+            label="URL de la Google Sheet (réponses)"
+            value={form.adaSheetUrl}
+            onChange={e => setForm({ ...form, adaSheetUrl: e.target.value })}
+            placeholder="https://docs.google.com/spreadsheets/d/..."
+          />
         </CardContent>
       </Card>
 

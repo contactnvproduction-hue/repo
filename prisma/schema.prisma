@@ -109,6 +109,7 @@ model Client {
   socialKpis      SocialKPI[]
   retainers       ClientRetainer[]
   charges         ClientCharge[]
+  adaResponses    AdaFormResponse[]
 
   @@map("clients")
 }
@@ -590,6 +591,7 @@ model AgencySetting {
   quoteCounter   Int      @default(1)
   bankDetails    String?
   youtubeApiKey  String?
+  adaSheetUrl    String?  // URL de la Google Sheet réponses ADA (publique)
   updatedAt      DateTime @updatedAt
 
   @@map("agency_settings")
@@ -827,6 +829,21 @@ model DailyClientFollowUp {
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@map("daily_client_follow_ups")
+}
+
+// ─── FORMULAIRE ADA (réponses Google Forms) ──────────────────────────────────
+
+model AdaFormResponse {
+  id                 String   @id @default(cuid())
+  clientId           String?
+  client             Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  responseTimestamp  String   @unique // "Horodateur" Google Forms — clé de déduplication
+  data               Json     // toutes les réponses du formulaire (clé = question, valeur = réponse)
+  matchedOn          String?  // valeur utilisée pour le match (ex: "Thibault Dupont")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@map("ada_form_responses")
 }
 
 // ─── DAILY CHECKIN ───────────────────────────────────────────────────────────
