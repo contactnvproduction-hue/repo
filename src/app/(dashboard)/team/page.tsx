@@ -72,7 +72,7 @@ export default async function TeamPage() {
           id: e.id,
           memberName: e.memberName,
           date: e.date,
-          clientNames: e.clientNames,
+          clientNames: e.clientNames.length > 0 ? e.clientNames : (e.clientName ? [e.clientName] : []),
           types: e.types,
           notes: e.notes,
           createdAt: e.createdAt.toISOString(),

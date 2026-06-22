@@ -30,6 +30,7 @@ export async function POST(req: NextRequest) {
       memberName: result.data.memberName,
       userId: user?.id ?? null,
       date: result.data.date,
+      clientName: result.data.clientNames[0],   // legacy compat
       clientNames: result.data.clientNames,
       types: result.data.types,
       notes: result.data.notes,

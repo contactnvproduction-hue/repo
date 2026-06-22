@@ -821,7 +821,8 @@ model DailyClientFollowUp {
   memberName  String   // Nom du membre (saisi sur la page externe)
   userId      String?  // Lien optionnel vers un User du dashboard
   date        String   // "2026-06-20" — 1 par client par jour (multiple autorisé)
-  clientNames String[] // Clients relancés (texte libre, multiple)
+  clientName  String?  // legacy — gardé pour migration non-destructive
+  clientNames String[] // clients relancés (array, utilisé par le nouveau formulaire)
   types       String[] // ["relance_client", "avancement_livrable", ...]
   notes       String?
   createdAt   DateTime @default(now())
