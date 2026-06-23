@@ -13,13 +13,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'clientId requis' }, { status: 400 })
   }
 
-  const plan = await (prisma as any).shootingPlan.create({
-    data: {
-      clientId,
-      title: title ?? '',
-      ...rest,
-    },
-  })
+  if (rest.shootDate) rest.shootDate = new Date(rest.shootDate)
 
-  return NextResponse.json(plan, { status: 201 })
+  try {
+    const plan = await (prisma as any).shootingPlan.create({
+      data: {
+        clientId,
+        title: title ?? '',
+        ...rest,
+      },
+    })
+    return NextResponse.json(plan, { status: 201 })
+  } catch (err) {
+    console.error('[POST /api/shooting-plans]', err)
+    return NextResponse.json({ error: 'Erreur lors de la création' }, { status: 500 })
+  }
 }

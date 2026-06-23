@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, Plus, Trash2, Save, Share2, Check, Copy,
   Film, Clock, MapPin, Users, Camera, Shirt,
@@ -9,6 +8,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
+import React from 'react'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -69,11 +69,45 @@ function genId() { return Math.random().toString(36).slice(2, 8) }
 
 const DA_FORMATS = ['Portrait 9:16', 'Paysage 16:9', 'Carré 1:1', 'Ultra-large 21:9', 'Mixte']
 
+// ── Section (defined outside to keep a stable reference across renders) ──────
+
+interface SectionProps {
+  id: string
+  title: string
+  icon: React.ReactNode
+  children: React.ReactNode
+  openSection: string | null
+  setOpenSection: (v: string | null) => void
+}
+
+function Section({ id, title: sTitle, icon, children, openSection, setOpenSection }: SectionProps) {
+  const isOpen = openSection === null || openSection === id
+  return (
+    <div className="rounded-xl border border-nv-border bg-nv-card overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpenSection(isOpen && openSection === id ? null : id)}
+        className="w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-white/[0.02] transition-colors"
+      >
+        <div className="flex items-center gap-2.5">
+          <span className="text-primary">{icon}</span>
+          <span className="text-xs font-bold text-nv-text-muted uppercase tracking-wider">{sTitle}</span>
+        </div>
+        {isOpen && openSection === id
+          ? <ChevronUp size={14} className="text-nv-text-muted" />
+          : <ChevronDown size={14} className="text-nv-text-muted" />}
+      </button>
+      {/* CSS hidden instead of && — inputs never unmount, so they never lose focus */}
+      <div className={`px-5 pb-5 pt-1 space-y-4 border-t border-nv-border${isOpen ? '' : ' hidden'}`}>
+        {children}
+      </div>
+    </div>
+  )
+}
+
 // ── Component ────────────────────────────────────────────────────────────────
 
 export function ShootingPlanBuilder({ clientId, clientName, clientCompany, initialPlan }: Props) {
-  const router = useRouter()
-
   const [planId, setPlanId] = useState(initialPlan?.id)
   const [shareToken, setShareToken] = useState(initialPlan?.shareToken)
   const [copied, setCopied] = useState(false)
@@ -211,32 +245,8 @@ export function ShootingPlanBuilder({ clientId, clientName, clientCompany, initi
     setTimeout(() => setCopied(false), 2500)
   }
 
-  // ── Section wrapper ───────────────────────────────────────────────────────
-  const Section = ({ id, title: sTitle, icon, children }: { id: string; title: string; icon: React.ReactNode; children: React.ReactNode }) => {
-    const isOpen = openSection === id || openSection === null
-    return (
-      <div className="rounded-xl border border-nv-border bg-nv-card overflow-hidden">
-        <button
-          type="button"
-          onClick={() => setOpenSection(isOpen && openSection === id ? null : id)}
-          className="w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-white/[0.02] transition-colors"
-        >
-          <div className="flex items-center gap-2.5">
-            <span className="text-primary">{icon}</span>
-            <span className="text-xs font-bold text-nv-text-muted uppercase tracking-wider">{sTitle}</span>
-          </div>
-          {isOpen && openSection === id
-            ? <ChevronUp size={14} className="text-nv-text-muted" />
-            : <ChevronDown size={14} className="text-nv-text-muted" />}
-        </button>
-        {(isOpen || openSection === null) && (
-          <div className="px-5 pb-5 pt-1 space-y-4 border-t border-nv-border">
-            {children}
-          </div>
-        )}
-      </div>
-    )
-  }
+  // ── Shared section props (stable object ref not needed — Section is stable) ─
+  const sp = { openSection, setOpenSection }
 
   // ── Input styles ─────────────────────────────────────────────────────────
   const inp = "w-full bg-nv-bg border border-nv-border rounded-lg px-3 py-2 text-sm text-white placeholder-nv-text-muted focus:outline-none focus:border-primary/50 transition-colors"
@@ -338,7 +348,7 @@ export function ShootingPlanBuilder({ clientId, clientName, clientCompany, initi
       </div>
 
       {/* Lieu */}
-      <Section id="lieu" title="Lieu de tournage" icon={<MapPin size={14} />}>
+      <Section id="lieu" title="Lieu de tournage" icon={<MapPin size={14} />} {...sp}>
         <div>
           <label className="block text-[10px] font-semibold text-nv-text-muted mb-1.5 uppercase tracking-wider">Nom du lieu</label>
           <input value={location} onChange={e => setLocation(e.target.value)} placeholder="Studio, domicile client, bureau…" className={inp} />
@@ -350,7 +360,7 @@ export function ShootingPlanBuilder({ clientId, clientName, clientCompany, initi
       </Section>
 
       {/* Équipe */}
-      <Section id="equipe" title="Équipe" icon={<Users size={14} />}>
+      <Section id="equipe" title="Équipe" icon={<Users size={14} />} {...sp}>
         <div className="space-y-2.5">
           {team.map((m, i) => (
             <div key={m.id} className="p-3 rounded-lg border border-nv-border bg-nv-bg/60">
@@ -376,7 +386,7 @@ export function ShootingPlanBuilder({ clientId, clientName, clientCompany, initi
       </Section>
 
       {/* Déroulé */}
-      <Section id="derou" title="Déroulé de la journée" icon={<Clock size={14} />}>
+      <Section id="derou" title="Déroulé de la journée" icon={<Clock size={14} />} {...sp}>
         <div className="space-y-2">
           {schedule.map((s, i) => (
             <div key={s.id} className="flex gap-2 items-start">
@@ -414,7 +424,7 @@ export function ShootingPlanBuilder({ clientId, clientName, clientCompany, initi
       </Section>
 
       {/* Direction artistique */}
-      <Section id="da" title="Direction artistique" icon={<Camera size={14} />}>
+      <Section id="da" title="Direction artistique" icon={<Camera size={14} />} {...sp}>
         <div>
           <p className="text-[10px] font-semibold text-nv-text-muted mb-2 uppercase tracking-wider">Format vidéo</p>
           <div className="flex flex-wrap gap-2 mb-3">
@@ -469,7 +479,7 @@ export function ShootingPlanBuilder({ clientId, clientName, clientCompany, initi
       </Section>
 
       {/* Matériel & tenues */}
-      <Section id="materiel" title="Matériel & tenues" icon={<Shirt size={14} />}>
+      <Section id="materiel" title="Matériel & tenues" icon={<Shirt size={14} />} {...sp}>
         <div>
           <label className="block text-[10px] font-semibold text-nv-text-muted mb-1.5 uppercase tracking-wider">Matériel à prévoir</label>
           <textarea value={equipment} onChange={e => setEquipment(e.target.value)} placeholder="Caméra, stabilisateur, micros, éclairage…" rows={3} className={`${inp} resize-none`} />
@@ -481,12 +491,12 @@ export function ShootingPlanBuilder({ clientId, clientName, clientCompany, initi
       </Section>
 
       {/* Notes */}
-      <Section id="notes" title="Notes" icon={<StickyNote size={14} />}>
+      <Section id="notes" title="Notes" icon={<StickyNote size={14} />} {...sp}>
         <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Instructions, points d'attention, rappels…" rows={4} className={`${inp} resize-none`} />
       </Section>
 
       {/* Liens */}
-      <Section id="liens" title="Ressources & liens" icon={<Film size={14} />}>
+      <Section id="liens" title="Ressources & liens" icon={<Film size={14} />} {...sp}>
         {links.length === 0 ? (
           <p className="text-xs text-nv-text-faint">Aucun lien ajouté.</p>
         ) : (

@@ -25,12 +25,22 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
   const { id } = await params
   const body = await req.json()
 
-  const plan = await (prisma as any).shootingPlan.update({
-    where: { id },
-    data: body,
-  })
+  // Exclude clientId — FK cannot be updated after creation
+  const { clientId: _cid, ...data } = body
 
-  return NextResponse.json(plan)
+  // Convert shootDate string to Date if provided
+  if (data.shootDate) data.shootDate = new Date(data.shootDate)
+
+  try {
+    const plan = await (prisma as any).shootingPlan.update({
+      where: { id },
+      data,
+    })
+    return NextResponse.json(plan)
+  } catch (err) {
+    console.error('[PATCH /api/shooting-plans/:id]', err)
+    return NextResponse.json({ error: 'Erreur lors de la mise à jour' }, { status: 500 })
+  }
 }
 
 export async function DELETE(_req: NextRequest, { params }: RouteContext) {

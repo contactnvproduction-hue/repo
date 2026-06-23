@@ -95,6 +95,38 @@ const TONS = [
 
 function genId() { return Math.random().toString(36).slice(2, 8) }
 
+// ── Section (defined outside to keep a stable reference across renders) ──────
+
+interface SectionProps {
+  id: string
+  title: string
+  children: React.ReactNode
+  openSection: string | null
+  setOpenSection: (v: string | null) => void
+}
+
+function Section({ id, title, children, openSection, setOpenSection }: SectionProps) {
+  const isOpen = openSection === null || openSection === id
+  return (
+    <div className="rounded-xl border border-nv-border bg-nv-card overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpenSection(isOpen && openSection === id ? null : id)}
+        className="w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-white/[0.02] transition-colors"
+      >
+        <span className="text-xs font-bold text-nv-text-muted uppercase tracking-wider">{title}</span>
+        {isOpen && openSection === id
+          ? <ChevronUp size={14} className="text-nv-text-muted" />
+          : <ChevronDown size={14} className="text-nv-text-muted" />}
+      </button>
+      {/* CSS hidden instead of && — inputs never unmount, so they never lose focus */}
+      <div className={`px-5 pb-5 pt-1 space-y-4 border-t border-nv-border${isOpen ? '' : ' hidden'}`}>
+        {children}
+      </div>
+    </div>
+  )
+}
+
 // ── Component ────────────────────────────────────────────────────────────────
 
 export function BriefBuilder({
@@ -484,30 +516,7 @@ export function BriefBuilder({
     }
   }
 
-  // ── Section wrapper ───────────────────────────────────────────────────────
-
-  const Section = ({ id, title, children }: { id: string; title: string; children: React.ReactNode }) => {
-    const isOpen = openSection === id || openSection === null
-    return (
-      <div className="rounded-xl border border-nv-border bg-nv-card overflow-hidden">
-        <button
-          type="button"
-          onClick={() => setOpenSection(isOpen && openSection === id ? null : id)}
-          className="w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-white/[0.02] transition-colors"
-        >
-          <span className="text-xs font-bold text-nv-text-muted uppercase tracking-wider">{title}</span>
-          {isOpen && openSection === id
-            ? <ChevronUp size={14} className="text-nv-text-muted" />
-            : <ChevronDown size={14} className="text-nv-text-muted" />}
-        </button>
-        {(isOpen || openSection === null) && (
-          <div className="px-5 pb-5 pt-1 space-y-4 border-t border-nv-border">
-            {children}
-          </div>
-        )}
-      </div>
-    )
-  }
+  const sp = { openSection, setOpenSection }
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -580,7 +589,7 @@ export function BriefBuilder({
       )}
 
       {/* ── Section 1 : Infos mission ── */}
-      <Section id="mission" title="Informations mission">
+      <Section id="mission" title="Informations mission" {...sp}>
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-[10px] font-semibold text-nv-text-muted mb-1.5 uppercase tracking-wider">Niche / Secteur</label>
@@ -636,7 +645,7 @@ export function BriefBuilder({
       </Section>
 
       {/* ── Section 2 : Direction artistique ── */}
-      <Section id="da" title="Direction artistique">
+      <Section id="da" title="Direction artistique" {...sp}>
         <div>
           <label className="block text-[10px] font-semibold text-nv-text-muted mb-1.5 uppercase tracking-wider">Positionnement</label>
           <textarea
@@ -660,7 +669,7 @@ export function BriefBuilder({
       </Section>
 
       {/* ── Section 3 : Livrables ── */}
-      <Section id="livrables" title="Livrables & contenus">
+      <Section id="livrables" title="Livrables & contenus" {...sp}>
         <div className="space-y-2.5">
           {livrables.map((l, i) => (
             <div key={l.id} className="p-3 rounded-lg border border-nv-border bg-nv-bg/60 space-y-2">
@@ -709,7 +718,7 @@ export function BriefBuilder({
       </Section>
 
       {/* ── Section 4 : Canaux & ton ── */}
-      <Section id="canaux" title="Canaux & ton éditorial">
+      <Section id="canaux" title="Canaux & ton éditorial" {...sp}>
         <div>
           <p className="text-[10px] font-semibold text-nv-text-muted mb-2 uppercase tracking-wider">Canaux de diffusion</p>
           <div className="flex flex-wrap gap-2">
@@ -757,7 +766,7 @@ export function BriefBuilder({
       </Section>
 
       {/* ── Section 5 : Inspirations ── */}
-      <Section id="inspirations" title="Références & inspirations">
+      <Section id="inspirations" title="Références & inspirations" {...sp}>
         <div className="space-y-2">
           {inspirations.map(insp => (
             <div key={insp.id} className="flex gap-2 items-center">
@@ -788,7 +797,7 @@ export function BriefBuilder({
       </Section>
 
       {/* ── Section 6 : Palette ── */}
-      <Section id="palette" title="Identité visuelle — Palette">
+      <Section id="palette" title="Identité visuelle — Palette" {...sp}>
         <div className="flex flex-wrap gap-4">
           {colors.map(col => (
             <div key={col.id} className="flex flex-col items-center gap-1.5">
@@ -826,7 +835,7 @@ export function BriefBuilder({
       </Section>
 
       {/* ── Section 7 : Ressources ── */}
-      <Section id="resources" title="Ressources & accès">
+      <Section id="resources" title="Ressources & accès" {...sp}>
         {resources.length === 0 ? (
           <p className="text-xs text-nv-text-faint">Aucune ressource ajoutée.</p>
         ) : (
@@ -859,7 +868,7 @@ export function BriefBuilder({
       </Section>
 
       {/* ── Section 8 : Notes ── */}
-      <Section id="notes" title="Notes & instructions pour l'équipe">
+      <Section id="notes" title="Notes & instructions pour l'équipe" {...sp}>
         <textarea
           value={notes}
           onChange={e => setNotes(e.target.value)}
@@ -870,7 +879,7 @@ export function BriefBuilder({
       </Section>
 
       {/* ── Section 9 : À éviter ── */}
-      <Section id="avoid" title="À éviter">
+      <Section id="avoid" title="À éviter" {...sp}>
         <textarea
           value={avoidList}
           onChange={e => setAvoidList(e.target.value)}
