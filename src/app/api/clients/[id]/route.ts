@@ -70,13 +70,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: result.error.flatten() }, { status: 400 })
   }
 
-  const { relanceDate, ...rest } = result.data
+  const { relanceDate, adaNotes, ...rest } = result.data
   const client = await prisma.client.update({
     where: { id },
     data: {
       ...rest,
       ...(relanceDate !== undefined && {
         relanceDate: relanceDate ? new Date(relanceDate) : null,
+      }),
+      ...(adaNotes !== undefined && {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        adaNotes: adaNotes as any,
       }),
     },
   })

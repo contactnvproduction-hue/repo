@@ -111,6 +111,8 @@ model Client {
   charges         ClientCharge[]
   adaResponses    AdaFormResponse[]
   adaNotes        Json?
+  brief           ClientBrief?
+  shootingPlans   ShootingPlan[]
 
   @@map("clients")
 }
@@ -944,6 +946,60 @@ model CeoActionStep {
   meeting CeoMeeting? @relation(fields: [meetingId], references: [id], onDelete: SetNull)
 
   @@map("ceo_action_steps")
+}
+
+// ─── BRIEF CLIENT ────────────────────────────────────────────────────────────
+
+model ClientBrief {
+  id             String   @id @default(cuid())
+  clientId       String   @unique
+  client         Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  shareToken     String   @unique @default(cuid())
+  monteur        String?
+  deadline       String?
+  niche          String?
+  positionnement String?
+  avatar         String?
+  livrables      Json?
+  canaux         Json?
+  ton            String?
+  inspirations   Json?
+  colors         Json?
+  notes          String?
+  avoidList      String?
+  resources      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("client_briefs")
+}
+
+// ─── PLANS DE TOURNAGE ───────────────────────────────────────────────────────
+
+model ShootingPlan {
+  id              String    @id @default(cuid())
+  clientId        String
+  client          Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  shareToken      String    @unique @default(cuid())
+  title           String    @default("")
+  shootDate       DateTime?
+  duration        String?
+  meetTime        String?
+  location        String?
+  locationAddress String?
+  deliverables    String?
+  team            Json?
+  schedule        Json?
+  daFormat        String?
+  daInfo          Json?
+  equipment       String?
+  outfits         String?
+  notes           String?
+  links           Json?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("shooting_plans")
 }
 
 // ─── KPI SOCIAUX ──────────────────────────────────────────────────────────────

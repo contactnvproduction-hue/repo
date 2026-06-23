@@ -28,7 +28,9 @@ interface Props {
   initialNotes: AdaNotes | null
 }
 
-const HIDDEN_KEYS = ['Horodateur', 'Timestamp', 'Score', 'Envoie-nous']
+const HIDDEN_KEYS = ['Horodateur', 'Timestamp', 'Score']
+// Champs qui contiennent des pièces jointes (Google Drive)
+const ATTACHMENT_KEYS = ['envoie-nous', 'capture', 'pièce jointe', 'screenshot', 'fichier']
 
 // Parse "DD/MM/YYYY HH:MM:SS" (Google Sheets FR format)
 function parseGSheetDate(s: string): Date | null {
@@ -47,8 +49,35 @@ function formatDate(s: string, opts: Intl.DateTimeFormatOptions) {
 }
 
 // Render a field value: detect URLs → clickable links, handle multiline
-function FieldValue({ value }: { value: string }) {
+function FieldValue({ value, isAttachment = false }: { value: string; isAttachment?: boolean }) {
   const lines = value.split(/\n/)
+
+  if (isAttachment) {
+    const urls = lines.map(l => l.trim()).filter(l => /^https?:\/\//i.test(l))
+    if (urls.length > 0) {
+      return (
+        <div className="flex-1 flex flex-wrap gap-2">
+          {urls.map((url, i) => {
+            const isDrive = /drive\.google\.com|docs\.google\.com/i.test(url)
+            return (
+              <a
+                key={i}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/30 bg-primary/5 text-xs text-primary hover:bg-primary/15 transition-colors"
+              >
+                <ExternalLink size={11} />
+                {isDrive ? 'Voir la pièce jointe' : 'Ouvrir le lien'}
+              </a>
+            )
+          })}
+        </div>
+      )
+    }
+    return <p className="text-xs text-nv-text-muted flex-1 italic">Aucune pièce jointe</p>
+  }
+
   return (
     <div className="text-xs text-white flex-1 leading-relaxed">
       {lines.map((line, i) => {
@@ -56,15 +85,15 @@ function FieldValue({ value }: { value: string }) {
         if (!trimmed) return i < lines.length - 1 ? <div key={i} className="h-1" /> : null
         const isUrl = /^https?:\/\//i.test(trimmed)
         return (
-          <div key={i} className={i > 0 && lines[i - 1].trim() ? 'mt-1' : ''}>
+          <div key={i} className={i > 0 && lines[i - 1].trim() ? 'mt-1.5' : ''}>
             {isUrl ? (
               <a
                 href={trimmed}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-primary hover:underline inline-flex items-center gap-1 break-all"
+                className="text-primary hover:underline inline-flex items-start gap-1"
               >
-                <ExternalLink size={10} className="shrink-0" />
+                <ExternalLink size={10} className="shrink-0 mt-0.5" />
                 <span className="break-all">{trimmed}</span>
               </a>
             ) : (
@@ -94,6 +123,9 @@ export function ClientAdaSection({ clientId, initialResponse, hasSheetConfigured
         ([k, v]) => v?.trim() && !HIDDEN_KEYS.some(h => k.toLowerCase().includes(h.toLowerCase()))
       )
     : []
+
+  const isAttachmentKey = (key: string) =>
+    ATTACHMENT_KEYS.some(a => key.toLowerCase().includes(a))
 
   // Effective display value: override > synced
   const displayValue = useCallback(
@@ -347,22 +379,28 @@ export function ClientAdaSection({ clientId, initialResponse, hasSheetConfigured
                 </div>
               )}
 
-              {/* Champs synchro */}
-              {syncedEntries.map(([key, synced]) => {
-                const val = displayValue(key, synced)
-                const isOverridden = key in notes.overrides
-                return (
-                  <div key={key} className="flex items-start gap-4 px-5 py-3 hover:bg-white/[0.015] transition-colors">
-                    <p className="text-xs text-nv-text-muted w-40 shrink-0 pt-0.5 leading-relaxed">
-                      {key}
-                      {isOverridden && (
-                        <span className="ml-1 text-[9px] text-amber-400 font-medium">modifié</span>
-                      )}
-                    </p>
-                    <FieldValue value={val} />
-                  </div>
-                )
-              })}
+              {/* Champs synchro — grille 2 colonnes */}
+              <div className="grid grid-cols-1 md:grid-cols-2 divide-y divide-nv-border/40 md:divide-y-0 md:gap-0">
+                {syncedEntries.map(([key, synced]) => {
+                  const val = displayValue(key, synced)
+                  const isOverridden = key in notes.overrides
+                  const isAttach = isAttachmentKey(key)
+                  return (
+                    <div
+                      key={key}
+                      className={`flex flex-col gap-1 px-5 py-3 border-b border-nv-border/40 hover:bg-white/[0.015] transition-colors ${isAttach ? 'md:col-span-2' : ''}`}
+                    >
+                      <p className="text-[10px] text-nv-text-muted leading-relaxed font-medium tracking-wide uppercase">
+                        {key}
+                        {isOverridden && (
+                          <span className="ml-1.5 normal-case text-[9px] text-amber-400 font-medium">modifié</span>
+                        )}
+                      </p>
+                      <FieldValue value={val} isAttachment={isAttach} />
+                    </div>
+                  )
+                })}
+              </div>
 
               {/* Champs personnalisés */}
               {notes.extras.filter(e => e.key || e.value).map((extra, i) => (

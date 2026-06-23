@@ -20,6 +20,7 @@ import { ClientRetainerManager } from '@/components/clients/ClientRetainerManage
 import { ClientBilanSection } from '@/components/clients/ClientBilanSection'
 import { ClientChargesSection } from '@/components/clients/ClientChargesSection'
 import { ClientAdaSection } from '@/components/clients/ClientAdaSection'
+import { ClientDocumentsSection } from '@/components/clients/ClientDocumentsSection'
 
 const statusBadge: Record<string, 'success' | 'info' | 'warning' | 'muted'> = {
   ACTIF: 'success', PROSPECT: 'info', EN_PAUSE: 'warning', ARCHIVÉ: 'muted',
@@ -70,7 +71,7 @@ export default async function ClientDetailPage({ params }: PageProps) {
   const session = await auth()
   if (!session?.user) return null
 
-  const [client, allTeam, settings] = await Promise.all([
+  const [client, allTeam, settings, brief, shootingPlans] = await Promise.all([
     prisma.client.findUnique({
       where: { id },
       include: {
@@ -116,6 +117,12 @@ export default async function ClientDetailPage({ params }: PageProps) {
     }),
     prisma.user.findMany({ select: { id: true, name: true }, orderBy: { name: 'asc' } }),
     prisma.agencySetting.findFirst({ select: { adaSheetUrl: true } }),
+    (prisma as any).clientBrief.findUnique({ where: { clientId: id } }),
+    (prisma as any).shootingPlan.findMany({
+      where: { clientId: id },
+      orderBy: { createdAt: 'desc' as const },
+      select: { id: true, title: true, shareToken: true, shootDate: true, location: true, updatedAt: true },
+    }),
   ])
 
   if (!client) notFound()
@@ -220,27 +227,48 @@ export default async function ClientDetailPage({ params }: PageProps) {
         initialChecklist={client.onboardingChecklist as Array<{ id: string; label: string; done: boolean }> | null}
       />
 
+      {/* INFOS DA — pleine largeur */}
+      <ClientAdaSection
+        clientId={client.id}
+        hasSheetConfigured={!!(settings?.adaSheetUrl)}
+        initialResponse={client.adaResponses?.[0]
+          ? {
+              id: client.adaResponses[0].id,
+              responseTimestamp: client.adaResponses[0].responseTimestamp,
+              data: client.adaResponses[0].data as Record<string, string>,
+              matchedOn: client.adaResponses[0].matchedOn,
+              updatedAt: client.adaResponses[0].updatedAt.toISOString(),
+            }
+          : null}
+        initialNotes={
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (() => { const n = (client as any).adaNotes as { overrides?: Record<string,string>; extras?: { key:string; value:string }[] } | null; return n ? { overrides: n.overrides ?? {}, extras: n.extras ?? [] } : null })()
+        }
+      />
+
+      {/* Documents — briefs & plans de tournage */}
+      <ClientDocumentsSection
+        clientId={client.id}
+        brief={brief ? {
+          id: brief.id,
+          shareToken: brief.shareToken,
+          updatedAt: brief.updatedAt instanceof Date ? brief.updatedAt.toISOString() : String(brief.updatedAt),
+          niche: brief.niche ?? null,
+          monteur: brief.monteur ?? null,
+        } : null}
+        shootingPlans={(shootingPlans ?? []).map((p: any) => ({
+          id: p.id,
+          title: p.title,
+          shareToken: p.shareToken,
+          shootDate: p.shootDate ? (p.shootDate instanceof Date ? p.shootDate.toISOString() : String(p.shootDate)) : null,
+          location: p.location ?? null,
+          updatedAt: p.updatedAt instanceof Date ? p.updatedAt.toISOString() : String(p.updatedAt),
+        }))}
+      />
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Colonne gauche - Infos */}
         <div className="space-y-4">
-          {/* Info ADA */}
-          <ClientAdaSection
-            clientId={client.id}
-            hasSheetConfigured={!!(settings?.adaSheetUrl)}
-            initialResponse={client.adaResponses?.[0]
-              ? {
-                  id: client.adaResponses[0].id,
-                  responseTimestamp: client.adaResponses[0].responseTimestamp,
-                  data: client.adaResponses[0].data as Record<string, string>,
-                  matchedOn: client.adaResponses[0].matchedOn,
-                  updatedAt: client.adaResponses[0].updatedAt.toISOString(),
-                }
-              : null}
-            initialNotes={
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              (() => { const n = (client as any).adaNotes as { overrides?: Record<string,string>; extras?: { key:string; value:string }[] } | null; return n ? { overrides: n.overrides ?? {}, extras: n.extras ?? [] } : null })()
-            }
-          />
 
           {/* Coordonnées */}
           <Card>
