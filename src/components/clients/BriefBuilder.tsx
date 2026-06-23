@@ -56,12 +56,18 @@ interface BriefData {
   resources?: Resource[]
 }
 
+interface TeamMember {
+  id: string
+  name: string
+}
+
 interface BriefBuilderProps {
   clientId: string
   clientName: string
   clientCompany?: string
   initialBrief?: BriefData | null
   adaData?: Record<string, string> | null
+  teamMembers?: TeamMember[]
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -97,6 +103,7 @@ export function BriefBuilder({
   clientCompany,
   initialBrief,
   adaData,
+  teamMembers = [],
 }: BriefBuilderProps) {
   const router = useRouter()
 
@@ -596,12 +603,35 @@ export function BriefBuilder({
         </div>
         <div>
           <label className="block text-[10px] font-semibold text-nv-text-muted mb-1.5 uppercase tracking-wider">Monteur / Réalisateur assigné</label>
-          <input
-            value={monteur}
-            onChange={e => setMonteur(e.target.value)}
-            placeholder="Prénom Nom"
-            className="w-full bg-nv-bg border border-nv-border rounded-lg px-3 py-2 text-sm text-white placeholder-nv-text-muted focus:outline-none focus:border-primary/50 transition-colors"
-          />
+          {teamMembers.length > 0 ? (
+            <select
+              value={monteur}
+              onChange={e => setMonteur(e.target.value)}
+              className="w-full bg-nv-bg border border-nv-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary/50 transition-colors"
+            >
+              <option value="">— Choisir un membre de l&apos;équipe</option>
+              {teamMembers.map(m => (
+                <option key={m.id} value={m.name}>{m.name}</option>
+              ))}
+              <option value="__custom__">Autre (saisir manuellement)</option>
+            </select>
+          ) : (
+            <input
+              value={monteur}
+              onChange={e => setMonteur(e.target.value)}
+              placeholder="Prénom Nom"
+              className="w-full bg-nv-bg border border-nv-border rounded-lg px-3 py-2 text-sm text-white placeholder-nv-text-muted focus:outline-none focus:border-primary/50 transition-colors"
+            />
+          )}
+          {monteur === '__custom__' && (
+            <input
+              autoFocus
+              value=""
+              onChange={e => setMonteur(e.target.value)}
+              placeholder="Saisir le nom manuellement…"
+              className="mt-2 w-full bg-nv-bg border border-primary/40 rounded-lg px-3 py-2 text-sm text-white placeholder-nv-text-muted focus:outline-none focus:border-primary/60 transition-colors"
+            />
+          )}
         </div>
       </Section>
 

@@ -117,12 +117,8 @@ export default async function ClientDetailPage({ params }: PageProps) {
     }),
     prisma.user.findMany({ select: { id: true, name: true }, orderBy: { name: 'asc' } }),
     prisma.agencySetting.findFirst({ select: { adaSheetUrl: true } }),
-    (prisma as any).clientBrief.findUnique({ where: { clientId: id } }),
-    (prisma as any).shootingPlan.findMany({
-      where: { clientId: id },
-      orderBy: { createdAt: 'desc' as const },
-      select: { id: true, title: true, shareToken: true, shootDate: true, location: true, updatedAt: true },
-    }),
+    (async () => { try { return await (prisma as any).clientBrief.findUnique({ where: { clientId: id } }) } catch { return null } })(),
+    (async () => { try { return await (prisma as any).shootingPlan.findMany({ where: { clientId: id }, orderBy: { createdAt: 'desc' }, select: { id: true, title: true, shareToken: true, shootDate: true, location: true, updatedAt: true } }) } catch { return [] } })(),
   ])
 
   if (!client) notFound()

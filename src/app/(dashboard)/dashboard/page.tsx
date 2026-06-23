@@ -158,23 +158,52 @@ export default async function DashboardPage() {
       <DailyCheckinModal initialDone={data.checkinDone} />
       <LeadFollowUpModal leads={data.leadsFollowUp} />
 
-      {/* ── Greeting ── */}
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <p className="text-xs text-nv-text-faint capitalize mb-1">{today}</p>
-          <h1 className="text-2xl font-bold text-white">
-            Bonjour, {session.user.name.split(' ')[0]} 👋
-          </h1>
-          <p className="text-sm text-nv-text-muted mt-0.5">
-            {data.activeClients} clients actifs · {data.activeProjects} projets en cours
-          </p>
-        </div>
-        {alertCount > 0 && (
-          <div className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl bg-amber-400/10 border border-amber-400/25 text-amber-300 shrink-0">
-            <Zap size={12} />
-            {alertCount} action{alertCount > 1 ? 's' : ''} en attente
+      {/* ── Hero greeting ── */}
+      <div className="relative overflow-hidden rounded-2xl border border-nv-border bg-nv-card p-6">
+        {/* Glow décoratif */}
+        <div className="pointer-events-none absolute -top-20 -right-20 w-72 h-72 rounded-full bg-primary/8 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-10 -left-10 w-48 h-48 rounded-full bg-primary/5 blur-2xl" />
+        <div className="relative flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <p className="text-xs text-nv-text-faint capitalize mb-2 tracking-wide">{today}</p>
+            <h1 className="text-3xl font-black text-white leading-none mb-2">
+              Bonjour, {session.user.name.split(' ')[0]}
+            </h1>
+            <div className="flex items-center gap-3 text-sm text-nv-text-muted flex-wrap">
+              <span className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                {data.activeClients} clients actifs
+              </span>
+              <span className="text-nv-border">·</span>
+              <span>{data.activeProjects} projets en cours</span>
+              {data.currentMRR > 0 && (
+                <>
+                  <span className="text-nv-border">·</span>
+                  <span className="text-primary font-semibold">{formatCurrency(data.currentMRR)}/m MRR</span>
+                </>
+              )}
+            </div>
           </div>
-        )}
+          <div className="flex flex-col items-end gap-2">
+            {alertCount > 0 && (
+              <div className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl bg-amber-400/10 border border-amber-400/25 text-amber-300">
+                <Zap size={11} />
+                {alertCount} action{alertCount > 1 ? 's' : ''} en attente
+              </div>
+            )}
+            <div className="flex items-center gap-4 text-right">
+              <div>
+                <p className="text-[10px] text-nv-text-faint uppercase tracking-wider">CA ce mois</p>
+                <p className="text-xl font-bold text-white">{formatCurrency(data.caMonth)}</p>
+              </div>
+              <div className="w-px h-8 bg-nv-border" />
+              <div>
+                <p className="text-[10px] text-nv-text-faint uppercase tracking-wider">Cette année</p>
+                <p className="text-xl font-bold text-primary">{formatCurrency(data.caYear)}</p>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* ── CEO meeting imminent ── */}
@@ -193,8 +222,8 @@ export default async function DashboardPage() {
 
       {/* ── KPIs ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="CA du mois" value={formatCurrency(data.caMonth)} icon={TrendingUp} trend={data.trend} color="primary" subtitle={`${formatCurrency(data.caYear)} cette année`} />
         <StatCard title="MRR actuel" value={formatCurrency(data.currentMRR)} icon={RepeatIcon} color="success" subtitle="Revenu récurrent / mois" />
+        <StatCard title="Clients actifs" value={String(data.activeClients)} icon={Users} color="primary" />
         <StatCard title="Projets en cours" value={String(data.activeProjects)} icon={FolderKanban} color="warning" />
         <StatCard title="Factures impayées" value={String(data.pendingInvoices)} icon={Receipt} color={data.pendingInvoices > 0 ? 'danger' : 'success'} />
       </div>

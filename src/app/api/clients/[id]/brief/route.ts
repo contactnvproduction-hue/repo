@@ -81,3 +81,17 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
 
   return NextResponse.json(brief)
 }
+
+export async function DELETE(_req: NextRequest, { params }: RouteContext) {
+  const session = await auth()
+  if (!session?.user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+
+  const { id } = await params
+  try {
+    await (prisma as any).clientBrief.delete({ where: { clientId: id } })
+  } catch {
+    return NextResponse.json({ error: 'Brief introuvable' }, { status: 404 })
+  }
+  revalidatePath(`/clients/${id}`)
+  return NextResponse.json({ ok: true })
+}

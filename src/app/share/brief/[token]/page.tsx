@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/db'
 import { notFound } from 'next/navigation'
+import Image from 'next/image'
+import { PrintButton } from '@/components/share/PrintButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -492,22 +494,14 @@ export default async function PublicBriefPage({
         <header className="pub-header">
           <div className="pub-header-inner">
             <div className="pub-logo">
+              <Image src="/nv-logo.png" alt="NV" width={48} height={48} style={{ display: 'block', marginBottom: '8px', filter: 'brightness(0) invert(1)' }} />
               <div className="pub-logo-name">
-                NV <span className="pub-logo-dot">·</span> New Vision Production
+                New Vision Production
               </div>
               <div className="pub-logo-sub">Fiche de pilotage — Usage interne</div>
             </div>
             <div className="pub-header-right">
-              <button
-                className="print-btn"
-                onClick={() => typeof window !== 'undefined' && window.print()}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2" />
-                  <rect x="6" y="14" width="12" height="8" />
-                </svg>
-                Imprimer / PDF
-              </button>
+              <PrintButton />
               <div className="pub-date">Créé le {createdDate}</div>
             </div>
           </div>

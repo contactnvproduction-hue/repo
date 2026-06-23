@@ -13,18 +13,16 @@ export default async function BriefPage({
 
   const { id } = await params
 
-  const client = await prisma.client.findUnique({
-    where: { id },
-    include: {
-      adaResponses: { orderBy: { responseTimestamp: 'desc' }, take: 1 },
-    },
-  })
+  const [client, team, brief] = await Promise.all([
+    prisma.client.findUnique({
+      where: { id },
+      include: { adaResponses: { orderBy: { responseTimestamp: 'desc' }, take: 1 } },
+    }),
+    prisma.user.findMany({ select: { id: true, name: true }, orderBy: { name: 'asc' } }),
+    (async () => { try { return await (prisma as any).clientBrief.findUnique({ where: { clientId: id } }) } catch { return null } })(),
+  ])
 
   if (!client) return notFound()
-
-  const brief = await (prisma as any).clientBrief.findUnique({
-    where: { clientId: id },
-  })
 
   const adaData = (client.adaResponses ?? [])[0]?.data ?? null
 
@@ -35,6 +33,7 @@ export default async function BriefPage({
       clientCompany={client.company ?? undefined}
       initialBrief={brief ?? null}
       adaData={adaData as Record<string, string> | null}
+      teamMembers={team}
     />
   )
 }
