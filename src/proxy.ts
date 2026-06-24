@@ -26,10 +26,16 @@ export async function proxy(req: NextRequest) {
   const isSignaturePage     = nextUrl.pathname === '/nv-signature.html'
   const isContratRoute      = nextUrl.pathname.startsWith('/contrat/')
   const isContractsApi      = nextUrl.pathname.startsWith('/api/contracts')
+  // Suivi relances équipe — formulaire public accessible sans compte
+  const isSuiviPage         = nextUrl.pathname.startsWith('/suivi')
+  const isSuiviApi          = nextUrl.pathname.startsWith('/api/suivi')
+  // Pages de partage (plan de tournage, brief client) — liens publics envoyés aux clients
+  const isSharePage         = nextUrl.pathname.startsWith('/share/')
 
   // Always allow through
   if (isApiAuthRoute || isPublicApiRoute || isHealthRoute || isStaticAsset
-      || isSignaturePage || isContratRoute || isContractsApi) {
+      || isSignaturePage || isContratRoute || isContractsApi
+      || isSuiviPage || isSuiviApi || isSharePage) {
     return NextResponse.next()
   }
 
