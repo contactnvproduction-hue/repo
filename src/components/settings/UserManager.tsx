@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { Plus, Trash2, Edit2, UserCheck, Eye, EyeOff, Shield, Key } from 'lucide-react'
+import { AvatarUploader } from '@/components/ui/AvatarUploader'
 import toast from 'react-hot-toast'
 
 const ROLES = [
@@ -49,7 +50,7 @@ export function UserManager({ initialUsers, currentUserId, isAdmin }: Props) {
   })
   const [editForm, setEditForm] = useState({
     name: '', email: '', password: '', role: 'COMMERCIAL',
-    phone: '', specialty: '',
+    phone: '', specialty: '', avatar: null as string | null,
   })
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -91,6 +92,7 @@ export function UserManager({ initialUsers, currentUserId, isAdmin }: Props) {
         role: editForm.role,
         phone: editForm.phone || null,
         specialty: editForm.specialty || null,
+        avatar: editForm.avatar,
       }
       if (editForm.password) payload.password = editForm.password
       const res = await fetch(`/api/users/${showEdit.id}`, {
@@ -135,6 +137,7 @@ export function UserManager({ initialUsers, currentUserId, isAdmin }: Props) {
       role: user.role,
       phone: user.phone || '',
       specialty: user.specialty || '',
+      avatar: user.avatar ?? null,
     })
     setShowEdit(user)
   }
@@ -276,6 +279,19 @@ export function UserManager({ initialUsers, currentUserId, isAdmin }: Props) {
       {/* Edit modal */}
       <Modal open={!!showEdit} onClose={() => setShowEdit(null)} title={`Modifier — ${showEdit?.name}`} size="sm">
         <form onSubmit={handleEdit} className="space-y-4">
+          {/* Photo de profil */}
+          <div className="flex items-center gap-4 pb-3 border-b border-nv-border">
+            <AvatarUploader
+              value={editForm.avatar}
+              name={editForm.name || showEdit?.name || ''}
+              onChange={v => setEditForm(f => ({ ...f, avatar: v }))}
+              size={64}
+            />
+            <div>
+              <p className="text-sm font-medium text-white">Photo de profil</p>
+              <p className="text-xs text-nv-text-muted mt-0.5">JPG, PNG, WebP</p>
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <Input label="Nom complet *" value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} required />
             <Input label="Email *" type="email" value={editForm.email} onChange={e => setEditForm({ ...editForm, email: e.target.value })} required />
