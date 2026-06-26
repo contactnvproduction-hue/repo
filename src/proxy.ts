@@ -15,7 +15,9 @@ export async function proxy(req: NextRequest) {
     return NextResponse.next()
   }
 
-  const isSecure = nextUrl.protocol === 'https:'
+  // Render/Cloudflare terminates SSL — check x-forwarded-proto before nextUrl.protocol
+  const forwardedProto = req.headers.get('x-forwarded-proto')
+  const isSecure = forwardedProto === 'https' || nextUrl.protocol === 'https:'
 
   const isAuthPage          = nextUrl.pathname.startsWith('/login')
   const isApiAuthRoute      = nextUrl.pathname.startsWith('/api/auth')
@@ -39,12 +41,11 @@ export async function proxy(req: NextRequest) {
     return NextResponse.next()
   }
 
-  // NextAuth v5 renamed cookie from 'next-auth.session-token' → 'authjs.session-token'
-  const cookieName = isSecure ? '__Secure-authjs.session-token' : 'authjs.session-token'
+  // secureCookie: true → '__Secure-authjs.session-token', false → 'authjs.session-token'
   const token = await getToken({
     req,
     secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
-    cookieName,
+    secureCookie: isSecure,
   })
   const isLoggedIn = !!token
 
