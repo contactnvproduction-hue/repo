@@ -6,6 +6,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
+import { AvatarUploader } from '@/components/ui/AvatarUploader'
 import toast from 'react-hot-toast'
 
 interface Client {
@@ -16,6 +17,7 @@ interface Client {
   phone: string | null
   address: string | null
   siret: string | null
+  avatar: string | null
   type: string
   status: string
   source: string | null
@@ -25,6 +27,7 @@ interface Client {
 export function ClientEditForm({ client }: { client: Client }) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  const [avatar, setAvatar] = useState<string | null>(client.avatar)
   const [form, setForm] = useState({
     name: client.name,
     company: client.company || '',
@@ -45,7 +48,7 @@ export function ClientEditForm({ client }: { client: Client }) {
       const res = await fetch(`/api/clients/${client.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, avatar }),
       })
       if (!res.ok) throw new Error()
       toast.success('Client mis à jour !')
@@ -62,6 +65,14 @@ export function ClientEditForm({ client }: { client: Client }) {
     <form onSubmit={handleSave} className="space-y-6">
       <Card>
         <CardContent className="space-y-4 pt-6">
+          {/* Photo de profil */}
+          <div className="flex items-center gap-4 pb-2 border-b border-nv-border">
+            <AvatarUploader value={avatar} name={form.name || client.name} onChange={setAvatar} size={72} />
+            <div>
+              <p className="text-sm font-medium text-white">Photo de profil</p>
+              <p className="text-xs text-nv-text-muted mt-0.5">JPG, PNG, WebP · max 5 Mo</p>
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <Input label="Nom *" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
             <Input label="Société" value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} />

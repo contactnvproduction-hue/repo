@@ -7,6 +7,7 @@ import { TeamManager } from '@/components/team/TeamManager'
 import { TeamAvailabilityEditor } from '@/components/team/TeamAvailabilityEditor'
 import { DeleteButton } from '@/components/ui/DeleteButton'
 import { DailyFollowUpSection } from '@/components/team/DailyFollowUpSection'
+import { UserAvatarUpload } from '@/components/team/UserAvatarUpload'
 
 const roleLabel: Record<string, string> = {
   ADMIN: 'Administrateur', MANAGER: 'Manager', MONTEUR: 'Monteur',
@@ -85,11 +86,12 @@ export default async function TeamPage() {
           <Card key={user.id} className="hover:border-nv-border-light transition-colors group">
             <CardContent className="p-5">
               <div className="flex items-start gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
-                  {user.avatar
-                    ? <img src={user.avatar} alt={user.name} className="w-full h-full rounded-2xl object-cover" />
-                    : <span className="text-lg font-bold text-primary">{user.name.charAt(0)}</span>}
-                </div>
+                <UserAvatarUpload
+                  userId={user.id}
+                  currentAvatar={user.avatar}
+                  name={user.name}
+                  size={48}
+                />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="text-sm font-semibold text-white">{user.name}</p>
