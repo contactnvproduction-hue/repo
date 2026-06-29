@@ -187,8 +187,12 @@ export function TasksBoard({ tasks: initialTasks, projects, users, categories, c
                           ) : <span />}
                           <div className="flex items-center gap-1 ml-auto">
                             {task.assignedTo && (
-                              <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center" title={task.assignedTo.name}>
-                                <span className="text-[8px] font-bold text-primary">{task.assignedTo.name.charAt(0)}</span>
+                              <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center overflow-hidden shrink-0" title={task.assignedTo.name}>
+                                {task.assignedTo.avatar ? (
+                                  <img src={task.assignedTo.avatar} alt={task.assignedTo.name} className="w-full h-full object-cover" />
+                                ) : (
+                                  <span className="text-[8px] font-bold text-primary">{task.assignedTo.name.charAt(0)}</span>
+                                )}
                               </div>
                             )}
                             <button onClick={() => deleteTask(task.id)}
