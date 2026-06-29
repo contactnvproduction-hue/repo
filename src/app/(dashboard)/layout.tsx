@@ -15,14 +15,17 @@ export default async function DashboardLayout({
     redirect('/login')
   }
 
-  // Compter les notifications non lues
-  const notifCount = await prisma.notification.count({
-    where: { userId: session.user.id, read: false },
-  })
+  // Fetch notifs + avatar in parallel (avatar no longer in JWT to keep token small)
+  const [notifCount, currentUser] = await Promise.all([
+    prisma.notification.count({ where: { userId: session.user.id, read: false } }),
+    prisma.user.findUnique({ where: { id: session.user.id }, select: { avatar: true } }),
+  ])
+
+  const userWithAvatar = { ...session.user, avatar: currentUser?.avatar ?? null }
 
   return (
     <DashboardShell
-      user={session.user}
+      user={userWithAvatar}
       notifCount={notifCount}
     >
       <AdaAutoSync />
