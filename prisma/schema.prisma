@@ -47,6 +47,7 @@ model User {
   availability      TeamAvailability[]
   dailyCheckins     UserDailyCheckin[]
   dailyFollowUps    DailyClientFollowUp[]
+  memberPayments    MemberPayment[]
 
   @@map("users")
 }
@@ -1003,6 +1004,31 @@ model ShootingPlan {
 }
 
 // ─── KPI SOCIAUX ──────────────────────────────────────────────────────────────
+
+// ─── RÉMUNÉRATIONS ÉQUIPE ─────────────────────────────────────────────────────
+
+enum MemberPaymentType {
+  SALAIRE
+  FREELANCE
+  BONUS
+}
+
+model MemberPayment {
+  id        String            @id @default(cuid())
+  userId    String
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount    Float
+  month     String            // format "YYYY-MM"
+  type      MemberPaymentType @default(FREELANCE)
+  notes     String?
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  @@unique([userId, month, type])
+  @@map("member_payments")
+}
+
+// ─── SOCIAL KPIs ──────────────────────────────────────────────────────────────
 
 model SocialKPI {
   id             String         @id @default(cuid())

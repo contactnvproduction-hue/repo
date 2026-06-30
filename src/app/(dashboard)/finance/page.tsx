@@ -8,6 +8,7 @@ import { BarChart3, TrendingUp, TrendingDown, Wallet, AlertCircle, RepeatIcon, R
 import Link from 'next/link'
 import { FinanceCharts } from '@/components/finance/FinanceCharts'
 import { ExpenseManager } from '@/components/finance/ExpenseManager'
+import { TeamCostSection } from '@/components/finance/TeamCostSection'
 
 export default async function FinancePage() {
   const session = await auth()
@@ -105,6 +106,25 @@ export default async function FinancePage() {
     }),
   ])
 
+  // Requêtes masse salariale — séparées pour éviter de dépasser les overloads Promise.all (TypeScript limite à 10-12 éléments typés)
+  const from6m = new Date(year, now.getMonth() - 5, 1)
+  const [teamPayments, monthlyCA6, monthlyExpenses6] = await Promise.all([
+    (prisma as any).memberPayment.findMany({
+      where: { month: { gte: `${year}-01`, lte: `${year}-12` } },
+      include: { user: { select: { id: true, name: true, avatar: true, role: true } } },
+    }) as Promise<Array<{ id: string; userId: string; month: string; amount: number; type: string; notes: string | null; user: { id: string; name: string; avatar: string | null; role: string } }>>,
+    prisma.$queryRaw<Array<{ month: string; total: number }>>`
+      SELECT TO_CHAR(DATE_TRUNC('month', date), 'YYYY-MM') as month, SUM(amount)::float as total
+      FROM payments WHERE confirmed = true AND date >= ${from6m}
+      GROUP BY month ORDER BY month ASC
+    `,
+    prisma.$queryRaw<Array<{ month: string; total: number }>>`
+      SELECT TO_CHAR(DATE_TRUNC('month', date), 'YYYY-MM') as month, SUM(amount)::float as total
+      FROM expenses WHERE date >= ${from6m}
+      GROUP BY month ORDER BY month ASC
+    `,
+  ])
+
   const caYearVal = caYear._sum.amount || 0
   const caMonthVal = caMonth._sum.amount || 0
   const caLastYearVal = caLastYear._sum.amount || 0
@@ -156,6 +176,56 @@ export default async function FinancePage() {
     })
     .filter(r => r.daysLeft > 0 && r.daysLeft <= 15)
     .sort((a, b) => a.daysLeft - b.daysLeft)
+
+  // ── Masse salariale & marge nette ──
+  const totalTeamCostYear = teamPayments.reduce((s, p) => s + p.amount, 0)
+
+  // Agrégation par membre pour le ranking
+  const memberMap: Record<string, { name: string; avatar: string | null; role: string; total: number; breakdown: Record<string, number> }> = {}
+  for (const p of teamPayments) {
+    if (!memberMap[p.userId]) {
+      memberMap[p.userId] = { name: p.user.name, avatar: p.user.avatar, role: p.user.role, total: 0, breakdown: {} }
+    }
+    memberMap[p.userId].total += p.amount
+    memberMap[p.userId].breakdown[p.type] = (memberMap[p.userId].breakdown[p.type] ?? 0) + p.amount
+  }
+  const memberCosts = Object.entries(memberMap)
+    .map(([userId, d]) => ({
+      userId,
+      name: d.name,
+      avatar: d.avatar,
+      role: d.role,
+      total: d.total,
+      breakdown: Object.entries(d.breakdown).map(([type, amount]) => ({ type, amount })),
+    }))
+    .sort((a, b) => b.total - a.total)
+
+  // Données mensuelles sur 6 mois
+  const last6Months: string[] = []
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(year, now.getMonth() - i, 1)
+    last6Months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+  }
+  const teamByMonth: Record<string, number> = {}
+  for (const p of teamPayments) {
+    if (last6Months.includes(p.month)) {
+      teamByMonth[p.month] = (teamByMonth[p.month] ?? 0) + p.amount
+    }
+  }
+  const monthlyTeamData = last6Months.map(m => {
+    const [y, mo] = m.split('-').map(Number)
+    const label = new Date(y, mo - 1, 1).toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' })
+    return {
+      month: m,
+      label,
+      teamCost: teamByMonth[m] ?? 0,
+      caEncaisse: monthlyCA6.find(c => c.month === m)?.total ?? 0,
+      charges: monthlyExpenses6.find(c => c.month === m)?.total ?? 0,
+      margeNette: (monthlyCA6.find(c => c.month === m)?.total ?? 0)
+        - (monthlyExpenses6.find(c => c.month === m)?.total ?? 0)
+        - (teamByMonth[m] ?? 0),
+    }
+  })
 
   const catLabel: Record<string, string> = {
     LOYER: 'Loyer', LOGICIELS: 'Logiciels', MATÉRIEL: 'Matériel',
@@ -453,6 +523,15 @@ export default async function FinancePage() {
           )}
         </CardContent>
       </Card>
+
+      {/* ── Masse salariale & marge nette ── */}
+      <TeamCostSection
+        memberCosts={memberCosts}
+        monthlyData={monthlyTeamData}
+        totalTeamCostYear={totalTeamCostYear}
+        caYear={caYearVal}
+        chargesYear={dépensesVal}
+      />
 
       {/* Gestion des dépenses */}
       <ExpenseManager />

@@ -8,6 +8,7 @@ import { TeamAvailabilityEditor } from '@/components/team/TeamAvailabilityEditor
 import { DeleteButton } from '@/components/ui/DeleteButton'
 import { DailyFollowUpSection } from '@/components/team/DailyFollowUpSection'
 import { UserAvatarUpload } from '@/components/team/UserAvatarUpload'
+import { MonteurPaymentTracker } from '@/components/team/MonteurPaymentTracker'
 
 const roleLabel: Record<string, string> = {
   ADMIN: 'Administrateur', MANAGER: 'Manager', MONTEUR: 'Monteur',
@@ -23,6 +24,10 @@ export default async function TeamPage() {
   if (!session?.user) return null
 
   const todayStr = new Date().toISOString().slice(0, 10)
+
+  const currentMonth = new Date().toISOString().slice(0, 7)
+
+  type RawMemberPayment = { id: string; userId: string; month: string; amount: number; type: 'SALAIRE' | 'FREELANCE' | 'BONUS'; notes: string | null }
 
   const [users, availabilities, todayFollowUps] = await Promise.all([
     prisma.user.findMany({
@@ -42,6 +47,11 @@ export default async function TeamPage() {
       orderBy: { createdAt: 'desc' },
     }),
   ])
+
+  const initialPayments = await (prisma as any).memberPayment.findMany({
+    where: { month: currentMonth },
+    orderBy: { createdAt: 'desc' },
+  }) as RawMemberPayment[]
 
   // Garder uniquement la disponibilité la plus récente par user
   const availByUser: Record<string, { hours: number; notes?: string | null }> = {}
@@ -80,6 +90,21 @@ export default async function TeamPage() {
         }))}
         isAdmin={isAdmin}
       />
+
+      {isAdmin && (
+        <MonteurPaymentTracker
+          members={users.map(u => ({ id: u.id, name: u.name, role: u.role, avatar: u.avatar }))}
+          initialPayments={initialPayments.map(p => ({
+            id: p.id,
+            userId: p.userId,
+            month: p.month,
+            amount: p.amount,
+            type: p.type as 'SALAIRE' | 'FREELANCE' | 'BONUS',
+            notes: p.notes,
+          }))}
+          initialMonth={currentMonth}
+        />
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {users.map((user) => (
