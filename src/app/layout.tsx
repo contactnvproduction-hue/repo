@@ -10,10 +10,11 @@ export const metadata: Metadata = {
   description: 'Dashboard de pilotage - Agence de production vidéo et photo',
   icons: {
     icon: [
+      { url: '/icon.png', type: 'image/png', sizes: '600x600' },
       { url: '/favicon.ico', sizes: 'any' },
-      { url: '/icon.png', type: 'image/png' },
     ],
-    apple: '/apple-icon.png',
+    apple: { url: '/apple-icon.png', sizes: '600x600' },
+    shortcut: '/icon.png',
   },
 }
 
