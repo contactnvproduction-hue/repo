@@ -129,7 +129,8 @@ export default async function FinancePage() {
   const caMonthVal = caMonth._sum.amount || 0
   const caLastYearVal = caLastYear._sum.amount || 0
   const dépensesVal = dépenses._sum.amount || 0
-  const résultatNet = caYearVal - dépensesVal
+  const totalTeamCostYear = teamPayments.reduce((s, p) => s + p.amount, 0)
+  const résultatNet = caYearVal - dépensesVal - totalTeamCostYear
   const impayéesVal = impayées._sum.totalTTC || 0
   const caContractéVal = caContracté._sum.totalTTC || 0
   const tauxEncaissement = caContractéVal > 0 ? Math.round((caYearVal / caContractéVal) * 100) : 0
@@ -178,7 +179,17 @@ export default async function FinancePage() {
     .sort((a, b) => a.daysLeft - b.daysLeft)
 
   // ── Masse salariale & marge nette ──
-  const totalTeamCostYear = teamPayments.reduce((s, p) => s + p.amount, 0)
+
+  // Fusion charges agence + masse salariale par mois → pour FinanceCharts
+  const teamByMonthAll: Record<string, number> = {}
+  for (const p of teamPayments) {
+    teamByMonthAll[p.month] = (teamByMonthAll[p.month] ?? 0) + p.amount
+  }
+  const allChargeMonths = new Set([...monthlyExpenses.map(e => e.month), ...Object.keys(teamByMonthAll)])
+  const monthlyExpensesWithTeam = [...allChargeMonths].sort().map(m => ({
+    month: m,
+    total: (monthlyExpenses.find(e => e.month === m)?.total ?? 0) + (teamByMonthAll[m] ?? 0),
+  }))
 
   // Agrégation par membre pour le ranking
   const memberMap: Record<string, { name: string; avatar: string | null; role: string; total: number; breakdown: Record<string, number> }> = {}
@@ -265,7 +276,7 @@ export default async function FinancePage() {
       </div>
 
       {/* ── HÉRO: Graphique d'évolution ── */}
-      <FinanceCharts monthlyCA={monthlyCA} monthlyExpenses={monthlyExpenses} />
+      <FinanceCharts monthlyCA={monthlyCA} monthlyExpenses={monthlyExpensesWithTeam} />
 
       {/* Alerte impayées */}
       {impayéesVal > 0 && (
