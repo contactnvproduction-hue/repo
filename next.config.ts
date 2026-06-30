@@ -8,7 +8,7 @@ const nextConfig: NextConfig = {
         // Next.js sets s-maxage=31536000 for static-looking pages, but after each
         // deploy the JS chunk filenames change — serving stale HTML causes blank pages.
         // Static assets under /_next/static/ are content-hashed and should stay cached.
-        source: "/((?!_next/static|_next/image|favicon\\.ico).*)",
+        source: "/((?!_next/static|_next/image).*)",
         headers: [
           {
             key: "Cache-Control",
