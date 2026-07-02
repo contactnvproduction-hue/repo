@@ -33,11 +33,15 @@ export async function proxy(req: NextRequest) {
   const isSuiviApi          = nextUrl.pathname.startsWith('/api/suivi')
   // Pages de partage (plan de tournage, brief client) — liens publics envoyés aux clients
   const isSharePage         = nextUrl.pathname.startsWith('/share/')
+  // Formulaire d'onboarding client — public, envoyé aux nouveaux clients
+  const isOnboardingPage    = nextUrl.pathname.startsWith('/onboarding')
+  const isOnboardingApi     = nextUrl.pathname.startsWith('/api/onboarding')
 
   // Always allow through
   if (isApiAuthRoute || isPublicApiRoute || isHealthRoute || isStaticAsset
       || isSignaturePage || isContratRoute || isContractsApi
-      || isSuiviPage || isSuiviApi || isSharePage) {
+      || isSuiviPage || isSuiviApi || isSharePage
+      || isOnboardingPage || isOnboardingApi) {
     return NextResponse.next()
   }
 

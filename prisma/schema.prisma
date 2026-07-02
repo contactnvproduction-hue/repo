@@ -114,6 +114,8 @@ model Client {
   adaNotes        Json?
   brief           ClientBrief?
   shootingPlans   ShootingPlan[]
+  onboardingForm  ClientOnboardingForm?
+  spotSelections  ClientSpotSelection[]
 
   @@map("clients")
 }
@@ -1026,6 +1028,76 @@ model MemberPayment {
 
   @@unique([userId, month, type])
   @@map("member_payments")
+}
+
+// ─── FORMULAIRE D'ONBOARDING CLIENT (public, remplace Google Forms) ──────────
+
+model ShootingSpot {
+  id          String   @id @default(cuid())
+  name        String
+  city        String
+  description String?
+  tags        String[]
+  photos      String[]
+  supplement  String?
+  active      Boolean  @default(true)
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  selections  ClientSpotSelection[]
+
+  @@map("shooting_spots")
+}
+
+model ClientSpotSelection {
+  id        String       @id @default(cuid())
+  clientId  String
+  spotId    String
+  client    Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  spot      ShootingSpot @relation(fields: [spotId], references: [id], onDelete: Cascade)
+  createdAt DateTime     @default(now())
+
+  @@unique([clientId, spotId])
+  @@map("client_spot_selections")
+}
+
+model ClientOnboardingForm {
+  id       String @id @default(cuid())
+  clientId String @unique
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  // Identité
+  firstName String?
+  lastName  String?
+
+  // Branding
+  brandName          String?
+  acquisitionChannels String[]
+  inspirationLinks    String[]
+  inspirationNotes    String?
+  visualPerception    String[]
+  editingStyles       String[]
+  mustHighlight       String?
+  mustAvoid           String?
+  brandFont           String?
+  musicVibe           String?
+  callToAction        String?
+
+  // ICP
+  icpSector       String?
+  icpTargetAge    String?
+  icpTargetStatus String?
+  icpTargetProblem String?
+  icpOffer         String?
+  icpTone          String?
+
+  status      String   @default("pending") // pending | completed
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("client_onboarding_forms")
 }
 
 // ─── SOCIAL KPIs ──────────────────────────────────────────────────────────────
