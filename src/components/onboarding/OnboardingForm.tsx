@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { ChevronLeft, ChevronRight, Check, MapPin, Play, Loader2 } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { ChevronLeft, ChevronRight, Check, MapPin, Play, Loader2, Upload, FileText, X, ImageIcon } from 'lucide-react'
 import toast from 'react-hot-toast'
+import type { OnboardingQuestion } from '@/lib/onboarding-questions'
 
 type Spot = {
   id: string
@@ -14,11 +15,10 @@ type Spot = {
   supplement: string | null
 }
 
-type FormData = {
+type Answers = {
   firstName: string
   lastName: string
   email: string
-  // Branding
   brandName: string
   acquisitionChannels: string[]
   inspirationLinks: string[]
@@ -30,24 +30,28 @@ type FormData = {
   brandFont: string
   musicVibe: string
   callToAction: string
-  // ICP
   icpSector: string
   icpTargetAge: string
   icpTargetStatus: string
   icpTargetProblem: string
   icpOffer: string
   icpTone: string
-  // Spots
+  icpPdf: string
+  icpPdfName: string
+  channelsScreenshot: string
+  customAnswers: Record<string, string>
   selectedSpots: string[]
 }
 
-const INITIAL: FormData = {
+const INITIAL: Answers = {
   firstName: '', lastName: '', email: '',
   brandName: '', acquisitionChannels: [], inspirationLinks: ['', '', ''],
   inspirationNotes: '', visualPerception: [], editingStyles: [],
   mustHighlight: '', mustAvoid: '', brandFont: '', musicVibe: '', callToAction: '',
   icpSector: '', icpTargetAge: '', icpTargetStatus: '',
   icpTargetProblem: '', icpOffer: '', icpTone: '',
+  icpPdf: '', icpPdfName: '', channelsScreenshot: '',
+  customAnswers: {},
   selectedSpots: [],
 }
 
@@ -55,18 +59,52 @@ const STORAGE_KEY = 'nv_onboarding_v2'
 const STEPS = ['Bienvenue', 'Branding', 'Votre audience', 'Lieux de tournage', 'Récapitulatif']
 const YOUTUBE_VIDEO_ID = '' // TODO: à renseigner quand Noah fournit le lien
 
-const CHANNELS = ['Instagram', 'YouTube', 'LinkedIn', 'TikTok', 'Facebook', 'Podcast', 'Email', 'Site web']
-const VISUAL_PERCEPTIONS = ['Froid', 'Chaud', 'Sombre', 'Lumineux', 'Naturel', 'Épuré', 'Luxueux', 'Dynamique']
-const EDITING_STYLES = ['Dynamique & rapide', 'Storytelling narratif', 'Cinématique', 'Vlog / authentique', 'Corporate premium', 'Éducatif / tutoriel']
-const MUSIC_VIBES = ['Épique & inspirant', 'Ambient & calme', 'Upbeat & énergique', 'Hip-hop / trap', 'Cinématique', 'Piano émotionnel', 'Lo-fi / chill', 'Électronique']
-const AGE_RANGES = ['18-25 ans', '25-35 ans', '35-45 ans', '45-55 ans', '55+ ans', 'Tous âges']
-const TARGET_STATUSES = ['Entrepreneur / chef d\'entreprise', 'Salarié en reconversion', 'Freelance', 'Étudiant', 'Cadre supérieur', 'Parent actif', 'Retraité', 'Grand public']
-const TONES = ['Expert & autoritaire', 'Bienveillant & pédagogue', 'Direct & sans filtre', 'Inspirant & motivant', 'Élégant & premium', 'Proximal & ami']
+const inputCls = 'w-full bg-nv-card border border-nv-border rounded-lg px-4 py-2.5 text-nv-text placeholder-nv-text-faint focus:outline-none focus:border-primary/60 transition-colors text-sm'
+const textareaCls = `${inputCls} resize-none`
 
 function toggle<T>(arr: T[], val: T, max?: number): T[] {
   if (arr.includes(val)) return arr.filter(v => v !== val)
   if (max && arr.length >= max) return arr
   return [...arr, val]
+}
+
+// Redimensionne une image côté client → base64 JPEG (max 1600px, qualité 0.82)
+function resizeImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const img = new Image()
+      img.onload = () => {
+        const MAX = 1600
+        let { width, height } = img
+        if (width > MAX || height > MAX) {
+          const ratio = Math.min(MAX / width, MAX / height)
+          width = Math.round(width * ratio)
+          height = Math.round(height * ratio)
+        }
+        const canvas = document.createElement('canvas')
+        canvas.width = width
+        canvas.height = height
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return reject(new Error('canvas'))
+        ctx.drawImage(img, 0, 0, width, height)
+        resolve(canvas.toDataURL('image/jpeg', 0.82))
+      }
+      img.onerror = reject
+      img.src = reader.result as string
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
 }
 
 function Chip({ label, active, onClick, disabled }: { label: string; active: boolean; onClick: () => void; disabled?: boolean }) {
@@ -96,12 +134,228 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   )
 }
 
-const inputCls = 'w-full bg-nv-card border border-nv-border rounded-lg px-4 py-2.5 text-nv-text placeholder-nv-text-faint focus:outline-none focus:border-primary/60 transition-colors text-sm'
-const textareaCls = `${inputCls} resize-none`
+function ImageUpload({ value, onChange, label }: { value: string; onChange: (v: string) => void; label: string }) {
+  const ref = useRef<HTMLInputElement>(null)
+  const [loading, setLoading] = useState(false)
+
+  const handleFile = async (file: File) => {
+    if (!file.type.startsWith('image/')) { toast.error('Image uniquement (PNG, JPG…)'); return }
+    setLoading(true)
+    try {
+      onChange(await resizeImage(file))
+    } catch {
+      toast.error("Impossible de lire l'image")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div>
+      <input ref={ref} type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
+      {value ? (
+        <div className="relative rounded-xl overflow-hidden border border-nv-border">
+          <img src={value} alt={label} className="w-full max-h-64 object-contain bg-nv-dark" />
+          <button
+            type="button"
+            onClick={() => onChange('')}
+            className="absolute top-2 right-2 w-7 h-7 rounded-full bg-nv-black/80 border border-nv-border flex items-center justify-center text-nv-text-muted hover:text-red-400 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => ref.current?.click()}
+          disabled={loading}
+          className="w-full py-8 rounded-xl border border-dashed border-nv-border bg-nv-card hover:border-primary/40 transition-colors flex flex-col items-center gap-2 text-nv-text-muted"
+        >
+          {loading ? <Loader2 className="w-6 h-6 animate-spin text-primary" /> : <ImageIcon className="w-6 h-6 text-primary" />}
+          <span className="text-sm">Cliquez pour ajouter une capture d'écran</span>
+          <span className="text-xs text-nv-text-faint">PNG, JPG — compressée automatiquement</span>
+        </button>
+      )}
+    </div>
+  )
+}
+
+function PdfUpload({ value, fileName, onChange }: { value: string; fileName: string; onChange: (data: string, name: string) => void }) {
+  const ref = useRef<HTMLInputElement>(null)
+  const [loading, setLoading] = useState(false)
+
+  const handleFile = async (file: File) => {
+    if (file.type !== 'application/pdf') { toast.error('PDF uniquement'); return }
+    if (file.size > 8 * 1024 * 1024) { toast.error('PDF trop lourd (max 8 Mo)'); return }
+    setLoading(true)
+    try {
+      onChange(await fileToBase64(file), file.name)
+      toast.success('PDF ajouté')
+    } catch {
+      toast.error('Impossible de lire le PDF')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div>
+      <input ref={ref} type="file" accept="application/pdf" className="hidden" onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
+      {value ? (
+        <div className="flex items-center gap-3 p-3 rounded-xl border border-primary/30 bg-primary/5">
+          <FileText className="w-5 h-5 text-primary shrink-0" />
+          <span className="text-sm text-nv-text flex-1 truncate">{fileName || 'document.pdf'}</span>
+          <button
+            type="button"
+            onClick={() => onChange('', '')}
+            className="w-7 h-7 rounded-full flex items-center justify-center text-nv-text-muted hover:text-red-400 transition-colors shrink-0"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => ref.current?.click()}
+          disabled={loading}
+          className="w-full py-6 rounded-xl border border-dashed border-nv-border bg-nv-card hover:border-primary/40 transition-colors flex flex-col items-center gap-2 text-nv-text-muted"
+        >
+          {loading ? <Loader2 className="w-6 h-6 animate-spin text-primary" /> : <Upload className="w-6 h-6 text-primary" />}
+          <span className="text-sm">Uploader votre document ICP (PDF)</span>
+          <span className="text-xs text-nv-text-faint">Max 8 Mo</span>
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ─── RENDU D'UNE QUESTION PILOTÉE PAR LA CONFIG ──────────────────────────────
+
+function QuestionField({
+  q, answers, setAnswers,
+}: {
+  q: OnboardingQuestion
+  answers: Answers
+  setAnswers: (a: Answers) => void
+}) {
+  const key = q.key as keyof Answers
+
+  if (q.custom) {
+    return (
+      <Field label={q.label} hint={q.hint}>
+        <textarea
+          className={textareaCls}
+          rows={3}
+          value={answers.customAnswers[q.key] ?? ''}
+          onChange={e => setAnswers({ ...answers, customAnswers: { ...answers.customAnswers, [q.key]: e.target.value } })}
+        />
+      </Field>
+    )
+  }
+
+  switch (q.type) {
+    case 'text':
+      return (
+        <Field label={q.label} hint={q.hint}>
+          <input
+            className={inputCls}
+            value={(answers[key] as string) ?? ''}
+            onChange={e => setAnswers({ ...answers, [key]: e.target.value })}
+          />
+        </Field>
+      )
+    case 'textarea':
+      return (
+        <Field label={q.label} hint={q.hint}>
+          <textarea
+            className={textareaCls}
+            rows={3}
+            value={(answers[key] as string) ?? ''}
+            onChange={e => setAnswers({ ...answers, [key]: e.target.value })}
+          />
+        </Field>
+      )
+    case 'chips': {
+      const val = answers[key] as string
+      return (
+        <Field label={q.label} hint={q.hint}>
+          <div className="flex flex-wrap gap-2 mt-1">
+            {(q.options ?? []).map(o => (
+              <Chip key={o} label={o} active={val === o} onClick={() => setAnswers({ ...answers, [key]: val === o ? '' : o })} />
+            ))}
+          </div>
+        </Field>
+      )
+    }
+    case 'chips-multi': {
+      const val = (answers[key] as string[]) ?? []
+      return (
+        <Field label={q.label} hint={q.hint}>
+          <div className="flex flex-wrap gap-2 mt-1">
+            {(q.options ?? []).map(o => (
+              <Chip
+                key={o} label={o}
+                active={val.includes(o)}
+                onClick={() => setAnswers({ ...answers, [key]: toggle(val, o, q.maxSelect) })}
+                disabled={!!q.maxSelect && val.length >= q.maxSelect && !val.includes(o)}
+              />
+            ))}
+          </div>
+        </Field>
+      )
+    }
+    case 'links': {
+      const links = (answers[key] as string[]) ?? []
+      const shown = links.length < 5 ? [...links, ''] : links
+      return (
+        <Field label={q.label} hint={q.hint}>
+          <div className="space-y-2">
+            {shown.slice(0, 5).map((link, i) => (
+              <input
+                key={i}
+                className={inputCls}
+                placeholder={`Lien ${i + 1}`}
+                value={link}
+                onChange={e => {
+                  const next = [...links]
+                  while (next.length <= i) next.push('')
+                  next[i] = e.target.value
+                  setAnswers({ ...answers, [key]: next })
+                }}
+              />
+            ))}
+          </div>
+        </Field>
+      )
+    }
+    case 'file-image':
+      return (
+        <Field label={q.label} hint={q.hint}>
+          <ImageUpload
+            value={answers.channelsScreenshot}
+            onChange={v => setAnswers({ ...answers, channelsScreenshot: v })}
+            label={q.label}
+          />
+        </Field>
+      )
+    case 'file-pdf':
+      return (
+        <Field label={q.label} hint={q.hint}>
+          <PdfUpload
+            value={answers.icpPdf}
+            fileName={answers.icpPdfName}
+            onChange={(data, name) => setAnswers({ ...answers, icpPdf: data, icpPdfName: name })}
+          />
+        </Field>
+      )
+    default:
+      return null
+  }
+}
 
 // ─── STEP 1 : Intro ──────────────────────────────────────────────────────────
 
-function Step1({ data, setData }: { data: FormData; setData: (d: FormData) => void }) {
+function Step1({ answers, setAnswers }: { answers: Answers; setAnswers: (a: Answers) => void }) {
   return (
     <div className="space-y-8">
       {YOUTUBE_VIDEO_ID ? (
@@ -131,251 +385,15 @@ function Step1({ data, setData }: { data: FormData; setData: (d: FormData) => vo
 
       <div className="grid grid-cols-2 gap-4">
         <Field label="Prénom">
-          <input
-            className={inputCls}
-            placeholder="Thomas"
-            value={data.firstName}
-            onChange={e => setData({ ...data, firstName: e.target.value })}
-          />
+          <input className={inputCls} placeholder="Thomas" value={answers.firstName} onChange={e => setAnswers({ ...answers, firstName: e.target.value })} />
         </Field>
         <Field label="Nom">
-          <input
-            className={inputCls}
-            placeholder="Dupont"
-            value={data.lastName}
-            onChange={e => setData({ ...data, lastName: e.target.value })}
-          />
+          <input className={inputCls} placeholder="Dupont" value={answers.lastName} onChange={e => setAnswers({ ...answers, lastName: e.target.value })} />
         </Field>
       </div>
 
       <Field label="Email *" hint="L'email avec lequel vous avez signé votre contrat NVP">
-        <input
-          className={inputCls}
-          type="email"
-          placeholder="thomas.dupont@gmail.com"
-          value={data.email}
-          onChange={e => setData({ ...data, email: e.target.value })}
-        />
-      </Field>
-    </div>
-  )
-}
-
-// ─── STEP 2 : Branding ────────────────────────────────────────────────────────
-
-function Step2({ data, setData }: { data: FormData; setData: (d: FormData) => void }) {
-  const setLink = (i: number, val: string) => {
-    const links = [...data.inspirationLinks]
-    links[i] = val
-    setData({ ...data, inspirationLinks: links })
-  }
-
-  return (
-    <div className="space-y-6">
-      <Field label="Nom de marque / nom public">
-        <input
-          className={inputCls}
-          placeholder="Ex : Thomas Dupont Coaching, La Méthode Dupont…"
-          value={data.brandName}
-          onChange={e => setData({ ...data, brandName: e.target.value })}
-        />
-      </Field>
-
-      <Field label="Sur quels canaux êtes-vous présent ?" hint="Sélectionnez tous vos canaux actifs">
-        <div className="flex flex-wrap gap-2 mt-1">
-          {CHANNELS.map(c => (
-            <Chip
-              key={c} label={c}
-              active={data.acquisitionChannels.includes(c)}
-              onClick={() => setData({ ...data, acquisitionChannels: toggle(data.acquisitionChannels, c) })}
-            />
-          ))}
-        </div>
-      </Field>
-
-      <Field label="Liens d'inspiration" hint="3 à 5 profils/créateurs dont vous aimez le contenu vidéo (concurrents, références, idéaux)">
-        <div className="space-y-2">
-          {(data.inspirationLinks.length < 5 ? [...data.inspirationLinks, ''] : data.inspirationLinks).slice(0, 5).map((link, i) => (
-            <input
-              key={i}
-              className={inputCls}
-              placeholder={`Lien ${i + 1} — ex: youtube.com/@nomdelachain`}
-              value={link}
-              onChange={e => {
-                const links = [...data.inspirationLinks]
-                while (links.length <= i) links.push('')
-                links[i] = e.target.value
-                setData({ ...data, inspirationLinks: links.filter((l, idx) => idx < i + 1 || l !== '') })
-              }}
-            />
-          ))}
-        </div>
-      </Field>
-
-      <Field label="Qu'est-ce qui vous plaît chez ces références ?" hint="Montage, ambiance, musique, couleurs, façon de parler…">
-        <textarea
-          className={textareaCls}
-          rows={3}
-          placeholder="Ex : J'aime le côté cinématique avec des coupes rapides sur la musique, les plans larges en extérieur…"
-          value={data.inspirationNotes}
-          onChange={e => setData({ ...data, inspirationNotes: e.target.value })}
-        />
-      </Field>
-
-      <Field label="Perception visuelle souhaitée" hint="Plusieurs choix possibles — comment voulez-vous que l'on vous perçoive ?">
-        <div className="flex flex-wrap gap-2 mt-1">
-          {VISUAL_PERCEPTIONS.map(v => (
-            <Chip
-              key={v} label={v}
-              active={data.visualPerception.includes(v)}
-              onClick={() => setData({ ...data, visualPerception: toggle(data.visualPerception, v) })}
-            />
-          ))}
-        </div>
-      </Field>
-
-      <Field label="Style de montage" hint="Maximum 2 styles — ceux qui correspondent le mieux à votre univers">
-        <div className="flex flex-wrap gap-2 mt-1">
-          {EDITING_STYLES.map(s => (
-            <Chip
-              key={s} label={s}
-              active={data.editingStyles.includes(s)}
-              onClick={() => setData({ ...data, editingStyles: toggle(data.editingStyles, s, 2) })}
-              disabled={data.editingStyles.length >= 2 && !data.editingStyles.includes(s)}
-            />
-          ))}
-        </div>
-      </Field>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="Ce que vous souhaitez mettre en avant">
-          <textarea
-            className={textareaCls}
-            rows={3}
-            placeholder="Ex : Mon expertise, ma légitimité, mes résultats clients, mon côté accessible…"
-            value={data.mustHighlight}
-            onChange={e => setData({ ...data, mustHighlight: e.target.value })}
-          />
-        </Field>
-        <Field label="Ce que vous souhaitez éviter">
-          <textarea
-            className={textareaCls}
-            rows={3}
-            placeholder="Ex : Paraître trop jeune, trop décontracté, trop formel…"
-            value={data.mustAvoid}
-            onChange={e => setData({ ...data, mustAvoid: e.target.value })}
-          />
-        </Field>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="Police / style visuel" hint="Optionnel">
-          <input
-            className={inputCls}
-            placeholder="Ex : Sans-serif moderne, Serif élégant, pas de préférence…"
-            value={data.brandFont}
-            onChange={e => setData({ ...data, brandFont: e.target.value })}
-          />
-        </Field>
-        <Field label="Vibe musicale">
-          <div className="flex flex-wrap gap-2 mt-1">
-            {MUSIC_VIBES.map(m => (
-              <Chip
-                key={m} label={m}
-                active={data.musicVibe === m}
-                onClick={() => setData({ ...data, musicVibe: data.musicVibe === m ? '' : m })}
-              />
-            ))}
-          </div>
-        </Field>
-      </div>
-
-      <Field label="Votre CTA (appel à l'action) principal" hint="La phrase que vous voulez que vos spectateurs retiennent et effectuent">
-        <input
-          className={inputCls}
-          placeholder="Ex : Rejoignez ma formation, Réservez un appel découverte, Téléchargez mon guide…"
-          value={data.callToAction}
-          onChange={e => setData({ ...data, callToAction: e.target.value })}
-        />
-      </Field>
-    </div>
-  )
-}
-
-// ─── STEP 3 : ICP ────────────────────────────────────────────────────────────
-
-function Step3({ data, setData }: { data: FormData; setData: (d: FormData) => void }) {
-  return (
-    <div className="space-y-6">
-      <div className="p-4 rounded-xl bg-primary/5 border border-primary/20">
-        <p className="text-sm text-nv-text-muted leading-relaxed">
-          <span className="text-primary font-medium">Votre client idéal</span> — Ces informations guident notre façon de vous filmer et de construire vos vidéos. Plus vous êtes précis, plus notre contenu sera ciblé et percutant.
-        </p>
-      </div>
-
-      <Field label="Votre secteur d'activité">
-        <input
-          className={inputCls}
-          placeholder="Ex : Coaching business, Immobilier, Marketing digital, Développement personnel…"
-          value={data.icpSector}
-          onChange={e => setData({ ...data, icpSector: e.target.value })}
-        />
-      </Field>
-
-      <Field label="Tranche d'âge de votre cible principale">
-        <div className="flex flex-wrap gap-2 mt-1">
-          {AGE_RANGES.map(a => (
-            <Chip
-              key={a} label={a}
-              active={data.icpTargetAge === a}
-              onClick={() => setData({ ...data, icpTargetAge: data.icpTargetAge === a ? '' : a })}
-            />
-          ))}
-        </div>
-      </Field>
-
-      <Field label="Statut de votre cible">
-        <div className="flex flex-wrap gap-2 mt-1">
-          {TARGET_STATUSES.map(s => (
-            <Chip
-              key={s} label={s}
-              active={data.icpTargetStatus === s}
-              onClick={() => setData({ ...data, icpTargetStatus: data.icpTargetStatus === s ? '' : s })}
-            />
-          ))}
-        </div>
-      </Field>
-
-      <Field label="Problématique principale de votre cible" hint="Le problème numéro 1 que votre client idéal essaie de résoudre">
-        <textarea
-          className={textareaCls}
-          rows={3}
-          placeholder="Ex : Il veut quitter son CDI pour créer son entreprise mais ne sait pas par où commencer et a peur de l'échec…"
-          value={data.icpTargetProblem}
-          onChange={e => setData({ ...data, icpTargetProblem: e.target.value })}
-        />
-      </Field>
-
-      <Field label="Votre offre / promesse principale">
-        <textarea
-          className={textareaCls}
-          rows={3}
-          placeholder="Ex : J'aide les cadres à générer leurs 3 premiers clients en freelance en 90 jours grâce à ma méthode LinkedIn."
-          value={data.icpOffer}
-          onChange={e => setData({ ...data, icpOffer: e.target.value })}
-        />
-      </Field>
-
-      <Field label="Ton de voix">
-        <div className="flex flex-wrap gap-2 mt-1">
-          {TONES.map(t => (
-            <Chip
-              key={t} label={t}
-              active={data.icpTone === t}
-              onClick={() => setData({ ...data, icpTone: data.icpTone === t ? '' : t })}
-            />
-          ))}
-        </div>
+        <input className={inputCls} type="email" placeholder="thomas.dupont@gmail.com" value={answers.email} onChange={e => setAnswers({ ...answers, email: e.target.value })} />
       </Field>
     </div>
   )
@@ -383,14 +401,14 @@ function Step3({ data, setData }: { data: FormData; setData: (d: FormData) => vo
 
 // ─── STEP 4 : Spots ──────────────────────────────────────────────────────────
 
-function Step4({ data, setData, spots }: { data: FormData; setData: (d: FormData) => void; spots: Spot[] }) {
+function StepSpots({ answers, setAnswers, spots }: { answers: Answers; setAnswers: (a: Answers) => void; spots: Spot[] }) {
   const cities = Array.from(new Set(spots.map(s => s.city))).sort()
 
   const toggleSpot = (id: string) => {
-    if (data.selectedSpots.includes(id)) {
-      setData({ ...data, selectedSpots: data.selectedSpots.filter(s => s !== id) })
-    } else if (data.selectedSpots.length < 2) {
-      setData({ ...data, selectedSpots: [...data.selectedSpots, id] })
+    if (answers.selectedSpots.includes(id)) {
+      setAnswers({ ...answers, selectedSpots: answers.selectedSpots.filter(s => s !== id) })
+    } else if (answers.selectedSpots.length < 2) {
+      setAnswers({ ...answers, selectedSpots: [...answers.selectedSpots, id] })
     }
   }
 
@@ -399,20 +417,20 @@ function Step4({ data, setData, spots }: { data: FormData; setData: (d: FormData
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-base font-medium text-nv-text">Choisissez 2 lieux de tournage</h3>
-          <p className="text-sm text-nv-text-muted mt-0.5">Ces lieux seront utilisés pour votre tournage initial. D'autres peuvent être ajoutés ultérieurement.</p>
+          <p className="text-sm text-nv-text-muted mt-0.5">Ces lieux seront utilisés pour votre tournage initial.</p>
         </div>
         <span className={`text-sm font-medium px-3 py-1 rounded-full border ${
-          data.selectedSpots.length === 2
+          answers.selectedSpots.length === 2
             ? 'bg-primary/15 border-primary/40 text-primary'
             : 'bg-nv-card border-nv-border text-nv-text-muted'
         }`}>
-          {data.selectedSpots.length} / 2
+          {answers.selectedSpots.length} / 2
         </span>
       </div>
 
       {spots.length === 0 && (
         <div className="text-center py-12 text-nv-text-muted text-sm">
-          Les lieux de tournage sont en cours de chargement…
+          Les lieux de tournage seront présentés lors de votre appel d'onboarding.
         </div>
       )}
 
@@ -424,8 +442,8 @@ function Step4({ data, setData, spots }: { data: FormData; setData: (d: FormData
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {spots.filter(s => s.city === city).map(spot => {
-              const selected = data.selectedSpots.includes(spot.id)
-              const maxed = data.selectedSpots.length >= 2 && !selected
+              const selected = answers.selectedSpots.includes(spot.id)
+              const maxed = answers.selectedSpots.length >= 2 && !selected
               return (
                 <button
                   key={spot.id}
@@ -458,9 +476,7 @@ function Step4({ data, setData, spots }: { data: FormData; setData: (d: FormData
                         </span>
                       )}
                     </div>
-                    {spot.description && (
-                      <p className="text-xs text-nv-text-muted leading-relaxed">{spot.description}</p>
-                    )}
+                    {spot.description && <p className="text-xs text-nv-text-muted leading-relaxed">{spot.description}</p>}
                     {spot.tags.length > 0 && (
                       <div className="flex flex-wrap gap-1">
                         {spot.tags.map(tag => (
@@ -468,9 +484,7 @@ function Step4({ data, setData, spots }: { data: FormData; setData: (d: FormData
                         ))}
                       </div>
                     )}
-                    {spot.supplement && (
-                      <p className="text-[11px] text-primary/80 italic">{spot.supplement}</p>
-                    )}
+                    {spot.supplement && <p className="text-[11px] text-primary/80 italic">{spot.supplement}</p>}
                   </div>
                 </button>
               )
@@ -484,17 +498,32 @@ function Step4({ data, setData, spots }: { data: FormData; setData: (d: FormData
 
 // ─── STEP 5 : Recap ──────────────────────────────────────────────────────────
 
-function Step5({ data, spots }: { data: FormData; spots: Spot[] }) {
-  const selectedSpotObjects = spots.filter(s => data.selectedSpots.includes(s.id))
+function StepRecap({ answers, spots, questions }: { answers: Answers; spots: Spot[]; questions: OnboardingQuestion[] }) {
+  const selectedSpotObjects = spots.filter(s => answers.selectedSpots.includes(s.id))
 
-  const Row = ({ label, value }: { label: string; value?: string | string[] }) => {
-    if (!value || (Array.isArray(value) && value.length === 0)) return null
+  const displayValue = (q: OnboardingQuestion): string | null => {
+    if (q.custom) return answers.customAnswers[q.key] || null
+    if (q.type === 'file-pdf') return answers.icpPdf ? (answers.icpPdfName || 'PDF joint') : null
+    if (q.type === 'file-image') return answers.channelsScreenshot ? 'Capture jointe' : null
+    const v = answers[q.key as keyof Answers]
+    if (Array.isArray(v)) return v.filter(Boolean).length ? v.filter(Boolean).join(', ') : null
+    return (v as string) || null
+  }
+
+  const Section = ({ title, qs }: { title: string; qs: OnboardingQuestion[] }) => {
+    const rows = qs.map(q => ({ q, val: displayValue(q) })).filter(r => r.val)
+    if (rows.length === 0) return null
     return (
-      <div className="flex gap-3 py-2 border-b border-nv-border last:border-0">
-        <span className="text-xs text-nv-text-muted w-36 shrink-0 pt-0.5">{label}</span>
-        <span className="text-sm text-nv-text">
-          {Array.isArray(value) ? value.join(', ') : value}
-        </span>
+      <div>
+        <h4 className="text-xs font-semibold text-nv-text-faint uppercase tracking-wider mb-3">{title}</h4>
+        <div className="bg-nv-card rounded-xl p-3 border border-nv-border">
+          {rows.map(({ q, val }) => (
+            <div key={q.key} className="flex gap-3 py-2 border-b border-nv-border last:border-0">
+              <span className="text-xs text-nv-text-muted w-40 shrink-0 pt-0.5">{q.label.length > 60 ? q.label.slice(0, 57) + '…' : q.label}</span>
+              <span className="text-sm text-nv-text">{val}</span>
+            </div>
+          ))}
+        </div>
       </div>
     )
   }
@@ -502,43 +531,25 @@ function Step5({ data, spots }: { data: FormData; spots: Spot[] }) {
   return (
     <div className="space-y-6">
       <div className="p-4 rounded-xl bg-primary/5 border border-primary/20">
-        <p className="text-sm text-nv-text-muted">
-          Vérifiez vos informations avant de valider. Vous recevrez une confirmation par email.
-        </p>
+        <p className="text-sm text-nv-text-muted">Vérifiez vos informations avant de valider.</p>
       </div>
 
       <div>
         <h4 className="text-xs font-semibold text-nv-text-faint uppercase tracking-wider mb-3">Identité</h4>
         <div className="bg-nv-card rounded-xl p-3 border border-nv-border">
-          <Row label="Nom" value={`${data.firstName} ${data.lastName}`.trim()} />
-          <Row label="Email" value={data.email} />
-          <Row label="Marque" value={data.brandName} />
+          <div className="flex gap-3 py-2 border-b border-nv-border">
+            <span className="text-xs text-nv-text-muted w-40 shrink-0 pt-0.5">Nom</span>
+            <span className="text-sm text-nv-text">{`${answers.firstName} ${answers.lastName}`.trim() || '—'}</span>
+          </div>
+          <div className="flex gap-3 py-2">
+            <span className="text-xs text-nv-text-muted w-40 shrink-0 pt-0.5">Email</span>
+            <span className="text-sm text-nv-text">{answers.email || '—'}</span>
+          </div>
         </div>
       </div>
 
-      <div>
-        <h4 className="text-xs font-semibold text-nv-text-faint uppercase tracking-wider mb-3">Branding</h4>
-        <div className="bg-nv-card rounded-xl p-3 border border-nv-border">
-          <Row label="Canaux" value={data.acquisitionChannels} />
-          <Row label="Perception visuelle" value={data.visualPerception} />
-          <Row label="Style de montage" value={data.editingStyles} />
-          <Row label="Vibe musicale" value={data.musicVibe} />
-          <Row label="CTA principal" value={data.callToAction} />
-          <Row label="À mettre en avant" value={data.mustHighlight} />
-          <Row label="À éviter" value={data.mustAvoid} />
-        </div>
-      </div>
-
-      <div>
-        <h4 className="text-xs font-semibold text-nv-text-faint uppercase tracking-wider mb-3">Audience</h4>
-        <div className="bg-nv-card rounded-xl p-3 border border-nv-border">
-          <Row label="Secteur" value={data.icpSector} />
-          <Row label="Tranche d'âge" value={data.icpTargetAge} />
-          <Row label="Statut cible" value={data.icpTargetStatus} />
-          <Row label="Ton de voix" value={data.icpTone} />
-          <Row label="Offre principale" value={data.icpOffer} />
-        </div>
-      </div>
+      <Section title="Branding" qs={questions.filter(q => q.step === 'branding' && q.active)} />
+      <Section title="Audience (ICP)" qs={questions.filter(q => q.step === 'icp' && q.active)} />
 
       {selectedSpotObjects.length > 0 && (
         <div>
@@ -568,9 +579,9 @@ function Step5({ data, spots }: { data: FormData; spots: Spot[] }) {
 
 // ─── MAIN FORM ───────────────────────────────────────────────────────────────
 
-export default function OnboardingForm({ spots }: { spots: Spot[] }) {
+export default function OnboardingForm({ spots, questions }: { spots: Spot[]; questions: OnboardingQuestion[] }) {
   const [step, setStep] = useState(0)
-  const [data, setDataRaw] = useState<FormData>(INITIAL)
+  const [answers, setAnswersRaw] = useState<Answers>(INITIAL)
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
 
@@ -578,23 +589,21 @@ export default function OnboardingForm({ spots }: { spots: Spot[] }) {
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY)
-      if (saved) {
-        const parsed = JSON.parse(saved)
-        setDataRaw(prev => ({ ...prev, ...parsed }))
-      }
+      if (saved) setAnswersRaw(prev => ({ ...prev, ...JSON.parse(saved) }))
     } catch {}
   }, [])
 
-  const setData = useCallback((d: FormData) => {
-    setDataRaw(d)
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)) } catch {}
+  const setAnswers = useCallback((a: Answers) => {
+    setAnswersRaw(a)
+    try {
+      // Les fichiers base64 dépassent le quota localStorage — on les exclut de l'auto-save
+      const { icpPdf, channelsScreenshot, ...rest } = a
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(rest))
+    } catch {}
   }, [])
 
-  const canNext = () => {
-    if (step === 0) return !!data.email.trim()
-    if (step === 4) return true
-    return true
-  }
+  const brandingQs = questions.filter(q => q.step === 'branding' && q.active)
+  const icpQs = questions.filter(q => q.step === 'icp' && q.active)
 
   const handleSubmit = async () => {
     setSubmitting(true)
@@ -603,8 +612,8 @@ export default function OnboardingForm({ spots }: { spots: Spot[] }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...data,
-          inspirationLinks: data.inspirationLinks.filter(l => l.trim() !== ''),
+          ...answers,
+          inspirationLinks: answers.inspirationLinks.filter(l => l.trim() !== ''),
         }),
       })
       const json = await res.json()
@@ -628,7 +637,7 @@ export default function OnboardingForm({ spots }: { spots: Spot[] }) {
           <div>
             <h1 className="text-2xl font-semibold text-nv-text mb-2">Formulaire envoyé !</h1>
             <p className="text-nv-text-muted text-sm leading-relaxed">
-              Merci {data.firstName ? `, ${data.firstName}` : ''} ! Votre brief a bien été reçu. L'équipe New Vision Production vous recontactera prochainement pour finaliser votre planning de tournage.
+              Merci{answers.firstName ? ` ${answers.firstName}` : ''} ! Votre brief a bien été reçu. L'équipe New Vision Production vous recontactera prochainement pour finaliser votre planning de tournage.
             </p>
           </div>
           <div className="pt-2">
@@ -645,16 +654,10 @@ export default function OnboardingForm({ spots }: { spots: Spot[] }) {
       <header className="sticky top-0 z-10 bg-nv-black/90 backdrop-blur border-b border-nv-border">
         <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
           <img src="/nv-logo.png" alt="NVP" className="h-7" />
-          <span className="text-xs text-nv-text-muted">
-            Étape {step + 1} / {STEPS.length}
-          </span>
+          <span className="text-xs text-nv-text-muted">Étape {step + 1} / {STEPS.length}</span>
         </div>
-        {/* Progress bar */}
         <div className="h-0.5 bg-nv-border">
-          <div
-            className="h-full bg-primary transition-all duration-500"
-            style={{ width: `${((step + 1) / STEPS.length) * 100}%` }}
-          />
+          <div className="h-full bg-primary transition-all duration-500" style={{ width: `${((step + 1) / STEPS.length) * 100}%` }} />
         </div>
       </header>
 
@@ -686,11 +689,24 @@ export default function OnboardingForm({ spots }: { spots: Spot[] }) {
         <div className="bg-nv-dark border border-nv-border rounded-2xl p-6">
           <h2 className="text-lg font-semibold text-nv-text mb-6">{STEPS[step]}</h2>
 
-          {step === 0 && <Step1 data={data} setData={setData} />}
-          {step === 1 && <Step2 data={data} setData={setData} />}
-          {step === 2 && <Step3 data={data} setData={setData} />}
-          {step === 3 && <Step4 data={data} setData={setData} spots={spots} />}
-          {step === 4 && <Step5 data={data} spots={spots} />}
+          {step === 0 && <Step1 answers={answers} setAnswers={setAnswers} />}
+          {step === 1 && (
+            <div className="space-y-6">
+              {brandingQs.map(q => <QuestionField key={q.key} q={q} answers={answers} setAnswers={setAnswers} />)}
+            </div>
+          )}
+          {step === 2 && (
+            <div className="space-y-6">
+              <div className="p-4 rounded-xl bg-primary/5 border border-primary/20">
+                <p className="text-sm text-nv-text-muted leading-relaxed">
+                  <span className="text-primary font-medium">Votre client idéal</span> — Ces informations guident notre façon de vous filmer et de construire vos vidéos. Remplissez les questions ci-dessous <span className="text-nv-text">ou uploadez directement votre document ICP en PDF</span> à la fin.
+                </p>
+              </div>
+              {icpQs.map(q => <QuestionField key={q.key} q={q} answers={answers} setAnswers={setAnswers} />)}
+            </div>
+          )}
+          {step === 3 && <StepSpots answers={answers} setAnswers={setAnswers} spots={spots} />}
+          {step === 4 && <StepRecap answers={answers} spots={spots} questions={questions} />}
         </div>
 
         {/* Navigation */}
@@ -709,7 +725,7 @@ export default function OnboardingForm({ spots }: { spots: Spot[] }) {
             <button
               type="button"
               onClick={() => setStep(s => s + 1)}
-              disabled={!canNext()}
+              disabled={step === 0 && !answers.email.trim()}
               className="flex items-center gap-1.5 px-5 py-2 rounded-lg bg-primary text-nv-black font-medium hover:bg-primary-hover transition-colors text-sm disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Suivant
@@ -719,7 +735,7 @@ export default function OnboardingForm({ spots }: { spots: Spot[] }) {
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={submitting || !data.email.trim()}
+              disabled={submitting || !answers.email.trim()}
               className="flex items-center gap-2 px-6 py-2 rounded-lg bg-primary text-nv-black font-semibold hover:bg-primary-hover transition-colors text-sm disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
@@ -729,7 +745,7 @@ export default function OnboardingForm({ spots }: { spots: Spot[] }) {
         </div>
 
         <p className="text-center text-xs text-nv-text-faint mt-4">
-          Vos données sont sauvegardées automatiquement — vous pouvez reprendre à tout moment.
+          Vos réponses sont sauvegardées automatiquement — vous pouvez reprendre à tout moment.
         </p>
       </main>
     </div>

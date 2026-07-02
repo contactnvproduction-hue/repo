@@ -21,6 +21,7 @@ import { ClientBilanSection } from '@/components/clients/ClientBilanSection'
 import { ClientChargesSection } from '@/components/clients/ClientChargesSection'
 import { ClientAdaSection } from '@/components/clients/ClientAdaSection'
 import { ClientDocumentsSection } from '@/components/clients/ClientDocumentsSection'
+import { ClientOnboardingFormSection } from '@/components/clients/ClientOnboardingFormSection'
 
 const statusBadge: Record<string, 'success' | 'info' | 'warning' | 'muted'> = {
   ACTIF: 'success', PROSPECT: 'info', EN_PAUSE: 'warning', ARCHIVÉ: 'muted',
@@ -119,6 +120,16 @@ export default async function ClientDetailPage({ params }: PageProps) {
     prisma.agencySetting.findFirst({ select: { adaSheetUrl: true } }),
     (async () => { try { return await (prisma as any).clientBrief.findUnique({ where: { clientId: id } }) } catch { return null } })(),
     (async () => { try { return await (prisma as any).shootingPlan.findMany({ where: { clientId: id }, orderBy: { createdAt: 'desc' }, select: { id: true, title: true, shareToken: true, shootDate: true, location: true, updatedAt: true } }) } catch { return [] } })(),
+  ])
+
+  const [onboardingForm, spotSelections, contentTopics] = await Promise.all([
+    // icpPdf exclu : base64 jusqu'à 8 Mo — servi à la demande via /api/onboarding/file
+    (async () => { try { return await (prisma as any).clientOnboardingForm.findUnique({
+      where: { clientId: id },
+      omit: { icpPdf: true },
+    }) } catch { return null } })(),
+    (async () => { try { return await (prisma as any).clientSpotSelection.findMany({ where: { clientId: id }, include: { spot: { select: { id: true, name: true, city: true } } } }) } catch { return [] } })(),
+    (async () => { try { return await (prisma as any).clientContentTopic.findMany({ where: { clientId: id }, orderBy: [{ order: 'asc' }, { createdAt: 'asc' }] }) } catch { return [] } })(),
   ])
 
   if (!client) notFound()
@@ -221,6 +232,19 @@ export default async function ClientDetailPage({ params }: PageProps) {
       <ClientOnboarding
         clientId={client.id}
         initialChecklist={client.onboardingChecklist as Array<{ id: string; label: string; done: boolean }> | null}
+      />
+
+      {/* Formulaire d'onboarding rempli par le client + sujets de contenu */}
+      <ClientOnboardingFormSection
+        clientId={client.id}
+        data={onboardingForm ? {
+          ...onboardingForm,
+          completedAt: onboardingForm.completedAt
+            ? (onboardingForm.completedAt instanceof Date ? onboardingForm.completedAt.toISOString() : String(onboardingForm.completedAt))
+            : null,
+        } : null}
+        spotSelections={(spotSelections ?? []).map((s: any) => ({ id: s.spot.id, name: s.spot.name, city: s.spot.city }))}
+        initialTopics={(contentTopics ?? []).map((t: any) => ({ id: t.id, title: t.title, notes: t.notes, status: t.status, order: t.order }))}
       />
 
       {/* INFOS DA — pleine largeur */}

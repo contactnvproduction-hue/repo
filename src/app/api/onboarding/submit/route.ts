@@ -12,25 +12,41 @@ export async function POST(req: NextRequest) {
       visualPerception, editingStyles, mustHighlight, mustAvoid,
       brandFont, musicVibe, callToAction,
       icpSector, icpTargetAge, icpTargetStatus, icpTargetProblem, icpOffer, icpTone,
+      icpPdf, icpPdfName, channelsScreenshot, customAnswers,
       selectedSpots,
     } = body
+
+    // Garde-fou taille des fichiers base64 (~8 Mo réels → ~11 Mo encodés)
+    const MAX_B64 = 11 * 1024 * 1024
+    if ((icpPdf && icpPdf.length > MAX_B64) || (channelsScreenshot && channelsScreenshot.length > MAX_B64)) {
+      return NextResponse.json({ error: 'Fichier trop lourd (max 8 Mo)' }, { status: 400 })
+    }
 
     if (!email) {
       return NextResponse.json({ error: 'Email requis' }, { status: 400 })
     }
 
-    // Upsert client by email
-    const client = await db.client.upsert({
-      where: { email },
-      update: {
-        name: `${firstName ?? ''} ${lastName ?? ''}`.trim() || undefined,
-      },
-      create: {
-        name: `${firstName ?? ''} ${lastName ?? ''}`.trim() || email,
-        email,
-        status: 'ACTIF',
-      },
+    // email n'est pas @unique sur Client → findFirst puis create/update
+    const fullName = `${firstName ?? ''} ${lastName ?? ''}`.trim()
+    const existing = await db.client.findFirst({
+      where: { email: { equals: email, mode: 'insensitive' } },
     })
+    const client = existing
+      ? await db.client.update({
+          where: { id: existing.id },
+          data: {
+            name: fullName || existing.name,
+            company: brandName || existing.company,
+          },
+        })
+      : await db.client.create({
+          data: {
+            name: fullName || email,
+            email,
+            company: brandName || null,
+            status: 'ACTIF',
+          },
+        })
 
     // Upsert onboarding form data
     await db.clientOnboardingForm.upsert({
@@ -41,6 +57,8 @@ export async function POST(req: NextRequest) {
         visualPerception, editingStyles, mustHighlight, mustAvoid,
         brandFont, musicVibe, callToAction,
         icpSector, icpTargetAge, icpTargetStatus, icpTargetProblem, icpOffer, icpTone,
+        icpPdf, icpPdfName, channelsScreenshot,
+        customAnswers: customAnswers ?? undefined,
         status: 'completed',
         completedAt: new Date(),
       },
@@ -52,6 +70,8 @@ export async function POST(req: NextRequest) {
         visualPerception: visualPerception ?? [], editingStyles: editingStyles ?? [],
         mustHighlight, mustAvoid, brandFont, musicVibe, callToAction,
         icpSector, icpTargetAge, icpTargetStatus, icpTargetProblem, icpOffer, icpTone,
+        icpPdf, icpPdfName, channelsScreenshot,
+        customAnswers: customAnswers ?? undefined,
         status: 'completed',
         completedAt: new Date(),
       },

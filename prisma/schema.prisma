@@ -116,6 +116,7 @@ model Client {
   shootingPlans   ShootingPlan[]
   onboardingForm  ClientOnboardingForm?
   spotSelections  ClientSpotSelection[]
+  contentTopics   ClientContentTopic[]
 
   @@map("clients")
 }
@@ -1092,12 +1093,44 @@ model ClientOnboardingForm {
   icpOffer         String?
   icpTone          String?
 
+  // Documents uploadés par le client (base64 data-URLs — le disque Render est éphémère)
+  icpPdf             String? // PDF avatar client
+  icpPdfName         String?
+  channelsScreenshot String? // capture d'écran état des canaux d'acquisition
+
+  // Réponses aux questions personnalisées ajoutées depuis le dashboard (clé = question key)
+  customAnswers Json?
+
   status      String   @default("pending") // pending | completed
   completedAt DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@map("client_onboarding_forms")
+}
+
+// Configuration éditable des questions du formulaire d'onboarding (singleton)
+model OnboardingConfig {
+  id        String   @id @default("main")
+  questions Json     // [{ key, label, hint, options, active, custom, step }]
+  updatedAt DateTime @updatedAt
+
+  @@map("onboarding_config")
+}
+
+// Sujets de contenu prédéfinis par client (basés sur l'ICP de l'onboarding)
+model ClientContentTopic {
+  id        String   @id @default(cuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  title     String
+  notes     String?
+  status    String   @default("IDEE") // IDEE | VALIDE | TOURNE | PUBLIE
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("client_content_topics")
 }
 
 // ─── SOCIAL KPIs ──────────────────────────────────────────────────────────────
