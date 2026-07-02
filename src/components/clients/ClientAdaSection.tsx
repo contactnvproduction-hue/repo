@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import {
-  RefreshCw, CheckCircle2, AlertCircle, ClipboardList,
+  CheckCircle2, AlertCircle, ClipboardList,
   ExternalLink, ChevronDown, ChevronRight,
   Pencil, Plus, X, RotateCcw, Save,
 } from 'lucide-react'
@@ -24,7 +24,6 @@ interface AdaNotes {
 interface Props {
   clientId: string
   initialResponse: AdaResponse | null
-  hasSheetConfigured: boolean
   initialNotes: AdaNotes | null
 }
 
@@ -106,9 +105,8 @@ function FieldValue({ value, isAttachment = false }: { value: string; isAttachme
   )
 }
 
-export function ClientAdaSection({ clientId, initialResponse, hasSheetConfigured, initialNotes }: Props) {
+export function ClientAdaSection({ clientId, initialResponse, initialNotes }: Props) {
   const [response, setResponse] = useState(initialResponse)
-  const [syncing, setSyncing] = useState(false)
   const [expanded, setExpanded] = useState(true)
   const [editing, setEditing] = useState(false)
 
@@ -132,29 +130,6 @@ export function ClientAdaSection({ clientId, initialResponse, hasSheetConfigured
     (key: string, synced: string) => notes.overrides[key] ?? synced,
     [notes]
   )
-
-  // --- Sync ---
-  const handleSync = async () => {
-    setSyncing(true)
-    try {
-      const res = await fetch('/api/ada/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId }),
-      })
-      const result = await res.json()
-      if (result.errors?.length) {
-        toast.error(result.errors[0])
-      } else {
-        toast.success(`Sync terminé · ${result.matched} correspondance${result.matched !== 1 ? 's' : ''} trouvée${result.matched !== 1 ? 's' : ''}`)
-        window.location.reload()
-      }
-    } catch {
-      toast.error('Erreur de synchronisation')
-    } finally {
-      setSyncing(false)
-    }
-  }
 
   // --- Edit mode ---
   const startEdit = () => {
@@ -236,40 +211,17 @@ export function ClientAdaSection({ clientId, initialResponse, hasSheetConfigured
               {hasNotes ? 'Annoté' : 'Modifier'}
             </button>
           )}
-          <button
-            onClick={handleSync}
-            disabled={syncing || !hasSheetConfigured}
-            title={!hasSheetConfigured ? 'Configurer la Google Sheet dans les paramètres' : 'Synchroniser depuis Google Forms'}
-            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-nv-border text-nv-text-muted hover:text-white hover:border-nv-border-light transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <RefreshCw size={11} className={syncing ? 'animate-spin' : ''} />
-            {syncing ? 'Sync…' : 'Sync'}
-          </button>
         </div>
       </div>
 
       {expanded && (
         <>
-          {!hasSheetConfigured ? (
+          {!response && notes.extras.length === 0 ? (
             <div className="px-5 py-8 text-center">
               <ClipboardList size={28} className="mx-auto mb-3 text-nv-text-faint opacity-30" />
-              <p className="text-sm text-nv-text-muted mb-1">Google Sheet non configurée</p>
-              <p className="text-xs text-nv-text-faint mb-4">
-                Lie ton formulaire à une Google Sheet et colle l&apos;URL dans les paramètres.
-              </p>
-              <a
-                href="/settings"
-                className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-primary/30 text-primary hover:bg-primary/10 transition-colors"
-              >
-                <ExternalLink size={11} /> Aller aux paramètres
-              </a>
-            </div>
-          ) : !response && notes.extras.length === 0 ? (
-            <div className="px-5 py-8 text-center">
-              <AlertCircle size={28} className="mx-auto mb-3 text-amber-400 opacity-40" />
-              <p className="text-sm text-nv-text-muted mb-1">Aucun formulaire ADA reçu</p>
+              <p className="text-sm text-nv-text-muted mb-1">Aucune donnée DA</p>
               <p className="text-xs text-nv-text-faint">
-                Clique sur Sync pour vérifier depuis Google Forms.
+                Ajoutez les infos manuellement avec le bouton Modifier — ou attendez la soumission du formulaire d&apos;onboarding.
               </p>
             </div>
           ) : editing ? (

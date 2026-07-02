@@ -70,27 +70,35 @@ export function briefPrefillFromOnboarding(ob: OnboardingFormData | null | undef
   }
 }
 
-// Prépare les champs pré-remplis d'un plan de tournage
+// Prépare les champs pré-remplis d'un plan de tournage.
+// Reporte TOUTES les infos onboarding utiles au tournage : rien à réécrire.
 export function shootingPlanPrefillFromOnboarding(
   ob: OnboardingFormData | null | undefined,
   spots: { name: string; address?: string | null }[],
 ) {
   if (!ob && spots.length === 0) return null
 
-  const daInfoParts = [
-    ob?.visualPerception?.length ? `Perception : ${ob.visualPerception.join(', ')}` : null,
-    ob?.editingStyles?.length ? `Montage : ${ob.editingStyles.join(', ')}` : null,
-    ob?.brandFont ? `Police : ${ob.brandFont}` : null,
-  ].filter(Boolean)
+  // Direction artistique — une entrée par info, éditable dans le builder
+  const daInfo = [
+    ob?.visualPerception?.length ? { id: genId(), key: 'Perception visuelle', value: ob.visualPerception.join(', ') } : null,
+    ob?.editingStyles?.length ? { id: genId(), key: 'Style de montage', value: ob.editingStyles.join(', ') } : null,
+    ob?.brandFont ? { id: genId(), key: 'Police / branding', value: ob.brandFont } : null,
+    ob?.musicVibe ? { id: genId(), key: 'Musique', value: ob.musicVibe } : null,
+    ob?.callToAction ? { id: genId(), key: 'CTA à intégrer', value: ob.callToAction } : null,
+    ob?.icpTone ? { id: genId(), key: 'Ton de voix', value: ob.icpTone } : null,
+    ob?.inspirationNotes ? { id: genId(), key: 'Inspirations — ce qu\'il aime', value: ob.inspirationNotes } : null,
+  ].filter((e): e is { id: string; key: string; value: string } => !!e)
 
   return {
     title: ob?.brandName ? `Tournage ${ob.brandName}` : '',
     location: spots.map(s => s.name).join(' + '),
     locationAddress: spots.map(s => s.address).filter(Boolean).join(' / '),
+    daInfo: daInfo.length ? daInfo : undefined,
     notes: [
       ob?.mustHighlight ? `À mettre en avant : ${ob.mustHighlight}` : null,
-      ob?.mustAvoid ? `À éviter : ${ob.mustAvoid}` : null,
-      daInfoParts.length ? daInfoParts.join(' • ') : null,
+      ob?.mustAvoid ? `À éviter absolument : ${ob.mustAvoid}` : null,
+      ob?.icpOffer ? `Offre / promesse : ${ob.icpOffer}` : null,
+      ob?.icpTargetProblem ? `Problématique de la cible : ${ob.icpTargetProblem}` : null,
     ].filter(Boolean).join('\n\n'),
   }
 }

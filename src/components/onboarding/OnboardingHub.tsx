@@ -1,11 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
-  Copy, Check, RefreshCw, FileText, MapPin, ExternalLink,
-  ChevronDown, ChevronUp, Loader2, Send, ClipboardCheck,
+  Copy, Check, FileText, MapPin, ExternalLink,
+  ChevronDown, ChevronUp, Send, ClipboardCheck,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -30,14 +29,9 @@ type HubRow = {
   spots: { name: string; city: string }[]
 }
 
-type PendingClient = { id: string; name: string; email: string | null }
-
-export function OnboardingHub({ rows, pendingClients }: { rows: HubRow[]; pendingClients: PendingClient[] }) {
-  const router = useRouter()
+export function OnboardingHub({ rows }: { rows: HubRow[] }) {
   const [copied, setCopied] = useState(false)
   const [expanded, setExpanded] = useState<string | null>(null)
-  const [refreshing, setRefreshing] = useState<string | null>(null)
-  const [syncingAll, setSyncingAll] = useState(false)
 
   const formUrl = typeof window !== 'undefined' ? `${window.location.origin}/onboarding` : '/onboarding'
 
@@ -49,43 +43,6 @@ export function OnboardingHub({ rows, pendingClients }: { rows: HubRow[]; pendin
       setTimeout(() => setCopied(false), 2000)
     } catch {
       toast.error('Impossible de copier')
-    }
-  }
-
-  // Actualise UN client depuis le Google Sheet (écrase ses infos onboarding)
-  const refreshClient = async (clientId: string, name: string) => {
-    if (!confirm(`Ré-importer les infos onboarding de ${name} depuis le Google Sheet ?\n\nSes infos actuelles seront remplacées par celles du sheet.`)) return
-    setRefreshing(clientId)
-    try {
-      const res = await fetch('/api/onboarding/migrate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId, force: true }),
-      })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? 'Erreur')
-      toast.success(json.migrated > 0 ? `Infos de ${name} actualisées` : 'Aucune réponse trouvée dans le sheet pour ce client')
-      router.refresh()
-    } catch (e: any) {
-      toast.error(e.message ?? 'Erreur')
-    } finally {
-      setRefreshing(null)
-    }
-  }
-
-  // Sync globale : sheet → nouvelles réponses uniquement (n'écrase rien)
-  const syncAll = async () => {
-    setSyncingAll(true)
-    try {
-      const res = await fetch('/api/onboarding/migrate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? 'Erreur')
-      toast.success(`Sync terminée — ${json.migrated} nouvelle(s) réponse(s) importée(s)`)
-      router.refresh()
-    } catch (e: any) {
-      toast.error(e.message ?? 'Erreur')
-    } finally {
-      setSyncingAll(false)
     }
   }
 
@@ -143,21 +100,11 @@ export function OnboardingHub({ rows, pendingClients }: { rows: HubRow[]; pendin
             <ClipboardCheck className="w-4 h-4 text-primary" />
             Onboardings complétés ({rows.length})
           </h2>
-          <button
-            type="button"
-            onClick={syncAll}
-            disabled={syncingAll}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-nv-border text-nv-text-muted rounded-lg hover:text-nv-text hover:border-nv-border-light transition-colors disabled:opacity-60"
-            title="Importe les nouvelles réponses du Google Sheet sans écraser l'existant"
-          >
-            {syncingAll ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-            Synchroniser le sheet
-          </button>
         </div>
 
         {rows.length === 0 ? (
           <div className="text-center py-10 text-nv-text-muted text-sm border border-dashed border-nv-border rounded-xl">
-            Aucun onboarding complété pour l'instant.
+            Aucun onboarding complété pour l'instant — les réponses apparaîtront ici dès qu'un client remplit le formulaire.
           </div>
         ) : (
           <div className="space-y-2">
@@ -190,15 +137,6 @@ export function OnboardingHub({ rows, pendingClients }: { rows: HubRow[]; pendin
                       </div>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => refreshClient(row.clientId, row.clientName)}
-                        disabled={refreshing === row.clientId}
-                        title="Actualiser depuis le Google Sheet"
-                        className="p-1.5 rounded-lg text-nv-text-muted hover:text-primary hover:bg-primary/10 transition-colors disabled:opacity-60"
-                      >
-                        {refreshing === row.clientId ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                      </button>
                       <button
                         type="button"
                         onClick={() => setExpanded(isOpen ? null : row.clientId)}
@@ -257,31 +195,6 @@ export function OnboardingHub({ rows, pendingClients }: { rows: HubRow[]; pendin
         )}
       </div>
 
-      {/* Clients sans onboarding */}
-      {pendingClients.length > 0 && (
-        <div>
-          <h2 className="text-sm font-semibold text-nv-text mb-3">
-            En attente d'onboarding ({pendingClients.length})
-          </h2>
-          <div className="space-y-1.5">
-            {pendingClients.map(c => (
-              <div key={c.id} className="flex items-center justify-between gap-3 px-3 py-2 border border-nv-border rounded-lg bg-nv-card">
-                <div className="min-w-0">
-                  <Link href={`/clients/${c.id}`} className="text-sm text-nv-text hover:text-primary transition-colors">{c.name}</Link>
-                  {c.email && <span className="text-xs text-nv-text-faint ml-2">{c.email}</span>}
-                </div>
-                <button
-                  type="button"
-                  onClick={copyLink}
-                  className="flex items-center gap-1 text-xs text-primary hover:text-primary-light transition-colors shrink-0"
-                >
-                  <Copy className="w-3 h-3" /> Copier le lien
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   )
 }

@@ -11,7 +11,7 @@ export default async function OnboardingsPage() {
 
   const db = prisma as any
 
-  const [forms, selections, activeClients] = await Promise.all([
+  const [forms, selections] = await Promise.all([
     (async () => { try { return await db.clientOnboardingForm.findMany({
       omit: { icpPdf: true },
       include: { client: { select: { id: true, name: true, status: true } } },
@@ -20,11 +20,6 @@ export default async function OnboardingsPage() {
     (async () => { try { return await db.clientSpotSelection.findMany({
       include: { spot: { select: { name: true, city: true } } },
     }) } catch { return [] } })(),
-    prisma.client.findMany({
-      where: { status: 'ACTIF' },
-      select: { id: true, name: true, email: true },
-      orderBy: { name: 'asc' },
-    }),
   ])
 
   const spotsByClient: Record<string, { name: string; city: string }[]> = {}
@@ -55,9 +50,6 @@ export default async function OnboardingsPage() {
     spots: spotsByClient[f.clientId] ?? [],
   }))
 
-  const doneIds = new Set(rows.map((r: any) => r.clientId))
-  const pendingClients = activeClients.filter(c => !doneIds.has(c.id))
-
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
@@ -66,11 +58,11 @@ export default async function OnboardingsPage() {
           Onboarding
         </h1>
         <p className="text-sm text-nv-text-muted mt-1">
-          Lien du formulaire, réponses clients et synchronisation — tout part d'ici et se reporte automatiquement dans les fiches clients, briefs et plans de tournage.
+          Un lien universel pour tous les clients — chaque réponse est rattachée automatiquement à la bonne fiche client (nom, prénom, marque, email) et se reporte dans les briefs et plans de tournage.
         </p>
       </div>
 
-      <OnboardingHub rows={rows} pendingClients={pendingClients} />
+      <OnboardingHub rows={rows} />
     </div>
   )
 }

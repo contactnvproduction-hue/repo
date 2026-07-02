@@ -73,7 +73,7 @@ export default async function ClientDetailPage({ params }: PageProps) {
   const session = await auth()
   if (!session?.user) return null
 
-  const [client, allTeam, settings, brief, shootingPlans] = await Promise.all([
+  const [client, allTeam, brief, shootingPlans] = await Promise.all([
     prisma.client.findUnique({
       where: { id },
       include: {
@@ -118,7 +118,6 @@ export default async function ClientDetailPage({ params }: PageProps) {
       },
     }),
     prisma.user.findMany({ select: { id: true, name: true }, orderBy: { name: 'asc' } }),
-    prisma.agencySetting.findFirst({ select: { adaSheetUrl: true } }),
     (async () => { try { return await (prisma as any).clientBrief.findUnique({ where: { clientId: id } }) } catch { return null } })(),
     (async () => { try { return await (prisma as any).shootingPlan.findMany({ where: { clientId: id }, orderBy: { createdAt: 'desc' }, select: { id: true, title: true, shareToken: true, shootDate: true, location: true, updatedAt: true } }) } catch { return [] } })(),
   ])
@@ -263,7 +262,6 @@ export default async function ClientDetailPage({ params }: PageProps) {
       {/* INFOS DA — pleine largeur */}
       <ClientAdaSection
         clientId={client.id}
-        hasSheetConfigured={!!(settings?.adaSheetUrl)}
         initialResponse={client.adaResponses?.[0]
           ? {
               id: client.adaResponses[0].id,

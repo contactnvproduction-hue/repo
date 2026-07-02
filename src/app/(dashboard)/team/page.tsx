@@ -23,6 +23,30 @@ export default async function TeamPage() {
   const session = await auth()
   if (!session?.user) return null
 
+  // Samuel doit apparaître dans le formulaire de suivi des relances (idempotent) :
+  // s'il existe → réactive son suivi ; sinon → créé comme membre sans accès dashboard
+  try {
+    const samuel = await prisma.user.findFirst({
+      where: { name: { contains: 'samuel', mode: 'insensitive' } },
+    })
+    if (samuel) {
+      if (!samuel.includeInSuivi) {
+        await prisma.user.update({ where: { id: samuel.id }, data: { includeInSuivi: true } })
+      }
+    } else {
+      await prisma.user.create({
+        data: {
+          name: 'Samuel',
+          email: 'samuel@nvproduction.local',
+          password: `no-login-${Math.random().toString(36)}${Date.now()}`,
+          role: 'MONTEUR',
+          hasLogin: false,
+          includeInSuivi: true,
+        },
+      })
+    }
+  } catch {}
+
   const todayStr = new Date().toISOString().slice(0, 10)
 
   const currentMonth = new Date().toISOString().slice(0, 7)

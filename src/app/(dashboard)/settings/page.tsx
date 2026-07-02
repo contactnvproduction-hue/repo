@@ -8,7 +8,6 @@ import { TaskCategoryManager } from '@/components/settings/TaskCategoryManager'
 import { UserManager } from '@/components/settings/UserManager'
 import { SpotManager } from '@/components/settings/SpotManager'
 import { OnboardingQuestionManager } from '@/components/settings/OnboardingQuestionManager'
-import { OnboardingMigration } from '@/components/settings/OnboardingMigration'
 import { mergeQuestions } from '@/lib/onboarding-questions'
 import { ensureDefaultSpots } from '@/lib/shooting-spots-seed'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -118,10 +117,7 @@ export default async function SettingsPage() {
             </CardTitle>
             <p className="text-sm text-nv-text-muted">Personnalisez les questions posées aux nouveaux clients : libellés, options, questions supplémentaires.</p>
           </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="pb-4 border-b border-nv-border">
-              <OnboardingMigration />
-            </div>
+          <CardContent>
             <OnboardingQuestionManager initialQuestions={onboardingQuestions} />
           </CardContent>
         </Card>
