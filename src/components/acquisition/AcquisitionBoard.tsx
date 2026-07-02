@@ -1433,7 +1433,7 @@ export function AcquisitionBoard({
                       </button>
                     ))}
                   </div>
-                  <p className="text-[10px] text-nv-text-faint mt-1.5">La LTV du client sera automatiquement répartie entre ces produits dans le graphique CA.</p>
+                  <p className="text-[10px] text-nv-text-faint mt-1.5">Le CA collecté du client sera automatiquement réparti entre ces produits dans le graphique CA.</p>
                 </div>
               )}
 

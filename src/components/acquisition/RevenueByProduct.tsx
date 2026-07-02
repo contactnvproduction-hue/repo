@@ -44,7 +44,7 @@ export function RevenueByProduct({
           Répartition CA par produit
         </h2>
         <p className="text-xs text-nv-text-muted mt-0.5 mb-4">
-          La LTV contractée de chaque client est répartie entre ses produits tagués (fiche client, fiche projet ou close de vente).
+          Le CA collecté (paiements confirmés) de chaque client tagué est réparti entre ses produits (fiche client, fiche projet ou close de vente).
         </p>
 
         {chartData.length === 0 ? (
@@ -104,7 +104,7 @@ export function RevenueByProduct({
       <div className="bg-nv-card border border-nv-border rounded-xl p-5">
         <h2 className="text-sm font-semibold text-white flex items-center gap-2 mb-4">
           <Trophy size={16} className="text-primary" />
-          Top clients — LTV
+          Top clients — CA collecté
         </h2>
         {topClients.length === 0 ? (
           <p className="text-xs text-nv-text-faint text-center py-8">Aucune donnée.</p>

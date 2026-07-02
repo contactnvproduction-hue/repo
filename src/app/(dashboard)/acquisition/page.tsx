@@ -80,36 +80,46 @@ export default async function AcquisitionPage() {
     }
   } catch {}
 
-  // Chaque tag produit sur un client répartit automatiquement sa LTV contractée
-  // (retainers : montant mensuel × durée) entre ses produits tagués.
+  // Seul le CA des clients ayant un tag produit est pris en compte.
+  // LTV = CA COLLECTÉ (paiements confirmés), pas le contracté — réparti
+  // équitablement entre les produits tagués du client.
   const clientProductItems: any[] = await (async () => {
     try {
       return await dbAny.clientProduct.findMany({
         include: {
           product: { select: { id: true, name: true, color: true } },
-          client: { select: { id: true, name: true, retainers: { select: { monthlyAmount: true, durationMonths: true } } } },
+          client: { select: { id: true, name: true } },
         },
       })
     } catch { return [] }
   })()
 
-  // Regroupe les tags par client pour partager la LTV équitablement
-  const byClient: Record<string, { name: string; ltv: number; tags: { productId: string; name: string; color: string }[] }> = {}
+  // Regroupe les tags par client
+  const byClient: Record<string, { name: string; collected: number; tags: { productId: string; name: string; color: string }[] }> = {}
   for (const item of clientProductItems) {
-    const entry = byClient[item.clientId] ??= {
-      name: item.client.name,
-      ltv: (item.client.retainers ?? []).reduce((s: number, r: any) => s + r.monthlyAmount * r.durationMonths, 0),
-      tags: [],
-    }
+    const entry = byClient[item.clientId] ??= { name: item.client.name, collected: 0, tags: [] }
     if (!entry.tags.some(t => t.productId === item.productId)) {
       entry.tags.push({ productId: item.productId, name: item.product.name, color: item.product.color })
+    }
+  }
+
+  // CA collecté par client tagué (paiements confirmés sur ses factures)
+  const taggedClientIds = Object.keys(byClient)
+  if (taggedClientIds.length > 0) {
+    const payments = await prisma.payment.findMany({
+      where: { confirmed: true, invoice: { clientId: { in: taggedClientIds } } },
+      select: { amount: true, invoice: { select: { clientId: true } } },
+    })
+    for (const pay of payments) {
+      const cId = pay.invoice?.clientId
+      if (cId && byClient[cId]) byClient[cId].collected += pay.amount
     }
   }
 
   const productStatsMap: Record<string, { productId: string; name: string; color: string; quantity: number; total: number }> = {}
   const clientStatsMap: Record<string, { clientId: string; name: string; total: number }> = {}
   for (const [clientId, entry] of Object.entries(byClient)) {
-    const share = entry.tags.length > 0 ? entry.ltv / entry.tags.length : 0
+    const share = entry.tags.length > 0 ? entry.collected / entry.tags.length : 0
     for (const tag of entry.tags) {
       const p = productStatsMap[tag.productId] ??= {
         productId: tag.productId, name: tag.name, color: tag.color, quantity: 0, total: 0,
@@ -117,7 +127,7 @@ export default async function AcquisitionPage() {
       p.quantity += 1 // nombre de clients tagués
       p.total += share
     }
-    clientStatsMap[clientId] = { clientId, name: entry.name, total: entry.ltv }
+    clientStatsMap[clientId] = { clientId, name: entry.name, total: entry.collected }
   }
   const productStats = Object.values(productStatsMap).map(p => ({ ...p, total: Math.round(p.total) }))
   const topClients = Object.values(clientStatsMap).filter(c => c.total > 0).sort((a, b) => b.total - a.total).slice(0, 8)

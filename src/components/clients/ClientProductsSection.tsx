@@ -104,7 +104,7 @@ export function ClientProductsSection({
           )}
         </CardTitle>
         <p className="text-sm text-nv-text-muted">
-          Taguez les offres vendues à ce client — sa LTV est automatiquement répartie entre ses tags dans le graphique CA par produit (Acquisition).
+          Taguez les offres vendues à ce client — son CA collecté est automatiquement réparti entre ses tags dans le graphique CA par produit (Acquisition).
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
