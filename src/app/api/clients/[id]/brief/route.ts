@@ -27,6 +27,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   const body = await req.json()
 
   const {
+    title,
     monteur,
     deadline,
     niche,
@@ -42,39 +43,27 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     resources,
   } = body
 
+  const fields = {
+    title,
+    monteur,
+    deadline,
+    niche,
+    positionnement,
+    avatar,
+    livrables,
+    canaux,
+    ton,
+    inspirations,
+    colors,
+    notes,
+    avoidList,
+    resources,
+  }
+
   const brief = await (prisma as any).clientBrief.upsert({
     where: { clientId: id },
-    create: {
-      clientId: id,
-      monteur,
-      deadline,
-      niche,
-      positionnement,
-      avatar,
-      livrables,
-      canaux,
-      ton,
-      inspirations,
-      colors,
-      notes,
-      avoidList,
-      resources,
-    },
-    update: {
-      monteur,
-      deadline,
-      niche,
-      positionnement,
-      avatar,
-      livrables,
-      canaux,
-      ton,
-      inspirations,
-      colors,
-      notes,
-      avoidList,
-      resources,
-    },
+    create: { clientId: id, ...fields },
+    update: fields,
   })
 
   revalidatePath(`/clients/${id}`)

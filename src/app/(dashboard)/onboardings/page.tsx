@@ -2,6 +2,7 @@ import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { ClipboardCheck } from 'lucide-react'
 import { OnboardingHub } from '@/components/onboarding/OnboardingHub'
+import { importLegacyResponses } from '@/lib/onboarding-import'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,6 +11,9 @@ export default async function OnboardingsPage() {
   if (!session?.user) return null
 
   const db = prisma as any
+
+  // Réintègre l'ancienne data Google Forms (idempotent, ne touche pas l'existant)
+  await importLegacyResponses(db)
 
   const [forms, selections] = await Promise.all([
     (async () => { try { return await db.clientOnboardingForm.findMany({

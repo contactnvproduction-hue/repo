@@ -72,13 +72,14 @@ export async function POST(req: NextRequest) {
       visualPerception, editingStyles, mustHighlight, mustAvoid,
       brandFont, musicVibe, callToAction,
       icpSector, icpTargetAge, icpTargetStatus, icpTargetProblem, icpOffer, icpTone,
-      icpPdf, icpPdfName, channelsScreenshot, customAnswers,
+      icpPdf, icpPdfName, channelsScreenshots, customAnswers,
       selectedSpots,
     } = body
 
     // Garde-fou taille des fichiers base64 (~8 Mo réels → ~11 Mo encodés)
     const MAX_B64 = 11 * 1024 * 1024
-    if ((icpPdf && icpPdf.length > MAX_B64) || (channelsScreenshot && channelsScreenshot.length > MAX_B64)) {
+    const screenshots: string[] = Array.isArray(channelsScreenshots) ? channelsScreenshots : []
+    if ((icpPdf && icpPdf.length > MAX_B64) || screenshots.some((s: string) => s.length > MAX_B64)) {
       return NextResponse.json({ error: 'Fichier trop lourd (max 8 Mo)' }, { status: 400 })
     }
 
@@ -117,7 +118,7 @@ export async function POST(req: NextRequest) {
         visualPerception, editingStyles, mustHighlight, mustAvoid,
         brandFont, musicVibe, callToAction,
         icpSector, icpTargetAge, icpTargetStatus, icpTargetProblem, icpOffer, icpTone,
-        icpPdf, icpPdfName, channelsScreenshot,
+        icpPdf, icpPdfName, channelsScreenshots: screenshots,
         customAnswers: customAnswers ?? undefined,
         status: 'completed',
         completedAt: new Date(),
@@ -130,7 +131,7 @@ export async function POST(req: NextRequest) {
         visualPerception: visualPerception ?? [], editingStyles: editingStyles ?? [],
         mustHighlight, mustAvoid, brandFont, musicVibe, callToAction,
         icpSector, icpTargetAge, icpTargetStatus, icpTargetProblem, icpOffer, icpTone,
-        icpPdf, icpPdfName, channelsScreenshot,
+        icpPdf, icpPdfName, channelsScreenshots: screenshots,
         customAnswers: customAnswers ?? undefined,
         status: 'completed',
         completedAt: new Date(),

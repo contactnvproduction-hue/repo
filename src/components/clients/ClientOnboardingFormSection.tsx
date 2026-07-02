@@ -30,6 +30,7 @@ type OnboardingData = {
   icpTone: string | null
   icpPdfName: string | null
   channelsScreenshot: string | null
+  channelsScreenshots?: string[]
   customAnswers: Record<string, string> | null
   completedAt: string | null
 }
@@ -234,16 +235,27 @@ export function ClientOnboardingFormSection({
                 </div>
               )}
 
-              {data.channelsScreenshot && (
-                <div>
-                  <h4 className="text-xs font-semibold text-nv-text-faint uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                    <ImageIcon className="w-3.5 h-3.5" /> État des canaux au début de la collaboration
-                  </h4>
-                  <a href={data.channelsScreenshot} target="_blank" rel="noopener noreferrer">
-                    <img src={data.channelsScreenshot} alt="Canaux d'acquisition" className="max-h-64 rounded-xl border border-nv-border object-contain hover:opacity-90 transition-opacity" />
-                  </a>
-                </div>
-              )}
+              {(() => {
+                const screenshots = [
+                  ...(data.channelsScreenshots ?? []),
+                  ...(data.channelsScreenshot ? [data.channelsScreenshot] : []),
+                ]
+                if (screenshots.length === 0) return null
+                return (
+                  <div>
+                    <h4 className="text-xs font-semibold text-nv-text-faint uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                      <ImageIcon className="w-3.5 h-3.5" /> État des canaux au début de la collaboration ({screenshots.length})
+                    </h4>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {screenshots.map((img, i) => (
+                        <a key={i} href={img} target="_blank" rel="noopener noreferrer">
+                          <img src={img} alt={`Canal ${i + 1}`} className="w-full h-32 rounded-xl border border-nv-border object-cover hover:opacity-90 transition-opacity" />
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })()}
             </>
           )}
 

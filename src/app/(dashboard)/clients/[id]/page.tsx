@@ -19,7 +19,6 @@ import { ClientInteractions } from '@/components/clients/ClientInteractions'
 import { ClientRetainerManager } from '@/components/clients/ClientRetainerManager'
 import { ClientBilanSection } from '@/components/clients/ClientBilanSection'
 import { ClientChargesSection } from '@/components/clients/ClientChargesSection'
-import { ClientAdaSection } from '@/components/clients/ClientAdaSection'
 import { ClientDocumentsSection } from '@/components/clients/ClientDocumentsSection'
 import { ClientOnboardingFormSection } from '@/components/clients/ClientOnboardingFormSection'
 import { ClientProductsSection } from '@/components/clients/ClientProductsSection'
@@ -110,10 +109,6 @@ export default async function ClientDetailPage({ params }: PageProps) {
         },
         charges: {
           orderBy: [{ month: 'desc' }, { createdAt: 'asc' }],
-        },
-        adaResponses: {
-          orderBy: { createdAt: 'desc' },
-          take: 1,
         },
       },
     }),
@@ -259,24 +254,6 @@ export default async function ClientDetailPage({ params }: PageProps) {
         }))}
       />
 
-      {/* INFOS DA — pleine largeur */}
-      <ClientAdaSection
-        clientId={client.id}
-        initialResponse={client.adaResponses?.[0]
-          ? {
-              id: client.adaResponses[0].id,
-              responseTimestamp: client.adaResponses[0].responseTimestamp,
-              data: client.adaResponses[0].data as Record<string, string>,
-              matchedOn: client.adaResponses[0].matchedOn,
-              updatedAt: client.adaResponses[0].updatedAt.toISOString(),
-            }
-          : null}
-        initialNotes={
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (() => { const n = (client as any).adaNotes as { overrides?: Record<string,string>; extras?: { key:string; value:string }[] } | null; return n ? { overrides: n.overrides ?? {}, extras: n.extras ?? [] } : null })()
-        }
-      />
-
       {/* Documents — briefs & plans de tournage */}
       <ClientDocumentsSection
         clientId={client.id}
@@ -284,6 +261,7 @@ export default async function ClientDetailPage({ params }: PageProps) {
           id: brief.id,
           shareToken: brief.shareToken,
           updatedAt: brief.updatedAt instanceof Date ? brief.updatedAt.toISOString() : String(brief.updatedAt),
+          title: brief.title ?? null,
           niche: brief.niche ?? null,
           monteur: brief.monteur ?? null,
         } : null}

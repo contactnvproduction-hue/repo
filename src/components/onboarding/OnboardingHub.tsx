@@ -1,10 +1,11 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   Copy, Check, FileText, MapPin, ExternalLink,
-  ChevronDown, ChevronUp, Send, ClipboardCheck,
+  ChevronDown, ChevronUp, Send, ClipboardCheck, Trash2, Loader2,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -30,8 +31,10 @@ type HubRow = {
 }
 
 export function OnboardingHub({ rows }: { rows: HubRow[] }) {
+  const router = useRouter()
   const [copied, setCopied] = useState(false)
   const [expanded, setExpanded] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState<string | null>(null)
 
   const formUrl = typeof window !== 'undefined' ? `${window.location.origin}/onboarding` : '/onboarding'
 
@@ -43,6 +46,21 @@ export function OnboardingHub({ rows }: { rows: HubRow[] }) {
       setTimeout(() => setCopied(false), 2000)
     } catch {
       toast.error('Impossible de copier')
+    }
+  }
+
+  const deleteForm = async (clientId: string, name: string) => {
+    if (!confirm(`Supprimer le formulaire d'onboarding de ${name} ?\n\nSes réponses et ses lieux choisis seront effacés — il pourra re-remplir le formulaire. La fiche client n'est pas supprimée.`)) return
+    setDeleting(clientId)
+    try {
+      const res = await fetch(`/api/onboarding/form?clientId=${clientId}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error()
+      toast.success(`Formulaire de ${name} supprimé`)
+      router.refresh()
+    } catch {
+      toast.error('Erreur lors de la suppression')
+    } finally {
+      setDeleting(null)
     }
   }
 
@@ -137,6 +155,15 @@ export function OnboardingHub({ rows }: { rows: HubRow[] }) {
                       </div>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => deleteForm(row.clientId, row.clientName)}
+                        disabled={deleting === row.clientId}
+                        title="Supprimer ce formulaire (le client pourra re-remplir)"
+                        className="p-1.5 rounded-lg text-nv-text-faint hover:text-red-400 hover:bg-red-400/10 transition-colors disabled:opacity-60"
+                      >
+                        {deleting === row.clientId ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                      </button>
                       <button
                         type="button"
                         onClick={() => setExpanded(isOpen ? null : row.clientId)}

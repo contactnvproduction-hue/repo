@@ -138,10 +138,10 @@ export function AcquisitionBoard({
     depositPercent: '30',
   })
 
-  // Produits vendus au close — catalogue chargé à l'ouverture du modal
+  // Produits vendus au close — tags simples, la LTV du client alimente le CA par produit
   type CatalogProduct = { id: string; name: string; color: string; defaultPrice: number | null; active: boolean }
   const [catalogProducts, setCatalogProducts] = useState<CatalogProduct[]>([])
-  const [selectedProducts, setSelectedProducts] = useState<Record<string, { quantity: string; amount: string }>>({})
+  const [selectedProducts, setSelectedProducts] = useState<string[]>([])
 
   useEffect(() => {
     if (!showConvert) return
@@ -152,13 +152,7 @@ export function AcquisitionBoard({
   }, [showConvert])
 
   const toggleConvertProduct = (p: CatalogProduct) => {
-    setSelectedProducts(prev => {
-      if (prev[p.id]) {
-        const { [p.id]: _, ...rest } = prev
-        return rest
-      }
-      return { ...prev, [p.id]: { quantity: '1', amount: p.defaultPrice != null ? String(p.defaultPrice) : '' } }
-    })
+    setSelectedProducts(prev => prev.includes(p.id) ? prev.filter(id => id !== p.id) : [...prev, p.id])
   }
 
   // ── Derived state ───────────────────────────────────────────────────────────
@@ -365,18 +359,14 @@ export function AcquisitionBoard({
             deliverables: convertDeal.deliverables || undefined,
             depositPercent: convertDeal.missionType === 'PONCTUEL' ? parseInt(convertDeal.depositPercent) || 30 : undefined,
           },
-          products: Object.entries(selectedProducts).map(([productId, v]) => ({
-            productId,
-            quantity: parseInt(v.quantity) || 1,
-            amount: parseFloat(v.amount) || 0,
-          })),
+          products: selectedProducts.map(productId => ({ productId })),
         }),
       })
       if (!res.ok) { toast.error('Erreur clôture de vente'); return }
       const data = await res.json()
       if (data.lead) updateLeadInState(data.lead)
       setShowConvert(false)
-      setSelectedProducts({})
+      setSelectedProducts([])
       const invCount = data.invoices?.length ?? 0
       toast.success(`✅ Vente clôturée — ${data.client?.name ?? ''}${invCount ? ` · ${invCount} facture${invCount > 1 ? 's' : ''} créée${invCount > 1 ? 's' : ''}` : ''}`)
     } catch { toast.error('Erreur') } finally { setConvertLoading(false) }
@@ -1422,18 +1412,18 @@ export function AcquisitionBoard({
                 />
               </div>
 
-              {/* Produits vendus — alimentent la répartition CA par produit */}
+              {/* Produits vendus — la LTV du client alimente la répartition CA par produit */}
               {catalogProducts.length > 0 && (
                 <div>
                   <label className="block text-xs font-medium text-nv-text-muted mb-1.5">Produits vendus</label>
-                  <div className="flex flex-wrap gap-1.5 mb-2">
+                  <div className="flex flex-wrap gap-1.5">
                     {catalogProducts.map(p => (
                       <button
                         key={p.id}
                         type="button"
                         onClick={() => toggleConvertProduct(p)}
                         className={`px-2.5 py-1 rounded-full text-xs border transition-all flex items-center gap-1.5 ${
-                          selectedProducts[p.id]
+                          selectedProducts.includes(p.id)
                             ? 'border-primary bg-primary/15 text-primary font-medium'
                             : 'border-nv-border text-nv-text-muted hover:text-white'
                         }`}
@@ -1443,30 +1433,7 @@ export function AcquisitionBoard({
                       </button>
                     ))}
                   </div>
-                  {Object.entries(selectedProducts).map(([pid, v]) => {
-                    const p = catalogProducts.find(x => x.id === pid)
-                    if (!p) return null
-                    return (
-                      <div key={pid} className="flex items-center gap-2 mb-1.5">
-                        <span className="text-xs text-nv-text-muted flex-1 min-w-0 truncate">{p.name}</span>
-                        <input
-                          type="number" min="1"
-                          value={v.quantity}
-                          onChange={e => setSelectedProducts(prev => ({ ...prev, [pid]: { ...prev[pid], quantity: e.target.value } }))}
-                          className="w-14 bg-nv-bg border border-nv-border rounded-lg px-2 py-1 text-xs text-white text-center focus:outline-none focus:border-primary"
-                        />
-                        <span className="text-[10px] text-nv-text-muted">×</span>
-                        <input
-                          type="number"
-                          placeholder="Montant €"
-                          value={v.amount}
-                          onChange={e => setSelectedProducts(prev => ({ ...prev, [pid]: { ...prev[pid], amount: e.target.value } }))}
-                          className="w-24 bg-nv-bg border border-nv-border rounded-lg px-2 py-1 text-xs text-white text-right focus:outline-none focus:border-primary"
-                        />
-                        <span className="text-[10px] text-nv-text-muted">€</span>
-                      </div>
-                    )
-                  })}
+                  <p className="text-[10px] text-nv-text-faint mt-1.5">La LTV du client sera automatiquement répartie entre ces produits dans le graphique CA.</p>
                 </div>
               )}
 

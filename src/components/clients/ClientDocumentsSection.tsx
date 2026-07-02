@@ -12,6 +12,7 @@ interface Brief {
   id: string
   shareToken: string
   updatedAt: string
+  title?: string | null
   niche?: string | null
   monteur?: string | null
 }
@@ -152,7 +153,7 @@ export function ClientDocumentsSection({ clientId, brief: initialBrief, shooting
                   <FileText size={13} className="text-primary" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-white">Fiche de brief</p>
+                  <p className="text-sm font-medium text-white truncate">{brief?.title || 'Fiche de brief'}</p>
                   <p className="text-xs text-nv-text-muted truncate">
                     {brief
                       ? `Mis à jour ${new Date(brief.updatedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}`

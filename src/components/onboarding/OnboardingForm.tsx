@@ -40,7 +40,7 @@ type Answers = {
   icpTone: string
   icpPdf: string
   icpPdfName: string
-  channelsScreenshot: string
+  channelsScreenshots: string[]
   customAnswers: Record<string, string>
   selectedSpots: string[]
 }
@@ -52,7 +52,7 @@ const INITIAL: Answers = {
   mustHighlight: '', mustAvoid: '', brandFont: '', musicVibe: '', callToAction: '',
   icpSector: '', icpTargetAge: '', icpTargetStatus: '',
   icpTargetProblem: '', icpOffer: '', icpTone: '',
-  icpPdf: '', icpPdfName: '', channelsScreenshot: '',
+  icpPdf: '', icpPdfName: '', channelsScreenshots: [],
   customAnswers: {},
   selectedSpots: [],
 }
@@ -136,46 +136,59 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   )
 }
 
-function ImageUpload({ value, onChange, label }: { value: string; onChange: (v: string) => void; label: string }) {
+function MultiImageUpload({ values, onChange }: { values: string[]; onChange: (v: string[]) => void }) {
   const ref = useRef<HTMLInputElement>(null)
   const [loading, setLoading] = useState(false)
+  const MAX_IMAGES = 6
 
-  const handleFile = async (file: File) => {
-    if (!file.type.startsWith('image/')) { toast.error('Image uniquement (PNG, JPG…)'); return }
+  const handleFiles = async (files: FileList) => {
     setLoading(true)
-    try {
-      onChange(await resizeImage(file))
-    } catch {
-      toast.error("Impossible de lire l'image")
-    } finally {
-      setLoading(false)
+    const added: string[] = []
+    for (const file of Array.from(files)) {
+      if (!file.type.startsWith('image/')) continue
+      try { added.push(await resizeImage(file)) } catch { toast.error(`Impossible de lire ${file.name}`) }
     }
+    onChange([...values, ...added].slice(0, MAX_IMAGES))
+    setLoading(false)
+    if (added.length > 0) toast.success(`${added.length} capture(s) ajoutée(s)`)
   }
 
   return (
-    <div>
-      <input ref={ref} type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
-      {value ? (
-        <div className="relative rounded-xl overflow-hidden border border-nv-border">
-          <img src={value} alt={label} className="w-full max-h-64 object-contain bg-nv-dark" />
-          <button
-            type="button"
-            onClick={() => onChange('')}
-            className="absolute top-2 right-2 w-7 h-7 rounded-full bg-nv-black/80 border border-nv-border flex items-center justify-center text-nv-text-muted hover:text-red-400 transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
+    <div className="space-y-2">
+      <input
+        ref={ref}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={e => { if (e.target.files?.length) handleFiles(e.target.files); e.target.value = '' }}
+      />
+      {values.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {values.map((img, i) => (
+            <div key={i} className="relative rounded-xl overflow-hidden border border-nv-border group">
+              <img src={img} alt={`Capture ${i + 1}`} className="w-full h-28 object-cover bg-nv-dark" />
+              <button
+                type="button"
+                onClick={() => onChange(values.filter((_, idx) => idx !== i))}
+                className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-nv-black/80 border border-nv-border flex items-center justify-center text-nv-text-muted hover:text-red-400 transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
         </div>
-      ) : (
+      )}
+      {values.length < MAX_IMAGES && (
         <button
           type="button"
           onClick={() => ref.current?.click()}
           disabled={loading}
-          className="w-full py-8 rounded-xl border border-dashed border-nv-border bg-nv-card hover:border-primary/40 transition-colors flex flex-col items-center gap-2 text-nv-text-muted"
+          className="w-full py-6 rounded-xl border border-dashed border-nv-border bg-nv-card hover:border-primary/40 transition-colors flex flex-col items-center gap-2 text-nv-text-muted"
         >
           {loading ? <Loader2 className="w-6 h-6 animate-spin text-primary" /> : <ImageIcon className="w-6 h-6 text-primary" />}
-          <span className="text-sm">Cliquez pour ajouter une capture d'écran</span>
-          <span className="text-xs text-nv-text-faint">PNG, JPG — compressée automatiquement</span>
+          <span className="text-sm">{values.length === 0 ? 'Ajouter vos captures d\'écran' : 'Ajouter une autre capture'}</span>
+          <span className="text-xs text-nv-text-faint">Une par canal — PNG, JPG, compressées automatiquement ({values.length}/{MAX_IMAGES})</span>
         </button>
       )}
     </div>
@@ -333,10 +346,9 @@ function QuestionField({
     case 'file-image':
       return (
         <Field label={q.label} hint={q.hint}>
-          <ImageUpload
-            value={answers.channelsScreenshot}
-            onChange={v => setAnswers({ ...answers, channelsScreenshot: v })}
-            label={q.label}
+          <MultiImageUpload
+            values={answers.channelsScreenshots}
+            onChange={v => setAnswers({ ...answers, channelsScreenshots: v })}
           />
         </Field>
       )
@@ -512,7 +524,7 @@ function StepRecap({ answers, spots, questions }: { answers: Answers; spots: Spo
   const displayValue = (q: OnboardingQuestion): string | null => {
     if (q.custom) return answers.customAnswers[q.key] || null
     if (q.type === 'file-pdf') return answers.icpPdf ? (answers.icpPdfName || 'PDF joint') : null
-    if (q.type === 'file-image') return answers.channelsScreenshot ? 'Capture jointe' : null
+    if (q.type === 'file-image') return answers.channelsScreenshots.length ? `${answers.channelsScreenshots.length} capture(s) jointe(s)` : null
     const v = answers[q.key as keyof Answers]
     if (Array.isArray(v)) return v.filter(Boolean).length ? v.filter(Boolean).join(', ') : null
     return (v as string) || null
@@ -605,7 +617,7 @@ export default function OnboardingForm({ spots, questions }: { spots: Spot[]; qu
     setAnswersRaw(a)
     try {
       // Les fichiers base64 dépassent le quota localStorage — on les exclut de l'auto-save
-      const { icpPdf, channelsScreenshot, ...rest } = a
+      const { icpPdf, channelsScreenshots, ...rest } = a
       localStorage.setItem(STORAGE_KEY, JSON.stringify(rest))
     } catch {}
   }, [])

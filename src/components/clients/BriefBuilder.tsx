@@ -41,6 +41,7 @@ interface Resource {
 interface BriefData {
   id?: string
   shareToken?: string
+  title?: string
   monteur?: string
   deadline?: string
   niche?: string
@@ -147,6 +148,7 @@ export function BriefBuilder({
   const [openSection, setOpenSection] = useState<string | null>(null)
 
   // Form fields — initialised from DB or blank
+  const [title, setTitle] = useState(initialBrief?.title ?? '')
   const [monteur, setMonteur] = useState(initialBrief?.monteur ?? '')
   const [deadline, setDeadline] = useState(initialBrief?.deadline ?? '')
   const [niche, setNiche] = useState(initialBrief?.niche ?? '')
@@ -209,6 +211,7 @@ export function BriefBuilder({
   // ── Build payload ────────────────────────────────────────────────────────
 
   const buildPayload = useCallback(() => ({
+    title,
     monteur,
     deadline,
     niche,
@@ -222,7 +225,7 @@ export function BriefBuilder({
     inspirations: inspirations.filter(i => i.url.trim()),
     resources: resources.filter(r => r.url.trim() || r.label.trim()),
     colors: colors.filter(c => c.hex),
-  }), [monteur, deadline, niche, positionnement, avatar, ton, notes, avoidList, canaux, livrables, inspirations, resources, colors])
+  }), [title, monteur, deadline, niche, positionnement, avatar, ton, notes, avoidList, canaux, livrables, inspirations, resources, colors])
 
   // ── Save to DB ───────────────────────────────────────────────────────────
 
@@ -590,6 +593,15 @@ export function BriefBuilder({
 
       {/* ── Section 1 : Infos mission ── */}
       <Section id="mission" title="Informations mission" {...sp}>
+        <div>
+          <label className="block text-[10px] font-semibold text-nv-text-muted mb-1.5 uppercase tracking-wider">Nom du document</label>
+          <input
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+            placeholder={`Ex : Brief ${clientName} — Batch mars, Brief documentaire…`}
+            className="w-full bg-nv-bg border border-nv-border rounded-lg px-3 py-2 text-sm text-white placeholder-nv-text-muted focus:outline-none focus:border-primary/50 transition-colors"
+          />
+        </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-[10px] font-semibold text-nv-text-muted mb-1.5 uppercase tracking-wider">Niche / Secteur</label>

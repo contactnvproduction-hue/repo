@@ -960,6 +960,7 @@ model ClientBrief {
   clientId       String   @unique
   client         Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
   shareToken     String   @unique @default(cuid())
+  title          String?  // nom du document, pour se repérer entre les briefs
   monteur        String?
   deadline       String?
   niche          String?
@@ -1097,9 +1098,10 @@ model ClientOnboardingForm {
   icpTone          String?
 
   // Documents uploadés par le client (base64 data-URLs — le disque Render est éphémère)
-  icpPdf             String? // PDF avatar client
-  icpPdfName         String?
-  channelsScreenshot String? // capture d'écran état des canaux d'acquisition
+  icpPdf              String?  // PDF avatar client
+  icpPdfName          String?
+  channelsScreenshot  String?  // legacy — capture unique (remplacé par channelsScreenshots)
+  channelsScreenshots String[] // captures des canaux d'acquisition (une par canal, tracking début de collab)
 
   // Réponses aux questions personnalisées ajoutées depuis le dashboard (clé = question key)
   customAnswers Json?

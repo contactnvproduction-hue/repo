@@ -84,8 +84,8 @@ export const DEFAULT_QUESTIONS: OnboardingQuestion[] = [
   },
   {
     key: 'channelsScreenshot', step: 'branding', type: 'file-image',
-    label: "Capture d'écran de l'état actuel de vos canaux d'acquisition",
-    hint: 'Nous la gardons comme référence de début de collaboration',
+    label: "Captures d'écran de l'état actuel de vos canaux d'acquisition",
+    hint: "Une capture par canal : votre profil Instagram avec le feed et le nombre d'abonnés visibles, votre chaîne YouTube, votre profil LinkedIn/TikTok… Ces captures servent uniquement au tracking : elles fixent le point de départ de notre collaboration pour mesurer votre progression.",
     active: true,
   },
   // ─── ICP / Avatar client ───

@@ -80,30 +80,47 @@ export default async function AcquisitionPage() {
     }
   } catch {}
 
+  // Chaque tag produit sur un client répartit automatiquement sa LTV contractée
+  // (retainers : montant mensuel × durée) entre ses produits tagués.
   const clientProductItems: any[] = await (async () => {
     try {
       return await dbAny.clientProduct.findMany({
         include: {
           product: { select: { id: true, name: true, color: true } },
-          client: { select: { id: true, name: true } },
+          client: { select: { id: true, name: true, retainers: { select: { monthlyAmount: true, durationMonths: true } } } },
         },
       })
     } catch { return [] }
   })()
 
+  // Regroupe les tags par client pour partager la LTV équitablement
+  const byClient: Record<string, { name: string; ltv: number; tags: { productId: string; name: string; color: string }[] }> = {}
+  for (const item of clientProductItems) {
+    const entry = byClient[item.clientId] ??= {
+      name: item.client.name,
+      ltv: (item.client.retainers ?? []).reduce((s: number, r: any) => s + r.monthlyAmount * r.durationMonths, 0),
+      tags: [],
+    }
+    if (!entry.tags.some(t => t.productId === item.productId)) {
+      entry.tags.push({ productId: item.productId, name: item.product.name, color: item.product.color })
+    }
+  }
+
   const productStatsMap: Record<string, { productId: string; name: string; color: string; quantity: number; total: number }> = {}
   const clientStatsMap: Record<string, { clientId: string; name: string; total: number }> = {}
-  for (const item of clientProductItems) {
-    const p = productStatsMap[item.productId] ??= {
-      productId: item.productId, name: item.product.name, color: item.product.color, quantity: 0, total: 0,
+  for (const [clientId, entry] of Object.entries(byClient)) {
+    const share = entry.tags.length > 0 ? entry.ltv / entry.tags.length : 0
+    for (const tag of entry.tags) {
+      const p = productStatsMap[tag.productId] ??= {
+        productId: tag.productId, name: tag.name, color: tag.color, quantity: 0, total: 0,
+      }
+      p.quantity += 1 // nombre de clients tagués
+      p.total += share
     }
-    p.quantity += item.quantity
-    p.total += item.amount
-    const c = clientStatsMap[item.clientId] ??= { clientId: item.clientId, name: item.client.name, total: 0 }
-    c.total += item.amount
+    clientStatsMap[clientId] = { clientId, name: entry.name, total: entry.ltv }
   }
-  const productStats = Object.values(productStatsMap)
-  const topClients = Object.values(clientStatsMap).sort((a, b) => b.total - a.total).slice(0, 8)
+  const productStats = Object.values(productStatsMap).map(p => ({ ...p, total: Math.round(p.total) }))
+  const topClients = Object.values(clientStatsMap).filter(c => c.total > 0).sort((a, b) => b.total - a.total).slice(0, 8)
 
   const pendingContracts = signedContracts.filter(c => c.status === 'PENDING')
   const completedContracts = signedContracts.filter(c => c.status === 'SIGNED')
