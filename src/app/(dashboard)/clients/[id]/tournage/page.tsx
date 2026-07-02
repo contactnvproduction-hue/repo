@@ -34,10 +34,13 @@ export default async function TournagePage({
   if (!plan) {
     const [onboardingForm, spotSelections] = await Promise.all([
       db.clientOnboardingForm.findUnique({ where: { clientId: id }, omit: { icpPdf: true } }).catch(() => null),
-      db.clientSpotSelection.findMany({ where: { clientId: id }, include: { spot: { select: { name: true, city: true } } } }).catch(() => []),
+      db.clientSpotSelection.findMany({ where: { clientId: id }, include: { spot: { select: { name: true, city: true, address: true } } } }).catch(() => []),
     ])
-    const spotNames = (spotSelections ?? []).map((s: any) => `${s.spot.name} (${s.spot.city})`)
-    initialPlan = shootingPlanPrefillFromOnboarding(onboardingForm, spotNames)
+    const spotInfos = (spotSelections ?? []).map((s: any) => ({
+      name: `${s.spot.name} (${s.spot.city})`,
+      address: s.spot.address ?? null,
+    }))
+    initialPlan = shootingPlanPrefillFromOnboarding(onboardingForm, spotInfos)
   }
 
   return (

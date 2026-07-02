@@ -73,9 +73,9 @@ export function briefPrefillFromOnboarding(ob: OnboardingFormData | null | undef
 // Prépare les champs pré-remplis d'un plan de tournage
 export function shootingPlanPrefillFromOnboarding(
   ob: OnboardingFormData | null | undefined,
-  spotNames: string[],
+  spots: { name: string; address?: string | null }[],
 ) {
-  if (!ob && spotNames.length === 0) return null
+  if (!ob && spots.length === 0) return null
 
   const daInfoParts = [
     ob?.visualPerception?.length ? `Perception : ${ob.visualPerception.join(', ')}` : null,
@@ -85,7 +85,8 @@ export function shootingPlanPrefillFromOnboarding(
 
   return {
     title: ob?.brandName ? `Tournage ${ob.brandName}` : '',
-    location: spotNames.join(' + '),
+    location: spots.map(s => s.name).join(' + '),
+    locationAddress: spots.map(s => s.address).filter(Boolean).join(' / '),
     notes: [
       ob?.mustHighlight ? `À mettre en avant : ${ob.mustHighlight}` : null,
       ob?.mustAvoid ? `À éviter : ${ob.mustAvoid}` : null,

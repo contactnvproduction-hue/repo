@@ -1037,6 +1037,8 @@ model ShootingSpot {
   id          String   @id @default(cuid())
   name        String
   city        String
+  address     String?
+  category    String?  // modulable : Café / Terrasse, Studio, Hôtel / Luxe…
   description String?
   tags        String[]
   photos      String[]

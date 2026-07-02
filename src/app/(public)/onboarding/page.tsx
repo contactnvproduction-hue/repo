@@ -1,11 +1,13 @@
 import { prisma } from '@/lib/db'
 import { mergeQuestions } from '@/lib/onboarding-questions'
+import { ensureDefaultSpots } from '@/lib/shooting-spots-seed'
 import OnboardingForm from '@/components/onboarding/OnboardingForm'
 
 export const dynamic = 'force-dynamic'
 
 export default async function OnboardingPage() {
   const db = prisma as any
+  await ensureDefaultSpots(db)
   const [spots, config] = await Promise.all([
     db.shootingSpot.findMany({
       where: { active: true },
@@ -14,6 +16,8 @@ export default async function OnboardingPage() {
         id: true,
         name: true,
         city: true,
+        address: true,
+        category: true,
         description: true,
         tags: true,
         photos: true,

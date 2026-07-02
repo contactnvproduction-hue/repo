@@ -38,6 +38,8 @@ type Spot = {
   id: string
   name: string
   city: string
+  address: string | null
+  category: string | null
   description: string | null
   tags: string[]
   photos: string[]
@@ -46,56 +48,24 @@ type Spot = {
   order: number
 }
 
-const INITIAL_SPOTS: Omit<Spot, 'id' | 'order'>[] = [
-  {
-    name: 'Studio Lumière', city: 'Nantes',
-    description: 'Studio professionnel avec lumière naturelle zénithale, fond blanc et fond gris. Parfait pour un rendu épuré et sobre.',
-    tags: ['studio', 'fond blanc', 'lumière naturelle', 'épuré'],
-    photos: [], supplement: null, active: true,
-  },
-  {
-    name: 'Café Industriel', city: 'Nantes',
-    description: 'Espace de co-working branché en centre-ville. Briques apparentes, plantes, ambiance dynamique et décontractée.',
-    tags: ['café', 'industriel', 'ambiance', 'co-working'],
-    photos: [], supplement: null, active: true,
-  },
-  {
-    name: 'Loft Haussmannien', city: 'Reims',
-    description: 'Appartement haussmannien en plein centre. Moulures, parquet ancien, grandes fenêtres. Élégance et caractère.',
-    tags: ['haussmannien', 'luxueux', 'parquet', 'moulures'],
-    photos: [], supplement: null, active: true,
-  },
-  {
-    name: 'Suite Prestige', city: 'Paris',
-    description: 'Appartement de luxe au cœur de Paris. Décoration soignée, vue sur toits parisiens. Pour un positionnement premium.',
-    tags: ['luxe', 'Paris', 'prestige', 'vue'],
-    photos: [], supplement: "Disponibilité limitée — réserver 2 semaines à l'avance", active: true,
-  },
-  {
-    name: 'Atelier Créatif', city: 'Paris',
-    description: "Grand loft d'artiste avec verrière. Lumière douce et abondante. Idéal pour un rendu chaleureux et inspirant.",
-    tags: ['verrière', 'loft', 'lumineux', 'chaleureux'],
-    photos: [], supplement: null, active: true,
-  },
-  {
-    name: 'Café Parisien', city: 'Paris',
-    description: "Terrasse d'un café chic du Marais. Ambiance authentiquement parisienne, parfaite pour du contenu lifestyle et inspirant.",
-    tags: ['terrasse', 'Marais', 'café', 'lifestyle'],
-    photos: [], supplement: null, active: true,
-  },
-]
+// Suggestions de catégories — libre : tape ce que tu veux, les catégories existantes apparaissent aussi
+const CATEGORY_SUGGESTIONS = ['Café / Terrasse', 'Studio', 'Hôtel / Luxe', 'Appartement', 'Extérieur / Urbain', 'Bureau / Co-working']
 
 function SpotForm({
   initial,
   onSave,
   onCancel,
+  categorySuggestions,
 }: {
   initial?: Partial<Spot>
   onSave: (data: Omit<Spot, 'id' | 'order'>) => Promise<void>
   onCancel: () => void
+  categorySuggestions: string[]
 }) {
   const [name, setName] = useState(initial?.name ?? '')
   const [city, setCity] = useState(initial?.city ?? '')
+  const [address, setAddress] = useState(initial?.address ?? '')
+  const [category, setCategory] = useState(initial?.category ?? '')
   const [description, setDescription] = useState(initial?.description ?? '')
   const [tagsStr, setTagsStr] = useState((initial?.tags ?? []).join(', '))
   const [supplement, setSupplement] = useState(initial?.supplement ?? '')
@@ -122,6 +92,8 @@ function SpotForm({
     setSaving(true)
     await onSave({
       name: name.trim(), city: city.trim(),
+      address: address.trim() || null,
+      category: category.trim() || null,
       description: description.trim() || null,
       tags: tagsStr.split(',').map(t => t.trim()).filter(Boolean),
       photos,
@@ -137,12 +109,31 @@ function SpotForm({
     <div className="space-y-3 mt-3 pt-3 border-t border-nv-border">
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-xs text-nv-text-muted block mb-1">Nom *</label>
-          <input className={inputCls} placeholder="Studio Lumière" value={name} onChange={e => setName(e.target.value)} />
+          <label className="text-xs text-nv-text-muted block mb-1">Nom du lieu *</label>
+          <input className={inputCls} placeholder="Maria, Auburn…" value={name} onChange={e => setName(e.target.value)} />
         </div>
         <div>
           <label className="text-xs text-nv-text-muted block mb-1">Ville *</label>
           <input className={inputCls} placeholder="Nantes / Reims / Paris" value={city} onChange={e => setCity(e.target.value)} />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs text-nv-text-muted block mb-1">Adresse</label>
+          <input className={inputCls} placeholder="12 rue de la Paix, 75002 Paris" value={address} onChange={e => setAddress(e.target.value)} />
+        </div>
+        <div>
+          <label className="text-xs text-nv-text-muted block mb-1">Catégorie</label>
+          <input
+            className={inputCls}
+            placeholder="Café / Terrasse, Studio…"
+            value={category}
+            onChange={e => setCategory(e.target.value)}
+            list="spot-categories"
+          />
+          <datalist id="spot-categories">
+            {categorySuggestions.map(c => <option key={c} value={c} />)}
+          </datalist>
         </div>
       </div>
       <div>
@@ -224,7 +215,6 @@ export function SpotManager({ initialSpots }: { initialSpots: Spot[] }) {
   const [spots, setSpots] = useState<Spot[]>(initialSpots)
   const [adding, setAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [seeding, setSeeding] = useState(false)
 
   const handleCreate = async (data: Omit<Spot, 'id' | 'order'>) => {
     const res = await fetch('/api/onboarding/spots', {
@@ -270,49 +260,23 @@ export function SpotManager({ initialSpots }: { initialSpots: Spot[] }) {
     setSpots(s => s.map(sp => sp.id === spot.id ? { ...sp, active: !sp.active } : sp))
   }
 
-  const handleSeedInitial = async () => {
-    if (!confirm(`Créer les ${INITIAL_SPOTS.length} spots de départ ? (cette action ne crée pas de doublons si les spots existent déjà)`) ) return
-    setSeeding(true)
-    let created = 0
-    for (let i = 0; i < INITIAL_SPOTS.length; i++) {
-      const s = INITIAL_SPOTS[i]
-      const res = await fetch('/api/onboarding/spots', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...s, order: spots.length + i }),
-      })
-      if (res.ok) { const spot = await res.json(); setSpots(prev => [...prev, spot]); created++ }
-    }
-    setSeeding(false)
-    toast.success(`${created} spot(s) créé(s)`)
-  }
-
   const cities = Array.from(new Set(spots.map(s => s.city))).sort()
+  const categorySuggestions = Array.from(new Set([
+    ...CATEGORY_SUGGESTIONS,
+    ...spots.map(s => s.category).filter((c): c is string => !!c),
+  ]))
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-xs text-nv-text-muted">{spots.length} spot(s) dans la bibliothèque</p>
-        <div className="flex gap-2">
-          {spots.length === 0 && (
-            <button
-              type="button"
-              onClick={handleSeedInitial}
-              disabled={seeding}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-primary/40 text-primary rounded-lg hover:bg-primary/10 transition-colors disabled:opacity-60"
-            >
-              {seeding ? <Loader2 className="w-3 h-3 animate-spin" /> : <MapPin className="w-3 h-3" />}
-              Initialiser spots de départ
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => { setAdding(true); setEditingId(null) }}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-primary text-nv-black rounded-lg font-medium hover:bg-primary-hover transition-colors"
-          >
-            <Plus className="w-3 h-3" /> Ajouter un spot
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => { setAdding(true); setEditingId(null) }}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-primary text-nv-black rounded-lg font-medium hover:bg-primary-hover transition-colors"
+        >
+          <Plus className="w-3 h-3" /> Ajouter un spot
+        </button>
       </div>
 
       {adding && (
@@ -321,6 +285,7 @@ export function SpotManager({ initialSpots }: { initialSpots: Spot[] }) {
           <SpotForm
             onSave={handleCreate}
             onCancel={() => setAdding(false)}
+            categorySuggestions={categorySuggestions}
           />
         </div>
       )}
@@ -328,7 +293,7 @@ export function SpotManager({ initialSpots }: { initialSpots: Spot[] }) {
       {cities.length === 0 && !adding && (
         <div className="text-center py-8 text-nv-text-muted text-sm border border-dashed border-nv-border rounded-xl">
           <MapPin className="w-8 h-8 mx-auto mb-2 text-nv-border-light" />
-          <p>Aucun spot. Cliquez sur "Initialiser" pour créer les spots de départ.</p>
+          <p>Aucun spot. Les spots de départ se créent automatiquement au premier chargement.</p>
         </div>
       )}
 
@@ -348,7 +313,13 @@ export function SpotManager({ initialSpots }: { initialSpots: Spot[] }) {
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-nv-text truncate">{spot.name}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium text-nv-text truncate">{spot.name}</p>
+                    {spot.category && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 border border-primary/25 text-primary shrink-0">{spot.category}</span>
+                    )}
+                  </div>
+                  {spot.address && <p className="text-[11px] text-nv-text-faint truncate">{spot.address}</p>}
                   {spot.tags.length > 0 && (
                     <div className="flex gap-1 mt-0.5 flex-wrap">
                       {spot.tags.map(t => (
@@ -388,6 +359,7 @@ export function SpotManager({ initialSpots }: { initialSpots: Spot[] }) {
                     initial={spot}
                     onSave={(data) => handleUpdate(spot.id, data)}
                     onCancel={() => setEditingId(null)}
+                    categorySuggestions={categorySuggestions}
                   />
                 </div>
               )}

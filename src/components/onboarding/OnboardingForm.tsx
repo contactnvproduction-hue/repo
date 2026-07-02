@@ -9,6 +9,8 @@ type Spot = {
   id: string
   name: string
   city: string
+  address: string | null
+  category: string | null
   description: string | null
   tags: string[]
   photos: string[]
@@ -469,13 +471,19 @@ function StepSpots({ answers, setAnswers, spots }: { answers: Answers; setAnswer
                   )}
                   <div className="p-3 space-y-1.5">
                     <div className="flex items-start justify-between gap-2">
-                      <span className="font-medium text-sm text-nv-text">{spot.name}</span>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium text-sm text-nv-text">{spot.name}</span>
+                        {spot.category && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 border border-primary/25 text-primary">{spot.category}</span>
+                        )}
+                      </div>
                       {selected && (
                         <span className="shrink-0 w-5 h-5 rounded-full bg-primary flex items-center justify-center">
                           <Check className="w-3 h-3 text-nv-black" />
                         </span>
                       )}
                     </div>
+                    {spot.address && <p className="text-[11px] text-nv-text-faint">{spot.address}</p>}
                     {spot.description && <p className="text-xs text-nv-text-muted leading-relaxed">{spot.description}</p>}
                     {spot.tags.length > 0 && (
                       <div className="flex flex-wrap gap-1">
