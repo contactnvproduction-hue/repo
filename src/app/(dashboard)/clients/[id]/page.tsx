@@ -22,6 +22,7 @@ import { ClientChargesSection } from '@/components/clients/ClientChargesSection'
 import { ClientAdaSection } from '@/components/clients/ClientAdaSection'
 import { ClientDocumentsSection } from '@/components/clients/ClientDocumentsSection'
 import { ClientOnboardingFormSection } from '@/components/clients/ClientOnboardingFormSection'
+import { ClientProductsSection } from '@/components/clients/ClientProductsSection'
 
 const statusBadge: Record<string, 'success' | 'info' | 'warning' | 'muted'> = {
   ACTIF: 'success', PROSPECT: 'info', EN_PAUSE: 'warning', ARCHIVÉ: 'muted',
@@ -122,7 +123,7 @@ export default async function ClientDetailPage({ params }: PageProps) {
     (async () => { try { return await (prisma as any).shootingPlan.findMany({ where: { clientId: id }, orderBy: { createdAt: 'desc' }, select: { id: true, title: true, shareToken: true, shootDate: true, location: true, updatedAt: true } }) } catch { return [] } })(),
   ])
 
-  const [onboardingForm, spotSelections, contentTopics] = await Promise.all([
+  const [onboardingForm, spotSelections, contentTopics, allProducts, clientProducts] = await Promise.all([
     // icpPdf exclu : base64 jusqu'à 8 Mo — servi à la demande via /api/onboarding/file
     (async () => { try { return await (prisma as any).clientOnboardingForm.findUnique({
       where: { clientId: id },
@@ -130,6 +131,8 @@ export default async function ClientDetailPage({ params }: PageProps) {
     }) } catch { return null } })(),
     (async () => { try { return await (prisma as any).clientSpotSelection.findMany({ where: { clientId: id }, include: { spot: { select: { id: true, name: true, city: true } } } }) } catch { return [] } })(),
     (async () => { try { return await (prisma as any).clientContentTopic.findMany({ where: { clientId: id }, orderBy: [{ order: 'asc' }, { createdAt: 'asc' }] }) } catch { return [] } })(),
+    (async () => { try { return await (prisma as any).product.findMany({ orderBy: [{ order: 'asc' }, { createdAt: 'asc' }] }) } catch { return [] } })(),
+    (async () => { try { return await (prisma as any).clientProduct.findMany({ where: { clientId: id }, include: { product: true }, orderBy: { createdAt: 'desc' } }) } catch { return [] } })(),
   ])
 
   if (!client) notFound()
@@ -245,6 +248,16 @@ export default async function ClientDetailPage({ params }: PageProps) {
         } : null}
         spotSelections={(spotSelections ?? []).map((s: any) => ({ id: s.spot.id, name: s.spot.name, city: s.spot.city }))}
         initialTopics={(contentTopics ?? []).map((t: any) => ({ id: t.id, title: t.title, notes: t.notes, status: t.status, order: t.order }))}
+      />
+
+      {/* Produits / offres vendus à ce client */}
+      <ClientProductsSection
+        clientId={client.id}
+        allProducts={(allProducts ?? []).map((p: any) => ({ id: p.id, name: p.name, color: p.color, defaultPrice: p.defaultPrice, active: p.active }))}
+        initialItems={(clientProducts ?? []).map((i: any) => ({
+          id: i.id, productId: i.productId, quantity: i.quantity, amount: i.amount, notes: i.notes,
+          product: { id: i.product.id, name: i.product.name, color: i.product.color, defaultPrice: i.product.defaultPrice, active: i.product.active },
+        }))}
       />
 
       {/* INFOS DA — pleine largeur */}

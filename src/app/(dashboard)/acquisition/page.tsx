@@ -2,6 +2,7 @@ import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { Target, FileSignature, ExternalLink, CheckCircle2, Clock } from 'lucide-react'
 import { AcquisitionBoard } from '@/components/acquisition/AcquisitionBoard'
+import { RevenueByProduct } from '@/components/acquisition/RevenueByProduct'
 import Link from 'next/link'
 
 // Plateforme de signature hébergée sur Netlify (site statique dédié)
@@ -61,6 +62,48 @@ export default async function AcquisitionPage() {
   }))
 
   const serializedStatuses = statuses.map(s => ({ ...s, createdAt: s.createdAt.toISOString() }))
+
+  // ── Répartition CA par produit ──────────────────────────────────────────────
+  const dbAny = prisma as any
+
+  // Produits de départ (modifiables/supprimables depuis les fiches clients)
+  try {
+    const productCount = await dbAny.product.count()
+    if (productCount === 0) {
+      await dbAny.product.createMany({
+        data: [
+          { name: 'Offre batch content', color: '#10b981', order: 0 },
+          { name: 'Documentaire', color: '#3b82f6', order: 1 },
+          { name: 'Offre montage', color: '#8b5cf6', order: 2 },
+        ],
+      })
+    }
+  } catch {}
+
+  const clientProductItems: any[] = await (async () => {
+    try {
+      return await dbAny.clientProduct.findMany({
+        include: {
+          product: { select: { id: true, name: true, color: true } },
+          client: { select: { id: true, name: true } },
+        },
+      })
+    } catch { return [] }
+  })()
+
+  const productStatsMap: Record<string, { productId: string; name: string; color: string; quantity: number; total: number }> = {}
+  const clientStatsMap: Record<string, { clientId: string; name: string; total: number }> = {}
+  for (const item of clientProductItems) {
+    const p = productStatsMap[item.productId] ??= {
+      productId: item.productId, name: item.product.name, color: item.product.color, quantity: 0, total: 0,
+    }
+    p.quantity += item.quantity
+    p.total += item.amount
+    const c = clientStatsMap[item.clientId] ??= { clientId: item.clientId, name: item.client.name, total: 0 }
+    c.total += item.amount
+  }
+  const productStats = Object.values(productStatsMap)
+  const topClients = Object.values(clientStatsMap).sort((a, b) => b.total - a.total).slice(0, 8)
 
   const pendingContracts = signedContracts.filter(c => c.status === 'PENDING')
   const completedContracts = signedContracts.filter(c => c.status === 'SIGNED')
@@ -136,6 +179,9 @@ export default async function AcquisitionPage() {
           </div>
         </div>
       )}
+
+      {/* ── Répartition CA par produit ── */}
+      <RevenueByProduct productStats={productStats} topClients={topClients} />
 
       <AcquisitionBoard initialLeads={serialized} initialStatuses={serializedStatuses} />
     </div>

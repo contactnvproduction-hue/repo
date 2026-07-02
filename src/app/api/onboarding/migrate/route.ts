@@ -53,19 +53,24 @@ function parseFrTimestamp(ts: string): Date | null {
 }
 
 // Migre les réponses Google Forms (AdaFormResponse) vers ClientOnboardingForm.
-// Idempotent : ne touche jamais un formulaire déjà rempli via /onboarding.
-export async function POST() {
+// Par défaut idempotent : ne touche jamais un formulaire existant.
+// { clientId, force: true } → ré-importe/écrase les infos de CE client depuis le sheet.
+export async function POST(req: Request) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+
+  const body = await req.json().catch(() => ({}))
+  const targetClientId = body.clientId as string | undefined
+  const force = body.force === true && !!targetClientId
 
   try {
     // 1. Sync du sheet pour être à jour (import + matching clients)
     let syncSummary = null
-    try { syncSummary = await syncAdaForms() } catch (e) { console.error('[migrate] sync failed', e) }
+    try { syncSummary = await syncAdaForms(targetClientId) } catch (e) { console.error('[migrate] sync failed', e) }
 
     // 2. Conversion des réponses matchées
     const responses = await db.adaFormResponse.findMany({
-      where: { clientId: { not: null } },
+      where: targetClientId ? { clientId: targetClientId } : { clientId: { not: null } },
       orderBy: { responseTimestamp: 'asc' },
     })
 
@@ -77,12 +82,12 @@ export async function POST() {
       const data = resp.data as Record<string, string>
       if (!data || typeof data !== 'object') continue
 
-      // Ne pas écraser un onboarding déjà rempli via le nouveau formulaire
+      // Ne pas écraser un onboarding existant — sauf actualisation forcée d'un client précis
       const existing = await db.clientOnboardingForm.findUnique({
         where: { clientId: resp.clientId },
         select: { id: true },
       })
-      if (existing) { skippedExisting++; continue }
+      if (existing && !force) { skippedExisting++; continue }
 
       // "1. Nom & Prénom" — format sheet : "Nom Prénom" (ex: "Laborde Nicolas")
       const fullName = byPrefix(data, 1)
@@ -102,26 +107,29 @@ export async function POST() {
 
       const completedAt = parseFrTimestamp(resp.responseTimestamp) ?? resp.createdAt
 
-      await db.clientOnboardingForm.create({
-        data: {
-          clientId: resp.clientId,
-          firstName,
-          lastName,
-          brandName: byPrefix(data, 2) || null,
-          acquisitionChannels: parseChannels(byPrefix(data, 3)),
-          inspirationLinks: inspirationUrls.length ? inspirationUrls : (inspirationRaw ? [inspirationRaw] : []),
-          inspirationNotes: byPrefix(data, 5) || null,
-          visualPerception: splitList(byPrefix(data, 6), /,/),
-          editingStyles: splitList(byPrefix(data, 7), /,/),
-          mustHighlight: byPrefix(data, 8) || null,
-          mustAvoid: byPrefix(data, 9) || null,
-          brandFont: byPrefix(data, 10) || null,
-          musicVibe: byPrefix(data, 11) || null,
-          callToAction: byPrefix(data, 12) || null,
-          customAnswers: Object.keys(customAnswers).length ? customAnswers : undefined,
-          status: 'completed',
-          completedAt,
-        },
+      const mapped = {
+        firstName,
+        lastName,
+        brandName: byPrefix(data, 2) || null,
+        acquisitionChannels: parseChannels(byPrefix(data, 3)),
+        inspirationLinks: inspirationUrls.length ? inspirationUrls : (inspirationRaw ? [inspirationRaw] : []),
+        inspirationNotes: byPrefix(data, 5) || null,
+        visualPerception: splitList(byPrefix(data, 6), /,/),
+        editingStyles: splitList(byPrefix(data, 7), /,/),
+        mustHighlight: byPrefix(data, 8) || null,
+        mustAvoid: byPrefix(data, 9) || null,
+        brandFont: byPrefix(data, 10) || null,
+        musicVibe: byPrefix(data, 11) || null,
+        callToAction: byPrefix(data, 12) || null,
+        customAnswers: Object.keys(customAnswers).length ? customAnswers : undefined,
+        status: 'completed',
+        completedAt,
+      }
+
+      await db.clientOnboardingForm.upsert({
+        where: { clientId: resp.clientId },
+        update: mapped,
+        create: { clientId: resp.clientId, ...mapped },
       })
       migrated++
       details.push(`${fullName || resp.matchedOn || resp.clientId}`)

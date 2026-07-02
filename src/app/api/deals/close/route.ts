@@ -7,7 +7,7 @@ export async function POST(req: Request) {
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
-  const { leadId, client: clientData, deal } = body
+  const { leadId, client: clientData, deal, products } = body
 
   try {
     // ── 1. Créer ou retrouver le client ─────────────────────────────────────
@@ -191,6 +191,24 @@ export async function POST(req: Request) {
         where: { id: settings.id },
         data: { invoiceCounter: counter },
       })
+    }
+
+    // ── 8. Enregistrer les produits vendus (répartition CA par produit) ───────
+    if (Array.isArray(products) && products.length > 0) {
+      try {
+        await (prisma as any).clientProduct.createMany({
+          data: products
+            .filter((p: any) => p.productId)
+            .map((p: any) => ({
+              clientId: client.id,
+              productId: p.productId,
+              quantity: Math.max(1, Number(p.quantity) || 1),
+              amount: Number(p.amount) || 0,
+            })),
+        })
+      } catch (e) {
+        console.error('[deals/close] produits', e)
+      }
     }
 
     return NextResponse.json({

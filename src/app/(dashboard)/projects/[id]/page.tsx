@@ -8,6 +8,8 @@ import Link from 'next/link'
 import { FolderKanban, Clock, RotateCcw, CheckSquare, Plus, ExternalLink } from 'lucide-react'
 import { ProjectActions } from '@/components/projects/ProjectActions'
 import { ClientOnboarding } from '@/components/clients/ClientOnboarding'
+import { ClientOnboardingFormSection } from '@/components/clients/ClientOnboardingFormSection'
+import { ClientProductsSection } from '@/components/clients/ClientProductsSection'
 import { ProjectTeam } from '@/components/projects/ProjectTeam'
 import { ProjectComments } from '@/components/projects/ProjectComments'
 import { DeliverableTimeline } from '@/components/projects/DeliverableTimeline'
@@ -72,6 +74,16 @@ export default async function ProjectDetailPage({ params }: PageProps) {
     orderBy: { name: 'asc' },
   })
 
+  // Données onboarding du client — reportées automatiquement dans la fiche projet
+  const dbAny = prisma as any
+  const [onboardingForm, spotSelections, contentTopics, allProducts, clientProducts] = await Promise.all([
+    (async () => { try { return await dbAny.clientOnboardingForm.findUnique({ where: { clientId: project.clientId }, omit: { icpPdf: true } }) } catch { return null } })(),
+    (async () => { try { return await dbAny.clientSpotSelection.findMany({ where: { clientId: project.clientId }, include: { spot: { select: { id: true, name: true, city: true } } } }) } catch { return [] } })(),
+    (async () => { try { return await dbAny.clientContentTopic.findMany({ where: { clientId: project.clientId }, orderBy: [{ order: 'asc' }, { createdAt: 'asc' }] }) } catch { return [] } })(),
+    (async () => { try { return await dbAny.product.findMany({ orderBy: [{ order: 'asc' }, { createdAt: 'asc' }] }) } catch { return [] } })(),
+    (async () => { try { return await dbAny.clientProduct.findMany({ where: { clientId: project.clientId }, include: { product: true }, orderBy: { createdAt: 'desc' } }) } catch { return [] } })(),
+  ])
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* ── Header ── */}
@@ -114,6 +126,29 @@ export default async function ProjectDetailPage({ params }: PageProps) {
       <ClientOnboarding
         clientId={project.clientId}
         initialChecklist={clientChecklist}
+      />
+
+      {/* ── Infos onboarding client (branding, ICP, lieux, sujets) ── */}
+      <ClientOnboardingFormSection
+        clientId={project.clientId}
+        data={onboardingForm ? {
+          ...onboardingForm,
+          completedAt: onboardingForm.completedAt
+            ? (onboardingForm.completedAt instanceof Date ? onboardingForm.completedAt.toISOString() : String(onboardingForm.completedAt))
+            : null,
+        } : null}
+        spotSelections={(spotSelections ?? []).map((s: any) => ({ id: s.spot.id, name: s.spot.name, city: s.spot.city }))}
+        initialTopics={(contentTopics ?? []).map((t: any) => ({ id: t.id, title: t.title, notes: t.notes, status: t.status, order: t.order }))}
+      />
+
+      {/* ── Produits / offres du client ── */}
+      <ClientProductsSection
+        clientId={project.clientId}
+        allProducts={(allProducts ?? []).map((p: any) => ({ id: p.id, name: p.name, color: p.color, defaultPrice: p.defaultPrice, active: p.active }))}
+        initialItems={(clientProducts ?? []).map((i: any) => ({
+          id: i.id, productId: i.productId, quantity: i.quantity, amount: i.amount, notes: i.notes,
+          product: { id: i.product.id, name: i.product.name, color: i.product.color, defaultPrice: i.product.defaultPrice, active: i.product.active },
+        }))}
       />
 
       {/* ── HERO: Deliverable Timeline ── */}

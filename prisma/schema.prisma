@@ -117,6 +117,7 @@ model Client {
   onboardingForm  ClientOnboardingForm?
   spotSelections  ClientSpotSelection[]
   contentTopics   ClientContentTopic[]
+  products        ClientProduct[]
 
   @@map("clients")
 }
@@ -1118,6 +1119,40 @@ model OnboardingConfig {
   updatedAt DateTime @updatedAt
 
   @@map("onboarding_config")
+}
+
+// ─── PRODUITS / OFFRES ────────────────────────────────────────────────────────
+
+// Catalogue de produits personnalisables (offre batch content, documentaire, montage…)
+model Product {
+  id           String   @id @default(cuid())
+  name         String
+  color        String   @default("#e8b84b")
+  defaultPrice Float?
+  active       Boolean  @default(true)
+  order        Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  clientProducts ClientProduct[]
+
+  @@map("products")
+}
+
+// Produits vendus à un client (au close ou ajoutés depuis la fiche client/projet)
+model ClientProduct {
+  id        String   @id @default(cuid())
+  clientId  String
+  productId String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity  Int      @default(1)
+  amount    Float    @default(0) // montant total facturé pour cette ligne
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("client_products")
 }
 
 // Sujets de contenu prédéfinis par client (basés sur l'ICP de l'onboarding)

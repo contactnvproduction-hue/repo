@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend,
@@ -137,6 +137,29 @@ export function AcquisitionBoard({
     deliverables: '',
     depositPercent: '30',
   })
+
+  // Produits vendus au close — catalogue chargé à l'ouverture du modal
+  type CatalogProduct = { id: string; name: string; color: string; defaultPrice: number | null; active: boolean }
+  const [catalogProducts, setCatalogProducts] = useState<CatalogProduct[]>([])
+  const [selectedProducts, setSelectedProducts] = useState<Record<string, { quantity: string; amount: string }>>({})
+
+  useEffect(() => {
+    if (!showConvert) return
+    fetch('/api/products')
+      .then(r => r.ok ? r.json() : [])
+      .then((list: CatalogProduct[]) => setCatalogProducts(list.filter(p => p.active)))
+      .catch(() => {})
+  }, [showConvert])
+
+  const toggleConvertProduct = (p: CatalogProduct) => {
+    setSelectedProducts(prev => {
+      if (prev[p.id]) {
+        const { [p.id]: _, ...rest } = prev
+        return rest
+      }
+      return { ...prev, [p.id]: { quantity: '1', amount: p.defaultPrice != null ? String(p.defaultPrice) : '' } }
+    })
+  }
 
   // ── Derived state ───────────────────────────────────────────────────────────
 
@@ -342,12 +365,18 @@ export function AcquisitionBoard({
             deliverables: convertDeal.deliverables || undefined,
             depositPercent: convertDeal.missionType === 'PONCTUEL' ? parseInt(convertDeal.depositPercent) || 30 : undefined,
           },
+          products: Object.entries(selectedProducts).map(([productId, v]) => ({
+            productId,
+            quantity: parseInt(v.quantity) || 1,
+            amount: parseFloat(v.amount) || 0,
+          })),
         }),
       })
       if (!res.ok) { toast.error('Erreur clôture de vente'); return }
       const data = await res.json()
       if (data.lead) updateLeadInState(data.lead)
       setShowConvert(false)
+      setSelectedProducts({})
       const invCount = data.invoices?.length ?? 0
       toast.success(`✅ Vente clôturée — ${data.client?.name ?? ''}${invCount ? ` · ${invCount} facture${invCount > 1 ? 's' : ''} créée${invCount > 1 ? 's' : ''}` : ''}`)
     } catch { toast.error('Erreur') } finally { setConvertLoading(false) }
@@ -1392,6 +1421,54 @@ export function AcquisitionBoard({
                   className="w-full bg-nv-bg border border-nv-border rounded-lg px-3 py-2 text-sm text-white placeholder:text-nv-text-muted focus:outline-none focus:border-primary resize-none"
                 />
               </div>
+
+              {/* Produits vendus — alimentent la répartition CA par produit */}
+              {catalogProducts.length > 0 && (
+                <div>
+                  <label className="block text-xs font-medium text-nv-text-muted mb-1.5">Produits vendus</label>
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {catalogProducts.map(p => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => toggleConvertProduct(p)}
+                        className={`px-2.5 py-1 rounded-full text-xs border transition-all flex items-center gap-1.5 ${
+                          selectedProducts[p.id]
+                            ? 'border-primary bg-primary/15 text-primary font-medium'
+                            : 'border-nv-border text-nv-text-muted hover:text-white'
+                        }`}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: p.color }} />
+                        {p.name}
+                      </button>
+                    ))}
+                  </div>
+                  {Object.entries(selectedProducts).map(([pid, v]) => {
+                    const p = catalogProducts.find(x => x.id === pid)
+                    if (!p) return null
+                    return (
+                      <div key={pid} className="flex items-center gap-2 mb-1.5">
+                        <span className="text-xs text-nv-text-muted flex-1 min-w-0 truncate">{p.name}</span>
+                        <input
+                          type="number" min="1"
+                          value={v.quantity}
+                          onChange={e => setSelectedProducts(prev => ({ ...prev, [pid]: { ...prev[pid], quantity: e.target.value } }))}
+                          className="w-14 bg-nv-bg border border-nv-border rounded-lg px-2 py-1 text-xs text-white text-center focus:outline-none focus:border-primary"
+                        />
+                        <span className="text-[10px] text-nv-text-muted">×</span>
+                        <input
+                          type="number"
+                          placeholder="Montant €"
+                          value={v.amount}
+                          onChange={e => setSelectedProducts(prev => ({ ...prev, [pid]: { ...prev[pid], amount: e.target.value } }))}
+                          className="w-24 bg-nv-bg border border-nv-border rounded-lg px-2 py-1 text-xs text-white text-right focus:outline-none focus:border-primary"
+                        />
+                        <span className="text-[10px] text-nv-text-muted">€</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
 
               {/* Preview */}
               {(convertDeal.monthlyAmount || convertDeal.totalAmount) && (

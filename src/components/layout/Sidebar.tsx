@@ -8,6 +8,7 @@ import {
   LayoutDashboard, Users, FolderKanban, Receipt, BarChart3,
   CheckSquare, Target, Calendar, Users2, Settings,
   LogOut, X, ChevronRight, Database, Crosshair, Briefcase,
+  ClipboardCheck,
 } from 'lucide-react'
 
 const navItems = [
@@ -15,6 +16,7 @@ const navItems = [
   { href: '/ceo', icon: Briefcase, label: 'Espace CEO' },
   { href: '/acquisition', icon: Crosshair, label: 'Acquisition' },
   { href: '/clients', icon: Users, label: 'Clients' },
+  { href: '/onboardings', icon: ClipboardCheck, label: 'Onboarding' },
   { href: '/projects', icon: FolderKanban, label: 'Projets' },
   {
     label: 'Facturation',
