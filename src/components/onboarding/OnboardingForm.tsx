@@ -460,18 +460,18 @@ function SpotDetailModal({
       onClick={handleClose}
     >
       <div
-        className={`w-full max-w-lg bg-nv-dark border border-nv-border rounded-2xl overflow-hidden transition-all duration-250 ${visible ? 'scale-100 translate-y-0' : 'scale-95 translate-y-4'}`}
+        className={`w-full max-w-lg max-h-[92vh] overflow-y-auto bg-nv-dark border border-nv-border rounded-2xl transition-all duration-250 ${visible ? 'scale-100 translate-y-0' : 'scale-95 translate-y-4'}`}
         onClick={e => e.stopPropagation()}
       >
-        {/* Carrousel */}
-        <div className="relative aspect-video bg-nv-black overflow-hidden">
+        {/* Carrousel — object-contain : les photos verticales s'affichent entières, sans crop */}
+        <div className="relative h-[55vh] max-h-[520px] bg-nv-black overflow-hidden">
           <div
             className="flex h-full transition-transform duration-300 ease-out"
             style={{ transform: `translateX(-${photoIdx * 100}%)` }}
           >
             {photos.map((photo, i) => (
               photo ? (
-                <img key={i} src={photo} alt={`${spot.name} — photo ${i + 1}`} className="w-full h-full object-cover shrink-0" />
+                <img key={i} src={photo} alt={`${spot.name} — photo ${i + 1}`} className="w-full h-full object-contain shrink-0" />
               ) : (
                 <div key={i} className="w-full h-full shrink-0 flex items-center justify-center">
                   <MapPin className="w-12 h-12 text-nv-border-light" />
