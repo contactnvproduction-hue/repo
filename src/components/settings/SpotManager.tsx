@@ -43,6 +43,7 @@ type Spot = {
   description: string | null
   tags: string[]
   photos: string[]
+  photosFull?: boolean[]
   supplement: string | null
   active: boolean
   order: number
@@ -71,6 +72,10 @@ function SpotForm({
   const [supplement, setSupplement] = useState(initial?.supplement ?? '')
   const [active, setActive] = useState(initial?.active ?? true)
   const [photos, setPhotos] = useState<string[]>(initial?.photos ?? [])
+  // Aligné sur photos : true = la photo s'affiche en grand format complet dans la fiche lieu
+  const [photosFull, setPhotosFull] = useState<boolean[]>(
+    (initial?.photos ?? []).map((_, i) => initial?.photosFull?.[i] ?? false)
+  )
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -83,8 +88,14 @@ function SpotForm({
       try { added.push(await resizeImage(file)) } catch { toast.error(`Impossible de lire ${file.name}`) }
     }
     setPhotos(p => [...p, ...added].slice(0, 6))
+    setPhotosFull(f => [...f, ...added.map(() => false)].slice(0, 6))
     setUploading(false)
     if (added.length > 0) toast.success(`${added.length} photo(s) ajoutée(s)`)
+  }
+
+  const removePhoto = (idx: number) => {
+    setPhotos(p => p.filter((_, i) => i !== idx))
+    setPhotosFull(f => f.filter((_, i) => i !== idx))
   }
 
   const handleSave = async () => {
@@ -97,6 +108,7 @@ function SpotForm({
       description: description.trim() || null,
       tags: tagsStr.split(',').map(t => t.trim()).filter(Boolean),
       photos,
+      photosFull: photos.map((_, i) => photosFull[i] ?? false),
       supplement: supplement.trim() || null,
       active,
     })
@@ -160,18 +172,29 @@ function SpotForm({
         />
         <div className="flex flex-wrap gap-2">
           {photos.map((photo, i) => (
-            <div key={i} className="relative w-20 h-20 rounded-lg overflow-hidden border border-nv-border group">
-              <img src={photo} alt={`Photo ${i + 1}`} className="w-full h-full object-cover" />
-              <button
-                type="button"
-                onClick={() => setPhotos(p => p.filter((_, idx) => idx !== i))}
-                className="absolute top-1 right-1 w-5 h-5 rounded-full bg-nv-black/80 flex items-center justify-center text-nv-text-muted hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
-              >
-                <X className="w-3 h-3" />
-              </button>
-              {i === 0 && (
-                <span className="absolute bottom-0 inset-x-0 bg-primary/90 text-nv-black text-[9px] font-semibold text-center py-0.5">Principale</span>
-              )}
+            <div key={i} className="w-20">
+              <div className="relative w-20 h-20 rounded-lg overflow-hidden border border-nv-border group">
+                <img src={photo} alt={`Photo ${i + 1}`} className="w-full h-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => removePhoto(i)}
+                  className="absolute top-1 right-1 w-5 h-5 rounded-full bg-nv-black/80 flex items-center justify-center text-nv-text-muted hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+                {i === 0 && (
+                  <span className="absolute bottom-0 inset-x-0 bg-primary/90 text-nv-black text-[9px] font-semibold text-center py-0.5">Principale</span>
+                )}
+              </div>
+              <label className="flex items-center gap-1 mt-1 cursor-pointer select-none" title="Afficher cette photo en grand format complet (sans crop) dans la fiche du lieu">
+                <input
+                  type="checkbox"
+                  checked={photosFull[i] ?? false}
+                  onChange={() => setPhotosFull(f => f.map((v, idx) => idx === i ? !v : v))}
+                  className="w-3 h-3 accent-[#e8b84b]"
+                />
+                <span className={`text-[9px] ${photosFull[i] ? 'text-primary' : 'text-nv-text-faint'}`}>Grand format</span>
+              </label>
             </div>
           ))}
           {photos.length < 6 && (
@@ -186,7 +209,7 @@ function SpotForm({
             </button>
           )}
         </div>
-        <p className="text-[10px] text-nv-text-faint mt-1">La première photo est celle affichée en couverture dans le formulaire. Compressées automatiquement.</p>
+        <p className="text-[10px] text-nv-text-faint mt-1">La première photo est la couverture dans le formulaire. Cochez «&nbsp;Grand format&nbsp;» pour les photos (verticales notamment) à afficher entières et en grand dans la fiche du lieu.</p>
       </div>
       <div className="flex items-center gap-2">
         <button

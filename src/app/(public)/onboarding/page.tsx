@@ -21,6 +21,7 @@ export default async function OnboardingPage() {
         description: true,
         tags: true,
         photos: true,
+        photosFull: true,
         supplement: true,
       },
     }),

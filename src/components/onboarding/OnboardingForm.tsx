@@ -14,6 +14,7 @@ type Spot = {
   description: string | null
   tags: string[]
   photos: string[]
+  photosFull?: boolean[]
   supplement: string | null
 }
 
@@ -431,7 +432,9 @@ function SpotDetailModal({
   // Orientation de chaque photo (détectée au chargement) → hauteur du cadre adaptée
   const [orientations, setOrientations] = useState<Record<number, 'portrait' | 'landscape'>>({})
   const photos = spot.photos.length > 0 ? spot.photos : [null]
-  const isPortrait = orientations[photoIdx] === 'portrait'
+  // Grand format complet uniquement pour les photos cochées « Grand format » dans l'admin
+  const isFullPhoto = spot.photosFull?.[photoIdx] === true
+  const isPortrait = isFullPhoto && orientations[photoIdx] === 'portrait'
 
   // Animation d'entrée : monté invisible → visible à la frame suivante
   useEffect(() => {
@@ -478,7 +481,7 @@ function SpotDetailModal({
                   key={i}
                   src={photo}
                   alt={`${spot.name} — photo ${i + 1}`}
-                  className="w-full h-full object-contain shrink-0"
+                  className={`w-full h-full shrink-0 ${spot.photosFull?.[i] ? 'object-contain' : 'object-cover'}`}
                   onLoad={e => {
                     const img = e.currentTarget
                     const orientation = img.naturalHeight > img.naturalWidth ? 'portrait' : 'landscape'

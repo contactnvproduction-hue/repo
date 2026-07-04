@@ -1044,6 +1044,7 @@ model ShootingSpot {
   description String?
   tags        String[]
   photos      String[]
+  photosFull  Boolean[] // aligné sur photos : true = afficher en grand format complet (sans crop)
   supplement  String?
   active      Boolean  @default(true)
   order       Int      @default(0)
