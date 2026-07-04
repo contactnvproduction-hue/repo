@@ -25,9 +25,14 @@ export default async function TournagePage({
   if (!client) return notFound()
 
   const db = prisma as any
-  const plan = planId
-    ? await db.shootingPlan.findUnique({ where: { id: planId } })
-    : null
+  const [plan, availableSpots] = await Promise.all([
+    planId ? db.shootingPlan.findUnique({ where: { id: planId } }) : Promise.resolve(null),
+    db.shootingSpot.findMany({
+      where: { active: true },
+      select: { id: true, name: true, city: true, address: true },
+      orderBy: [{ city: 'asc' }, { order: 'asc' }],
+    }).catch(() => []),
+  ])
 
   // Nouveau plan → pré-remplissage depuis l'onboarding client (lieux choisis, DA, notes)
   let initialPlan = plan
@@ -49,6 +54,7 @@ export default async function TournagePage({
       clientName={client.name}
       clientCompany={client.company ?? undefined}
       initialPlan={initialPlan ?? null}
+      availableSpots={availableSpots}
     />
   )
 }

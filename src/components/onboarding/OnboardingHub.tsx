@@ -6,8 +6,12 @@ import Link from 'next/link'
 import {
   Copy, Check, FileText, MapPin, ExternalLink,
   ChevronDown, ChevronUp, Send, ClipboardCheck, Trash2, Loader2,
+  ClipboardList,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { SpotManager } from '@/components/settings/SpotManager'
+import { OnboardingQuestionManager } from '@/components/settings/OnboardingQuestionManager'
+import type { OnboardingQuestion } from '@/lib/onboarding-questions'
 
 type HubRow = {
   clientId: string
@@ -30,11 +34,36 @@ type HubRow = {
   spots: { name: string; city: string }[]
 }
 
-export function OnboardingHub({ rows }: { rows: HubRow[] }) {
+type HubSpot = {
+  id: string
+  name: string
+  city: string
+  address: string | null
+  category: string | null
+  description: string | null
+  tags: string[]
+  photos: string[]
+  supplement: string | null
+  active: boolean
+  order: number
+}
+
+export function OnboardingHub({
+  rows,
+  isAdmin = false,
+  spots = [],
+  questions = [],
+}: {
+  rows: HubRow[]
+  isAdmin?: boolean
+  spots?: HubSpot[]
+  questions?: OnboardingQuestion[]
+}) {
   const router = useRouter()
   const [copied, setCopied] = useState(false)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [tab, setTab] = useState<'reponses' | 'lieux' | 'questions'>('reponses')
 
   const formUrl = typeof window !== 'undefined' ? `${window.location.origin}/onboarding` : '/onboarding'
 
@@ -111,7 +140,47 @@ export function OnboardingHub({ rows }: { rows: HubRow[] }) {
         </div>
       </div>
 
+      {/* Onglets admin : réponses / lieux / questions */}
+      {isAdmin && (
+        <div className="flex gap-1 border-b border-nv-border">
+          {([
+            { id: 'reponses', label: `Réponses (${rows.length})`, icon: ClipboardCheck },
+            { id: 'lieux', label: `Lieux de tournage (${spots.length})`, icon: MapPin },
+            { id: 'questions', label: 'Questions du formulaire', icon: ClipboardList },
+          ] as const).map(t => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTab(t.id)}
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-sm border-b-2 -mb-px transition-colors ${
+                tab === t.id
+                  ? 'border-primary text-primary font-medium'
+                  : 'border-transparent text-nv-text-muted hover:text-nv-text'
+              }`}
+            >
+              <t.icon className="w-3.5 h-3.5" />
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Lieux de tournage — modifiables : photos, description, adresse, catégorie… */}
+      {isAdmin && tab === 'lieux' && (
+        <div className="bg-nv-card border border-nv-border rounded-2xl p-5">
+          <SpotManager initialSpots={spots} />
+        </div>
+      )}
+
+      {/* Questions du formulaire — libellés, options, champs custom */}
+      {isAdmin && tab === 'questions' && (
+        <div className="bg-nv-card border border-nv-border rounded-2xl p-5">
+          <OnboardingQuestionManager initialQuestions={questions} />
+        </div>
+      )}
+
       {/* Réponses reçues */}
+      {tab === 'reponses' && (
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-nv-text flex items-center gap-2">
@@ -221,6 +290,7 @@ export function OnboardingHub({ rows }: { rows: HubRow[] }) {
           </div>
         )}
       </div>
+      )}
 
     </div>
   )

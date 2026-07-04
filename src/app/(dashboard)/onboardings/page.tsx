@@ -3,6 +3,8 @@ import { prisma } from '@/lib/db'
 import { ClipboardCheck } from 'lucide-react'
 import { OnboardingHub } from '@/components/onboarding/OnboardingHub'
 import { importLegacyResponses } from '@/lib/onboarding-import'
+import { ensureDefaultSpots } from '@/lib/shooting-spots-seed'
+import { mergeQuestions } from '@/lib/onboarding-questions'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,8 +16,11 @@ export default async function OnboardingsPage() {
 
   // Réintègre l'ancienne data Google Forms (idempotent, ne touche pas l'existant)
   await importLegacyResponses(db)
+  await ensureDefaultSpots(db)
 
-  const [forms, selections] = await Promise.all([
+  const isAdmin = ['ADMIN', 'MANAGER'].includes(session.user.role)
+
+  const [forms, selections, spots, questionsConfig] = await Promise.all([
     (async () => { try { return await db.clientOnboardingForm.findMany({
       omit: { icpPdf: true },
       include: { client: { select: { id: true, name: true, status: true } } },
@@ -24,7 +29,11 @@ export default async function OnboardingsPage() {
     (async () => { try { return await db.clientSpotSelection.findMany({
       include: { spot: { select: { name: true, city: true } } },
     }) } catch { return [] } })(),
+    (async () => { try { return await db.shootingSpot.findMany({ orderBy: [{ city: 'asc' }, { order: 'asc' }] }) } catch { return [] } })(),
+    (async () => { try { return await db.onboardingConfig.findUnique({ where: { id: 'main' } }) } catch { return null } })(),
   ])
+
+  const questions = mergeQuestions(questionsConfig?.questions ?? null)
 
   const spotsByClient: Record<string, { name: string; city: string }[]> = {}
   for (const sel of selections) {
@@ -66,7 +75,12 @@ export default async function OnboardingsPage() {
         </p>
       </div>
 
-      <OnboardingHub rows={rows} />
+      <OnboardingHub
+        rows={rows}
+        isAdmin={isAdmin}
+        spots={spots}
+        questions={questions}
+      />
     </div>
   )
 }

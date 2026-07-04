@@ -1,15 +1,11 @@
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
-import { Settings, Tag, DatabaseBackup, CheckSquare, Users, MapPin, ClipboardList } from 'lucide-react'
+import { Settings, Tag, DatabaseBackup, CheckSquare, Users } from 'lucide-react'
 import { SettingsForm } from '@/components/settings/SettingsForm'
 import { CategoryManager } from '@/components/projects/CategoryManager'
 import { DataBackup } from '@/components/settings/DataBackup'
 import { TaskCategoryManager } from '@/components/settings/TaskCategoryManager'
 import { UserManager } from '@/components/settings/UserManager'
-import { SpotManager } from '@/components/settings/SpotManager'
-import { OnboardingQuestionManager } from '@/components/settings/OnboardingQuestionManager'
-import { mergeQuestions } from '@/lib/onboarding-questions'
-import { ensureDefaultSpots } from '@/lib/shooting-spots-seed'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 export default async function SettingsPage() {
@@ -22,10 +18,6 @@ export default async function SettingsPage() {
   }
 
   const taskCategories = await prisma.taskCategory.findMany({ orderBy: { order: 'asc' } })
-  await ensureDefaultSpots(prisma as any)
-  const spots = await (prisma as any).shootingSpot.findMany({ orderBy: [{ city: 'asc' }, { order: 'asc' }] })
-  const onboardingConfig = await (prisma as any).onboardingConfig.findUnique({ where: { id: 'main' } }).catch(() => null)
-  const onboardingQuestions = mergeQuestions(onboardingConfig?.questions ?? null)
   const users = await prisma.user.findMany({
     select: { id: true, name: true, email: true, role: true, phone: true, specialty: true, disponible: true, avatar: true, createdAt: true },
     orderBy: { createdAt: 'asc' },
@@ -89,36 +81,6 @@ export default async function SettingsPage() {
           </CardHeader>
           <CardContent>
             <TaskCategoryManager initialCategories={taskCategories} />
-          </CardContent>
-        </Card>
-      )}
-
-      {isAdminOrManager && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <MapPin size={16} className="text-primary" />
-              Spots de tournage — Formulaire onboarding
-            </CardTitle>
-            <p className="text-sm text-nv-text-muted">Bibliothèque des lieux proposés aux nouveaux clients dans le formulaire d'onboarding <code className="text-primary text-xs">/onboarding</code>.</p>
-          </CardHeader>
-          <CardContent>
-            <SpotManager initialSpots={spots} />
-          </CardContent>
-        </Card>
-      )}
-
-      {isAdminOrManager && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <ClipboardList size={16} className="text-primary" />
-              Questions — Formulaire onboarding
-            </CardTitle>
-            <p className="text-sm text-nv-text-muted">Personnalisez les questions posées aux nouveaux clients : libellés, options, questions supplémentaires.</p>
-          </CardHeader>
-          <CardContent>
-            <OnboardingQuestionManager initialQuestions={onboardingQuestions} />
           </CardContent>
         </Card>
       )}

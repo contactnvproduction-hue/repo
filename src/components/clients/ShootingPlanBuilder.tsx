@@ -58,11 +58,19 @@ interface PlanData {
   links?: ExternalLink[]
 }
 
+interface AvailableSpot {
+  id: string
+  name: string
+  city: string
+  address: string | null
+}
+
 interface Props {
   clientId: string
   clientName: string
   clientCompany?: string
   initialPlan?: PlanData | null
+  availableSpots?: AvailableSpot[]
 }
 
 function genId() { return Math.random().toString(36).slice(2, 8) }
@@ -107,7 +115,7 @@ function Section({ id, title: sTitle, icon, children, openSection, setOpenSectio
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-export function ShootingPlanBuilder({ clientId, clientName, clientCompany, initialPlan }: Props) {
+export function ShootingPlanBuilder({ clientId, clientName, clientCompany, initialPlan, availableSpots = [] }: Props) {
   const [planId, setPlanId] = useState(initialPlan?.id)
   const [shareToken, setShareToken] = useState(initialPlan?.shareToken)
   const [copied, setCopied] = useState(false)
@@ -349,6 +357,42 @@ export function ShootingPlanBuilder({ clientId, clientName, clientCompany, initi
 
       {/* Lieu */}
       <Section id="lieu" title="Lieu de tournage" icon={<MapPin size={14} />} {...sp}>
+        {availableSpots.length > 0 && (
+          <div>
+            <label className="block text-[10px] font-semibold text-nv-text-muted mb-1.5 uppercase tracking-wider">Lieux de la bibliothèque — cliquer pour ajouter</label>
+            <div className="flex flex-wrap gap-1.5">
+              {availableSpots.map(spot => {
+                const label = `${spot.name} (${spot.city})`
+                const added = location.includes(spot.name)
+                return (
+                  <button
+                    key={spot.id}
+                    type="button"
+                    onClick={() => {
+                      if (added) {
+                        // Retire le lieu (et son adresse) des champs
+                        setLocation(l => l.split(' + ').filter(part => !part.includes(spot.name)).join(' + '))
+                        if (spot.address) setLocationAddress(a => a.split(' / ').filter(part => part.trim() !== spot.address).join(' / '))
+                      } else {
+                        setLocation(l => l ? `${l} + ${label}` : label)
+                        if (spot.address) setLocationAddress(a => a ? `${a} / ${spot.address}` : spot.address!)
+                      }
+                    }}
+                    className={`px-2.5 py-1 rounded-full text-xs border transition-all flex items-center gap-1 ${
+                      added
+                        ? 'border-primary bg-primary/15 text-primary font-medium'
+                        : 'border-nv-border text-nv-text-muted hover:text-white hover:border-nv-border-light'
+                    }`}
+                  >
+                    <MapPin size={10} />
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+            <p className="text-[10px] text-nv-text-faint mt-1.5">Les lieux du formulaire d&apos;onboarding — gérables depuis l&apos;onglet Onboarding.</p>
+          </div>
+        )}
         <div>
           <label className="block text-[10px] font-semibold text-nv-text-muted mb-1.5 uppercase tracking-wider">Nom du lieu</label>
           <input value={location} onChange={e => setLocation(e.target.value)} placeholder="Studio, domicile client, bureau…" className={inp} />

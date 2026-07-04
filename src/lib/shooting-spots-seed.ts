@@ -88,12 +88,35 @@ export const DEFAULT_SPOTS = [
   },
 ]
 
-// Idempotent : ne crée les spots par défaut que si la table est vide
+// Spot spécial toujours proposé : tournage dans les locaux du client
+const CLIENT_PREMISES_SPOT = {
+  name: 'Vos locaux',
+  city: 'Chez vous',
+  category: 'Sur site client',
+  description: 'Nous nous déplaçons directement dans vos locaux (bureaux, boutique, salle de sport…) pour un tournage dans votre environnement réel.',
+  tags: ['sur site', 'authentique', 'déplacement'],
+  photos: [] as string[],
+  supplement: null as string | null,
+  address: null as string | null,
+  active: true,
+  order: 99,
+}
+
+// Idempotent : crée les spots par défaut si la table est vide,
+// et garantit que le spot "Vos locaux" existe toujours
 export async function ensureDefaultSpots(db: any): Promise<void> {
   try {
     const count = await db.shootingSpot.count()
-    if (count > 0) return
-    await db.shootingSpot.createMany({ data: DEFAULT_SPOTS })
+    if (count === 0) {
+      await db.shootingSpot.createMany({ data: [...DEFAULT_SPOTS, CLIENT_PREMISES_SPOT] })
+      return
+    }
+    const premises = await db.shootingSpot.findFirst({
+      where: { name: { contains: 'locaux', mode: 'insensitive' } },
+    })
+    if (!premises) {
+      await db.shootingSpot.create({ data: CLIENT_PREMISES_SPOT })
+    }
   } catch {
     // table pas encore migrée — le build Render fera le db push
   }
