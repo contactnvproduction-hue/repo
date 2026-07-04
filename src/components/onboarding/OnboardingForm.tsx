@@ -428,7 +428,10 @@ function SpotDetailModal({
 }) {
   const [visible, setVisible] = useState(false)
   const [photoIdx, setPhotoIdx] = useState(0)
+  // Orientation de chaque photo (détectée au chargement) → hauteur du cadre adaptée
+  const [orientations, setOrientations] = useState<Record<number, 'portrait' | 'landscape'>>({})
   const photos = spot.photos.length > 0 ? spot.photos : [null]
+  const isPortrait = orientations[photoIdx] === 'portrait'
 
   // Animation d'entrée : monté invisible → visible à la frame suivante
   useEffect(() => {
@@ -463,15 +466,25 @@ function SpotDetailModal({
         className={`w-full max-w-lg max-h-[92vh] overflow-y-auto bg-nv-dark border border-nv-border rounded-2xl transition-all duration-250 ${visible ? 'scale-100 translate-y-0' : 'scale-95 translate-y-4'}`}
         onClick={e => e.stopPropagation()}
       >
-        {/* Carrousel — object-contain : les photos verticales s'affichent entières, sans crop */}
-        <div className="relative h-[55vh] max-h-[520px] bg-nv-black overflow-hidden">
+        {/* Carrousel — object-contain (jamais de crop) + cadre agrandi quand la photo est verticale */}
+        <div className={`relative bg-nv-black overflow-hidden transition-[height] duration-300 ease-out ${isPortrait ? 'h-[72vh] max-h-[700px]' : 'h-[55vh] max-h-[520px]'}`}>
           <div
             className="flex h-full transition-transform duration-300 ease-out"
             style={{ transform: `translateX(-${photoIdx * 100}%)` }}
           >
             {photos.map((photo, i) => (
               photo ? (
-                <img key={i} src={photo} alt={`${spot.name} — photo ${i + 1}`} className="w-full h-full object-contain shrink-0" />
+                <img
+                  key={i}
+                  src={photo}
+                  alt={`${spot.name} — photo ${i + 1}`}
+                  className="w-full h-full object-contain shrink-0"
+                  onLoad={e => {
+                    const img = e.currentTarget
+                    const orientation = img.naturalHeight > img.naturalWidth ? 'portrait' : 'landscape'
+                    setOrientations(o => o[i] === orientation ? o : { ...o, [i]: orientation })
+                  }}
+                />
               ) : (
                 <div key={i} className="w-full h-full shrink-0 flex items-center justify-center">
                   <MapPin className="w-12 h-12 text-nv-border-light" />
