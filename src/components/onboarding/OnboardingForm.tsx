@@ -415,8 +415,169 @@ function Step1({ answers, setAnswers }: { answers: Answers; setAnswers: (a: Answ
 
 // ─── STEP 4 : Spots ──────────────────────────────────────────────────────────
 
+// Fiche détaillée d'un lieu : carrousel photos + description complète,
+// ouverture/fermeture animées (fade + scale)
+function SpotDetailModal({
+  spot, selected, maxed, onToggle, onClose,
+}: {
+  spot: Spot
+  selected: boolean
+  maxed: boolean
+  onToggle: () => void
+  onClose: () => void
+}) {
+  const [visible, setVisible] = useState(false)
+  const [photoIdx, setPhotoIdx] = useState(0)
+  const photos = spot.photos.length > 0 ? spot.photos : [null]
+
+  // Animation d'entrée : monté invisible → visible à la frame suivante
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setVisible(true))
+    document.body.style.overflow = 'hidden'
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') handleClose()
+      if (e.key === 'ArrowRight') setPhotoIdx(i => Math.min(i + 1, photos.length - 1))
+      if (e.key === 'ArrowLeft') setPhotoIdx(i => Math.max(i - 1, 0))
+    }
+    window.addEventListener('keydown', onKey)
+    return () => {
+      cancelAnimationFrame(raf)
+      document.body.style.overflow = ''
+      window.removeEventListener('keydown', onKey)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const handleClose = () => {
+    setVisible(false)
+    setTimeout(onClose, 250)
+  }
+
+  return (
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 transition-opacity duration-250 ${visible ? 'opacity-100' : 'opacity-0'}`}
+      style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)' }}
+      onClick={handleClose}
+    >
+      <div
+        className={`w-full max-w-lg bg-nv-dark border border-nv-border rounded-2xl overflow-hidden transition-all duration-250 ${visible ? 'scale-100 translate-y-0' : 'scale-95 translate-y-4'}`}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Carrousel */}
+        <div className="relative aspect-video bg-nv-black overflow-hidden">
+          <div
+            className="flex h-full transition-transform duration-300 ease-out"
+            style={{ transform: `translateX(-${photoIdx * 100}%)` }}
+          >
+            {photos.map((photo, i) => (
+              photo ? (
+                <img key={i} src={photo} alt={`${spot.name} — photo ${i + 1}`} className="w-full h-full object-cover shrink-0" />
+              ) : (
+                <div key={i} className="w-full h-full shrink-0 flex items-center justify-center">
+                  <MapPin className="w-12 h-12 text-nv-border-light" />
+                </div>
+              )
+            ))}
+          </div>
+
+          {/* Flèches */}
+          {photos.length > 1 && (
+            <>
+              {photoIdx > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setPhotoIdx(i => i - 1)}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-nv-black/70 border border-nv-border flex items-center justify-center text-nv-text hover:bg-nv-black transition-colors"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+              )}
+              {photoIdx < photos.length - 1 && (
+                <button
+                  type="button"
+                  onClick={() => setPhotoIdx(i => i + 1)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-nv-black/70 border border-nv-border flex items-center justify-center text-nv-text hover:bg-nv-black transition-colors"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              )}
+              {/* Points */}
+              <div className="absolute bottom-2.5 inset-x-0 flex justify-center gap-1.5">
+                {photos.map((_, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => setPhotoIdx(i)}
+                    className={`h-1.5 rounded-full transition-all ${i === photoIdx ? 'w-5 bg-primary' : 'w-1.5 bg-white/40 hover:bg-white/70'}`}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* Fermer */}
+          <button
+            type="button"
+            onClick={handleClose}
+            className="absolute top-2.5 right-2.5 w-8 h-8 rounded-full bg-nv-black/70 border border-nv-border flex items-center justify-center text-nv-text-muted hover:text-nv-text transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Contenu */}
+        <div className="p-5 space-y-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="text-lg font-semibold text-nv-text">{spot.name}</h3>
+            {spot.category && (
+              <span className="text-[11px] px-2 py-0.5 rounded-full bg-primary/10 border border-primary/25 text-primary">{spot.category}</span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5 text-sm text-nv-text-muted">
+            <MapPin className="w-3.5 h-3.5 text-primary shrink-0" />
+            {spot.city}{spot.address ? ` — ${spot.address}` : ''}
+          </div>
+
+          {spot.description && (
+            <p className="text-sm text-nv-text-muted leading-relaxed">{spot.description}</p>
+          )}
+
+          {spot.tags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {spot.tags.map(tag => (
+                <span key={tag} className="text-[11px] px-2 py-0.5 rounded bg-nv-card border border-nv-border text-nv-text-faint">{tag}</span>
+              ))}
+            </div>
+          )}
+
+          {spot.supplement && (
+            <p className="text-xs text-primary/80 italic">{spot.supplement}</p>
+          )}
+
+          <button
+            type="button"
+            onClick={() => { onToggle(); handleClose() }}
+            disabled={maxed && !selected}
+            className={`w-full py-2.5 rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+              selected
+                ? 'bg-nv-card border border-primary/40 text-primary hover:bg-primary/10'
+                : maxed
+                ? 'bg-nv-card border border-nv-border text-nv-text-faint cursor-not-allowed'
+                : 'bg-primary text-nv-black hover:bg-primary-hover'
+            }`}
+          >
+            {selected ? (<><X className="w-4 h-4" /> Retirer ce lieu</>) : maxed ? 'Maximum 2 lieux atteint' : (<><Check className="w-4 h-4" /> Choisir ce lieu</>)}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function StepSpots({ answers, setAnswers, spots }: { answers: Answers; setAnswers: (a: Answers) => void; spots: Spot[] }) {
   const cities = Array.from(new Set(spots.map(s => s.city))).sort()
+  const [detailSpot, setDetailSpot] = useState<Spot | null>(null)
 
   const toggleSpot = (id: string) => {
     if (answers.selectedSpots.includes(id)) {
@@ -431,7 +592,7 @@ function StepSpots({ answers, setAnswers, spots }: { answers: Answers; setAnswer
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-base font-medium text-nv-text">Choisissez 2 lieux de tournage</h3>
-          <p className="text-sm text-nv-text-muted mt-0.5">Ces lieux seront utilisés pour votre tournage initial.</p>
+          <p className="text-sm text-nv-text-muted mt-0.5">Cliquez sur une photo pour voir la fiche complète du lieu.</p>
         </div>
         <span className={`text-sm font-medium px-3 py-1 rounded-full border ${
           answers.selectedSpots.length === 2
@@ -459,11 +620,12 @@ function StepSpots({ answers, setAnswers, spots }: { answers: Answers; setAnswer
               const selected = answers.selectedSpots.includes(spot.id)
               const maxed = answers.selectedSpots.length >= 2 && !selected
               return (
-                <button
+                <div
                   key={spot.id}
-                  type="button"
-                  onClick={() => toggleSpot(spot.id)}
-                  disabled={maxed}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => !maxed && toggleSpot(spot.id)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !maxed) toggleSpot(spot.id) }}
                   className={`text-left rounded-xl border transition-all overflow-hidden ${
                     selected
                       ? 'border-primary bg-primary/5 shadow-[0_0_0_1px_rgba(232,184,75,0.3)]'
@@ -472,15 +634,30 @@ function StepSpots({ answers, setAnswers, spots }: { answers: Answers; setAnswer
                       : 'border-nv-border bg-nv-card hover:border-nv-border-light cursor-pointer'
                   }`}
                 >
-                  {spot.photos[0] ? (
-                    <div className="aspect-video overflow-hidden">
-                      <img src={spot.photos[0]} alt={spot.name} className="w-full h-full object-cover" />
+                  {/* Photo — clic = fiche détaillée */}
+                  <div
+                    className="relative aspect-video overflow-hidden group/photo"
+                    onClick={e => { e.stopPropagation(); setDetailSpot(spot) }}
+                  >
+                    {spot.photos[0] ? (
+                      <img src={spot.photos[0]} alt={spot.name} className="w-full h-full object-cover transition-transform duration-300 group-hover/photo:scale-105" />
+                    ) : (
+                      <div className="w-full h-full bg-nv-dark flex items-center justify-center">
+                        <MapPin className="w-8 h-8 text-nv-border-light" />
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-nv-black/0 group-hover/photo:bg-nv-black/30 transition-colors flex items-center justify-center">
+                      <span className="opacity-0 group-hover/photo:opacity-100 transition-opacity text-xs font-medium text-white bg-nv-black/70 border border-nv-border px-3 py-1.5 rounded-full flex items-center gap-1.5">
+                        <ImageIcon className="w-3.5 h-3.5" />
+                        Voir la fiche{spot.photos.length > 1 ? ` · ${spot.photos.length} photos` : ''}
+                      </span>
                     </div>
-                  ) : (
-                    <div className="aspect-video bg-nv-dark flex items-center justify-center">
-                      <MapPin className="w-8 h-8 text-nv-border-light" />
-                    </div>
-                  )}
+                    {spot.photos.length > 1 && (
+                      <span className="absolute bottom-2 right-2 text-[10px] px-1.5 py-0.5 rounded bg-nv-black/70 text-nv-text border border-nv-border">
+                        {spot.photos.length} photos
+                      </span>
+                    )}
+                  </div>
                   <div className="p-3 space-y-1.5">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -496,7 +673,7 @@ function StepSpots({ answers, setAnswers, spots }: { answers: Answers; setAnswer
                       )}
                     </div>
                     {spot.address && <p className="text-[11px] text-nv-text-faint">{spot.address}</p>}
-                    {spot.description && <p className="text-xs text-nv-text-muted leading-relaxed">{spot.description}</p>}
+                    {spot.description && <p className="text-xs text-nv-text-muted leading-relaxed line-clamp-2">{spot.description}</p>}
                     {spot.tags.length > 0 && (
                       <div className="flex flex-wrap gap-1">
                         {spot.tags.map(tag => (
@@ -506,12 +683,23 @@ function StepSpots({ answers, setAnswers, spots }: { answers: Answers; setAnswer
                     )}
                     {spot.supplement && <p className="text-[11px] text-primary/80 italic">{spot.supplement}</p>}
                   </div>
-                </button>
+                </div>
               )
             })}
           </div>
         </div>
       ))}
+
+      {/* Fiche détaillée */}
+      {detailSpot && (
+        <SpotDetailModal
+          spot={detailSpot}
+          selected={answers.selectedSpots.includes(detailSpot.id)}
+          maxed={answers.selectedSpots.length >= 2 && !answers.selectedSpots.includes(detailSpot.id)}
+          onToggle={() => toggleSpot(detailSpot.id)}
+          onClose={() => setDetailSpot(null)}
+        />
+      )}
     </div>
   )
 }
