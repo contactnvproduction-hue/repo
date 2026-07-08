@@ -30,5 +30,5 @@ export default async function OnboardingPage() {
 
   const questions = mergeQuestions(config?.questions ?? null)
 
-  return <OnboardingForm spots={spots} questions={questions} />
+  return <OnboardingForm spots={spots} questions={questions} videoUrl={config?.videoUrl ?? null} />
 }

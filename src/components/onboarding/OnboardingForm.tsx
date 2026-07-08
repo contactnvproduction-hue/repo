@@ -60,7 +60,12 @@ const INITIAL: Answers = {
 
 const STORAGE_KEY = 'nv_onboarding_v2'
 const STEPS = ['Bienvenue', 'Branding', 'Votre audience', 'Lieux de tournage', 'Récapitulatif']
-const YOUTUBE_VIDEO_ID = '' // TODO: à renseigner quand Noah fournit le lien
+// Extrait l'ID vidéo de tout format d'URL YouTube (watch, youtu.be, embed, shorts, live)
+export function extractYouTubeId(url: string | null | undefined): string | null {
+  if (!url) return null
+  const m = url.match(/(?:youtube\.com\/(?:watch\?.*v=|embed\/|shorts\/|live\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/)
+  return m ? m[1] : null
+}
 
 const inputCls = 'w-full bg-nv-card border border-nv-border rounded-lg px-4 py-2.5 text-nv-text placeholder-nv-text-faint focus:outline-none focus:border-primary/60 transition-colors text-sm'
 const textareaCls = `${inputCls} resize-none`
@@ -370,13 +375,14 @@ function QuestionField({
 
 // ─── STEP 1 : Intro ──────────────────────────────────────────────────────────
 
-function Step1({ answers, setAnswers }: { answers: Answers; setAnswers: (a: Answers) => void }) {
+function Step1({ answers, setAnswers, videoId }: { answers: Answers; setAnswers: (a: Answers) => void; videoId: string | null }) {
   return (
     <div className="space-y-8">
-      {YOUTUBE_VIDEO_ID ? (
+      {videoId ? (
         <div className="aspect-video rounded-xl overflow-hidden border border-nv-border">
           <iframe
-            src={`https://www.youtube.com/embed/${YOUTUBE_VIDEO_ID}?rel=0`}
+            src={`https://www.youtube.com/embed/${videoId}?rel=0`}
+            title="Vidéo d'introduction NVP"
             className="w-full h-full"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             allowFullScreen
@@ -803,7 +809,8 @@ function StepRecap({ answers, spots, questions }: { answers: Answers; spots: Spo
 
 // ─── MAIN FORM ───────────────────────────────────────────────────────────────
 
-export default function OnboardingForm({ spots, questions }: { spots: Spot[]; questions: OnboardingQuestion[] }) {
+export default function OnboardingForm({ spots, questions, videoUrl }: { spots: Spot[]; questions: OnboardingQuestion[]; videoUrl?: string | null }) {
+  const videoId = extractYouTubeId(videoUrl)
   const [step, setStep] = useState(0)
   const [answers, setAnswersRaw] = useState<Answers>(INITIAL)
   const [submitting, setSubmitting] = useState(false)
@@ -913,7 +920,7 @@ export default function OnboardingForm({ spots, questions }: { spots: Spot[]; qu
         <div className="bg-nv-dark border border-nv-border rounded-2xl p-6">
           <h2 className="text-lg font-semibold text-nv-text mb-6">{STEPS[step]}</h2>
 
-          {step === 0 && <Step1 answers={answers} setAnswers={setAnswers} />}
+          {step === 0 && <Step1 answers={answers} setAnswers={setAnswers} videoId={videoId} />}
           {step === 1 && (
             <div className="space-y-6">
               {brandingQs.map(q => <QuestionField key={q.key} q={q} answers={answers} setAnswers={setAnswers} />)}

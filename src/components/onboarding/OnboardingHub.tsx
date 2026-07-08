@@ -6,7 +6,7 @@ import Link from 'next/link'
 import {
   Copy, Check, FileText, MapPin, ExternalLink,
   ChevronDown, ChevronUp, Send, ClipboardCheck, Trash2, Loader2,
-  ClipboardList,
+  ClipboardList, Play,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { SpotManager } from '@/components/settings/SpotManager'
@@ -53,17 +53,39 @@ export function OnboardingHub({
   isAdmin = false,
   spots = [],
   questions = [],
+  initialVideoUrl = null,
 }: {
   rows: HubRow[]
   isAdmin?: boolean
   spots?: HubSpot[]
   questions?: OnboardingQuestion[]
+  initialVideoUrl?: string | null
 }) {
   const router = useRouter()
   const [copied, setCopied] = useState(false)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [tab, setTab] = useState<'reponses' | 'lieux' | 'questions'>('reponses')
+  const [videoUrl, setVideoUrl] = useState(initialVideoUrl ?? '')
+  const [savingVideo, setSavingVideo] = useState(false)
+
+  const saveVideoUrl = async () => {
+    setSavingVideo(true)
+    try {
+      const res = await fetch('/api/onboarding/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ videoUrl }),
+      })
+      if (!res.ok) throw new Error()
+      toast.success(videoUrl.trim() ? 'Vidéo d\'introduction mise à jour' : 'Vidéo retirée du formulaire')
+      router.refresh()
+    } catch {
+      toast.error('Erreur lors de la sauvegarde')
+    } finally {
+      setSavingVideo(false)
+    }
+  }
 
   const formUrl = typeof window !== 'undefined' ? `${window.location.origin}/onboarding` : '/onboarding'
 
@@ -138,6 +160,36 @@ export function OnboardingHub({
             </a>
           </div>
         </div>
+
+        {/* Vidéo d'introduction — lien YouTube non répertorié, jouée en étape 1 du formulaire */}
+        {isAdmin && (
+          <div className="mt-4 pt-4 border-t border-nv-border">
+            <label className="text-xs font-medium text-nv-text flex items-center gap-1.5 mb-1">
+              <Play className="w-3.5 h-3.5 text-primary" />
+              Vidéo d'introduction du formulaire
+            </label>
+            <p className="text-[11px] text-nv-text-faint mb-2">
+              Collez le lien YouTube (non répertorié) — la vidéo se joue directement en première étape du formulaire. Laissez vide pour la retirer.
+            </p>
+            <div className="flex gap-2">
+              <input
+                value={videoUrl}
+                onChange={e => setVideoUrl(e.target.value)}
+                placeholder="https://youtu.be/XXXXXXXX ou https://www.youtube.com/watch?v=XXXXXXXX"
+                className="flex-1 bg-nv-black border border-nv-border rounded-lg px-3 py-2 text-sm text-nv-text placeholder-nv-text-faint focus:outline-none focus:border-primary/60 transition-colors"
+              />
+              <button
+                type="button"
+                onClick={saveVideoUrl}
+                disabled={savingVideo || videoUrl === (initialVideoUrl ?? '')}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm bg-primary text-nv-black rounded-lg font-medium hover:bg-primary-hover transition-colors disabled:opacity-40 shrink-0"
+              >
+                {savingVideo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                Enregistrer
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Onglets admin : réponses / lieux / questions */}

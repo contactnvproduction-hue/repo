@@ -1119,6 +1119,7 @@ model ClientOnboardingForm {
 model OnboardingConfig {
   id        String   @id @default("main")
   questions Json     // [{ key, label, hint, options, active, custom, step }]
+  videoUrl  String?  // lien YouTube (non répertorié) de la vidéo d'introduction du formulaire
   updatedAt DateTime @updatedAt
 
   @@map("onboarding_config")

@@ -80,6 +80,7 @@ export default async function OnboardingsPage() {
         isAdmin={isAdmin}
         spots={spots}
         questions={questions}
+        initialVideoUrl={questionsConfig?.videoUrl ?? null}
       />
     </div>
   )
