@@ -937,6 +937,38 @@ model MeetingTopic {
   @@map("meeting_topics")
 }
 
+// Calls récurrents hebdomadaires (point contenu, point delivery…)
+model RecurringCall {
+  id        String   @id @default(cuid())
+  title     String
+  dayOfWeek Int      // 0 = lundi … 6 = dimanche
+  time      String?  // "14:00"
+  withWho   String?  // participant(s) : Maël, équipe…
+  color     String   @default("#e8b84b")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  notes RecurringCallNote[]
+
+  @@map("recurring_calls")
+}
+
+// Notes / sujets à préparer pour UNE occurrence précise d'un call récurrent
+model RecurringCallNote {
+  id        String        @id @default(cuid())
+  callId    String
+  call      RecurringCall @relation(fields: [callId], references: [id], onDelete: Cascade)
+  date      String        // "2026-07-13" — date de l'occurrence
+  content   String?       // sujets à aborder, notes de préparation
+  done      Boolean       @default(false) // point effectué
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@unique([callId, date])
+  @@map("recurring_call_notes")
+}
+
 model CeoActionStep {
   id        String      @id @default(cuid())
   meetingId String?

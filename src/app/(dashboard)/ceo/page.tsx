@@ -2,12 +2,13 @@ import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { Briefcase, TrendingUp, CheckCircle2, Calendar, ExternalLink, MessageSquare, LayoutDashboard } from 'lucide-react'
 import { CeoManager } from '@/components/ceo/CeoManager'
+import { RecurringCallsAgenda } from '@/components/ceo/RecurringCallsAgenda'
 
 export default async function CeoPage() {
   const session = await auth()
   if (!session?.user) return null
 
-  const [meetings, teamMembers, availableTasks] = await Promise.all([
+  const [meetings, teamMembers, availableTasks, recurringCalls] = await Promise.all([
     prisma.ceoMeeting.findMany({
       include: {
         topics: { orderBy: { order: 'asc' } },
@@ -22,6 +23,10 @@ export default async function CeoPage() {
       orderBy: { createdAt: 'desc' },
       take: 50,
     }),
+    (async () => { try { return await (prisma as any).recurringCall.findMany({
+      include: { notes: true },
+      orderBy: [{ dayOfWeek: 'asc' }, { time: 'asc' }],
+    }) } catch { return [] } })(),
   ])
 
   const now = new Date()
@@ -101,6 +106,20 @@ export default async function CeoPage() {
       </div>
 
       {/* Manager */}
+      {/* Calls récurrents hebdo — agenda prévisionnel */}
+      <RecurringCallsAgenda
+        initialCalls={(recurringCalls ?? []).map((c: any) => ({
+          id: c.id,
+          title: c.title,
+          dayOfWeek: c.dayOfWeek,
+          time: c.time,
+          withWho: c.withWho,
+          color: c.color,
+          active: c.active,
+          notes: (c.notes ?? []).map((n: any) => ({ id: n.id, date: n.date, content: n.content, done: n.done })),
+        }))}
+      />
+
       <CeoManager initialMeetings={serialized} teamMembers={teamMembers} availableTasks={availableTasks} />
     </div>
   )
