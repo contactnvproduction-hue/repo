@@ -1,5 +1,6 @@
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { findMatchingClient } from '@/lib/client-matching'
 import { NextResponse } from 'next/server'
 
 export async function POST(req: Request) {
@@ -10,10 +11,13 @@ export async function POST(req: Request) {
   const { leadId, client: clientData, deal, products } = body
 
   try {
-    // ── 1. Créer ou retrouver le client ─────────────────────────────────────
-    let client = clientData.email
-      ? await prisma.client.findFirst({ where: { email: clientData.email } })
-      : null
+    // ── 1. Retrouver le client (email, nom+prénom, entreprise) ou le créer ───
+    // Un client qui resigne garde sa fiche : jamais de doublon.
+    let client = await findMatchingClient(prisma as any, {
+      email: clientData.email,
+      fullName: clientData.name,
+      company: clientData.company,
+    })
 
     if (!client) {
       client = await prisma.client.create({
@@ -28,10 +32,15 @@ export async function POST(req: Request) {
         },
       })
     } else {
-      // Met à jour le statut si déjà existant
+      // Réactive la fiche et complète les infos manquantes (sans écraser l'existant)
       client = await prisma.client.update({
         where: { id: client.id },
-        data: { status: 'ACTIF' },
+        data: {
+          status: 'ACTIF',
+          email: client.email || clientData.email || null,
+          phone: client.phone || clientData.phone || null,
+          company: client.company || clientData.company || null,
+        },
       })
     }
 

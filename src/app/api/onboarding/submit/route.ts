@@ -1,67 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { findMatchingClient } from '@/lib/client-matching'
 
 const db = prisma as any
-
-// ── Matching universel : rattache la réponse au bon client via tout élément
-// identifiant (email, nom + prénom dans les deux sens, nom de marque/entreprise)
-
-function norm(s: string): string {
-  return s
-    .toLowerCase()
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-function tokens(s: string): string[] {
-  return norm(s).split(' ').filter(t => t.length >= 2)
-}
-
-// Deux noms matchent si tous les tokens de l'un sont dans l'autre (ordre libre :
-// "Laborde Nicolas" ↔ "Nicolas Laborde")
-function namesMatch(a: string, b: string): boolean {
-  const ta = tokens(a)
-  const tb = tokens(b)
-  if (ta.length === 0 || tb.length === 0) return false
-  const [small, big] = ta.length <= tb.length ? [ta, tb] : [tb, ta]
-  return small.every(t => big.includes(t)) && small.length >= Math.min(2, big.length)
-}
-
-async function findMatchingClient({
-  email, firstName, lastName, brandName,
-}: { email?: string; firstName?: string; lastName?: string; brandName?: string }) {
-  // 1. Email — signal le plus fort
-  if (email?.trim()) {
-    const byEmail = await db.client.findFirst({
-      where: { email: { equals: email.trim(), mode: 'insensitive' } },
-    })
-    if (byEmail) return byEmail
-  }
-
-  const clients = await db.client.findMany({
-    select: { id: true, name: true, company: true },
-  })
-
-  // 2. Nom + prénom (dans les deux sens)
-  const fullName = `${firstName ?? ''} ${lastName ?? ''}`.trim()
-  if (fullName) {
-    const byName = clients.find((c: any) => namesMatch(fullName, c.name))
-    if (byName) return db.client.findUnique({ where: { id: byName.id } })
-  }
-
-  // 3. Nom de marque / entreprise
-  if (brandName?.trim()) {
-    const nb = norm(brandName)
-    const byCompany = clients.find((c: any) =>
-      (c.company && norm(c.company) === nb) || norm(c.name) === nb
-    )
-    if (byCompany) return db.client.findUnique({ where: { id: byCompany.id } })
-  }
-
-  return null
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -89,7 +30,7 @@ export async function POST(req: NextRequest) {
 
     // Matching universel : email, nom+prénom, marque — sinon création
     const fullName = `${firstName ?? ''} ${lastName ?? ''}`.trim()
-    const existing = await findMatchingClient({ email, firstName, lastName, brandName })
+    const existing = await findMatchingClient(db, { email, fullName, company: brandName })
     const client = existing
       ? await db.client.update({
           where: { id: existing.id },

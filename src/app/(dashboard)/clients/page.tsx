@@ -7,6 +7,8 @@ import { formatDate } from '@/lib/utils'
 import { Users, Plus, Building2, User, Briefcase, Mail, Phone, Archive, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { ClientsHeader } from '@/components/clients/ClientsHeader'
 import { ClientRowActions } from '@/components/clients/ClientRowActions'
+import { DuplicateClientsBanner } from '@/components/clients/DuplicateClientsBanner'
+import { detectDuplicates } from '@/lib/client-matching'
 
 const statusBadge: Record<string, 'success' | 'info' | 'warning' | 'muted'> = {
   ACTIF: 'success',
@@ -95,6 +97,16 @@ export default async function ClientsPage({ searchParams }: PageProps) {
     prisma.client.count({ where: { status: { not: 'ARCHIVÉ' as any } } }),
     prisma.client.count({ where: { status: 'ARCHIVÉ' as any } }),
   ])
+
+  // Détection de doublons (même nom / email / entreprise) — sur TOUTES les fiches
+  const allForDup = await prisma.client.findMany({
+    select: { id: true, name: true, company: true, email: true, createdAt: true },
+  })
+  const duplicatePairs = detectDuplicates(allForDup).map(p => ({
+    reason: p.reason,
+    primary: { ...p.primary, createdAt: new Date(p.primary.createdAt).toISOString() },
+    duplicate: { ...p.duplicate, createdAt: new Date(p.duplicate.createdAt).toISOString() },
+  }))
   const stats = {
     total: totalCount,
     actifs: await prisma.client.count({ where: { status: 'ACTIF' } }),
@@ -105,6 +117,9 @@ export default async function ClientsPage({ searchParams }: PageProps) {
   return (
     <div className="space-y-6 animate-fade-in">
       <ClientsHeader stats={stats} />
+
+      {/* Doublons détectés — fusion en un clic */}
+      {duplicatePairs.length > 0 && <DuplicateClientsBanner pairs={duplicatePairs} />}
 
       {/* Filtres & liste */}
       <Card>

@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db'
+import { findMatchingClient } from '@/lib/client-matching'
 import { NextResponse } from 'next/server'
 
 function corsHeaders() {
@@ -44,10 +45,13 @@ export async function PATCH(
       return NextResponse.json({ error: 'Déjà signé' }, { status: 409, headers: corsHeaders() })
     }
 
-    // ── 1. Créer ou retrouver le client ───────────────────────────────────────
-    let client = contract.clientEmail
-      ? await prisma.client.findFirst({ where: { email: contract.clientEmail } })
-      : null
+    // ── 1. Retrouver le client (email, nom+prénom, entreprise) ou le créer ────
+    // Un client qui resigne un contrat garde sa fiche existante : pas de doublon.
+    let client = await findMatchingClient(prisma as any, {
+      email: contract.clientEmail,
+      fullName: contract.clientName,
+      company: contract.clientCompany,
+    })
 
     // SIRET depuis contractData (champ optionnel du formulaire admin)
     const siret = (contract.contractData as any)?.siret || null
@@ -74,6 +78,7 @@ export async function PATCH(
           ...(siret && { siret }),
           ...(contract.clientCompany && { company: contract.clientCompany }),
           ...(contract.clientAddress && { address: contract.clientAddress }),
+          ...(!client.email && contract.clientEmail && { email: contract.clientEmail }),
         },
       })
     }
