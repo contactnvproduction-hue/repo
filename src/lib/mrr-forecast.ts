@@ -11,6 +11,7 @@ export type ForecastRetainer = {
   amount: number
   isLastMonth: boolean
   endLabel: string
+  included: boolean // sélectionné dans le prévisionnel (toggle)
 }
 
 export type ForecastInvoice = {
@@ -116,11 +117,15 @@ export async function computeSalesForecast(db: any, monthsAhead = 6): Promise<{
           amount: r.monthlyAmount,
           isLastMonth: mIdx === endIdxExcl - 1,
           endLabel: `fin ${endDate.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' })}`,
+          included: (r as any).forecastIncluded ?? true,
         }
       })
       .sort((a: ForecastRetainer, b: ForecastRetainer) => b.amount - a.amount)
 
     const monthInvoices: ForecastInvoice[] = pendingInvoices
+      // Les mensualités de retainer sont représentées par le MRR — on les
+      // exclut du bloc factures pour ne pas compter deux fois le même argent
+      .filter((inv: any) => !(inv.notes ?? '').includes('Mensualité'))
       .filter((inv: any) => {
         if (!inv.dueDate) return i === 0
         const dueIdx = monthIndex(new Date(inv.dueDate))
@@ -144,7 +149,7 @@ export async function computeSalesForecast(db: any, monthsAhead = 6): Promise<{
       .filter((o: ForecastInvoice) => o.amount > 0)
       .sort((a: ForecastInvoice, b: ForecastInvoice) => b.amount - a.amount)
 
-    const mrrTotal = monthRetainers.reduce((s, r) => s + r.amount, 0)
+    const mrrTotal = monthRetainers.filter(r => r.included).reduce((s, r) => s + r.amount, 0)
     const invoicesTotal = monthInvoices.filter(o => o.included).reduce((s, o) => s + o.amount, 0)
     const caTotal = mrrTotal + invoicesTotal
 

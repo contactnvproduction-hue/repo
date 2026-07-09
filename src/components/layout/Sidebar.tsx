@@ -18,22 +18,13 @@ const navItems = [
     label: 'Sales',
     icon: Crosshair,
     children: [
-      { href: '/sales', label: 'Pipeline & Prévisionnel' },
-      { href: '/quotes', label: 'Devis' },
+      { href: '/sales', label: 'Pipeline & Finance' },
       { href: '/invoices', label: 'Factures' },
     ],
   },
   { href: '/clients', icon: Users, label: 'Clients' },
   { href: '/onboardings', icon: ClipboardCheck, label: 'Onboarding' },
   { href: '/projects', icon: FolderKanban, label: 'Projets' },
-  {
-    label: 'Finance',
-    icon: BarChart3,
-    children: [
-      { href: '/finance', label: 'Vue générale' },
-      { href: '/finance/previsionnel', label: 'Prévisionnel' },
-    ],
-  },
   { href: '/tasks', icon: CheckSquare, label: 'Tâches' },
   { href: '/objectives', icon: Target, label: 'Objectifs' },
   { href: '/planning', icon: Calendar, label: 'Planning' },

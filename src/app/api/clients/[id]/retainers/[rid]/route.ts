@@ -16,6 +16,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
       monthlyAmount: body.monthlyAmount !== undefined ? parseFloat(body.monthlyAmount) : undefined,
       startDate: body.startDate ? new Date(body.startDate) : undefined,
       durationMonths: body.durationMonths !== undefined ? parseInt(body.durationMonths) : undefined,
+      ...(typeof body.forecastIncluded === 'boolean' && { forecastIncluded: body.forecastIncluded } as any),
     },
   })
   return NextResponse.json(retainer)

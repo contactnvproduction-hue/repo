@@ -6,6 +6,9 @@ import { RevenueByProduct } from '@/components/acquisition/RevenueByProduct'
 import { AcquisitionTabs } from '@/components/acquisition/AcquisitionTabs'
 import { SalesForecast } from '@/components/sales/SalesForecast'
 import { computeSalesForecast } from '@/lib/mrr-forecast'
+import { ensureRetainerInvoices } from '@/lib/retainer-invoices'
+import { FinanceOverview } from '@/components/finance/FinanceOverview'
+import { TreasurySection } from '@/components/finance/TreasurySection'
 import Link from 'next/link'
 
 // Plateforme de signature hébergée sur Netlify (site statique dédié)
@@ -138,6 +141,10 @@ export default async function SalesPage() {
   const pendingContracts = signedContracts.filter(c => c.status === 'PENDING')
   const completedContracts = signedContracts.filter(c => c.status === 'SIGNED')
 
+  // Mensualités : chaque retainer actif génère ses factures à venir (idempotent,
+  // backfill compris pour les clients déjà closés via la plateforme de signature)
+  await ensureRetainerInvoices(prisma as any)
+
   // Prévisionnel MRR — généré depuis les retainers contractés + factures en attente
   const forecast = await computeSalesForecast(prisma as any, 6)
 
@@ -221,6 +228,7 @@ export default async function SalesPage() {
       <AcquisitionTabs
         pipeline={<AcquisitionBoard initialLeads={serialized} initialStatuses={serializedStatuses} />}
         forecast={<SalesForecast months={forecast.months} suggestions={forecast.suggestions} />}
+        finance={<><FinanceOverview /><TreasurySection /></>}
         contracts={contractsSection}
         products={<RevenueByProduct productStats={productStats} topClients={topClients} />}
       />

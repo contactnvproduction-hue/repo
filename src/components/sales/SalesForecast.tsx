@@ -30,11 +30,37 @@ export function SalesForecast({
 
   const selected = months.find(m => m.key === selectedKey) ?? months[0]
 
-  // Recalcule les totaux d'un mois après un toggle de facture
+  // Recalcule les totaux d'un mois après un toggle (facture ou retainer)
   const recompute = (m: ForecastMonth): ForecastMonth => {
+    const mrrTotal = m.retainers.filter(r => r.included).reduce((s, r) => s + r.amount, 0)
     const invoicesTotal = m.invoices.filter(i => i.included).reduce((s, i) => s + i.amount, 0)
-    const caTotal = m.mrrTotal + invoicesTotal
-    return { ...m, invoicesTotal, caTotal, profit: caTotal - m.chargesTotal }
+    const caTotal = mrrTotal + invoicesTotal
+    return { ...m, mrrTotal, invoicesTotal, caTotal, profit: caTotal - m.chargesTotal }
+  }
+
+  // Inclure / exclure un retainer du prévisionnel (persisté — tous les mois concernés)
+  const toggleRetainer = async (retainerId: string, clientId: string, included: boolean) => {
+    setToggling(retainerId)
+    setMonths(ms => ms.map(m => recompute({
+      ...m,
+      retainers: m.retainers.map(r => r.retainerId === retainerId ? { ...r, included } : r),
+    })))
+    try {
+      const res = await fetch(`/api/clients/${clientId}/retainers/${retainerId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ forecastIncluded: included }),
+      })
+      if (!res.ok) throw new Error()
+    } catch {
+      toast.error('Erreur de sauvegarde')
+      setMonths(ms => ms.map(m => recompute({
+        ...m,
+        retainers: m.retainers.map(r => r.retainerId === retainerId ? { ...r, included: !included } : r),
+      })))
+    } finally {
+      setToggling(null)
+    }
   }
 
   // Inclure / exclure une facture du prévisionnel (persisté en base)
@@ -209,14 +235,28 @@ export function SalesForecast({
             <h4 className="text-xs font-semibold text-nv-text-faint uppercase tracking-wider mb-2">Ce qui rentre</h4>
             <div className="space-y-1.5">
               {selected.retainers.map(r => (
-                <div key={r.retainerId} className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border text-sm ${r.isLastMonth ? 'bg-amber-500/5 border-amber-500/25' : 'bg-nv-dark border-nv-border'}`}>
+                <label
+                  key={r.retainerId}
+                  className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border text-sm cursor-pointer transition-opacity ${
+                    !r.included ? 'bg-nv-dark border-nv-border opacity-45'
+                    : r.isLastMonth ? 'bg-amber-500/5 border-amber-500/25'
+                    : 'bg-nv-dark border-nv-border'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={r.included}
+                    disabled={toggling === r.retainerId}
+                    onChange={e => toggleRetainer(r.retainerId, r.clientId, e.target.checked)}
+                    className="w-3.5 h-3.5 accent-[#e8b84b] shrink-0"
+                  />
                   <Repeat className="w-3.5 h-3.5 text-primary shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <Link href={`/clients/${r.clientId}`} className="text-nv-text hover:text-primary transition-colors truncate block">{r.clientName}</Link>
+                    <Link href={`/clients/${r.clientId}`} onClick={e => e.stopPropagation()} className="text-nv-text hover:text-primary transition-colors truncate block">{r.clientName}</Link>
                     <span className="text-[10px] text-nv-text-faint">Retainer{r.isLastMonth ? ` · dernier mois (${r.endLabel})` : ''}</span>
                   </div>
                   <span className="font-semibold text-nv-text shrink-0">{eur(r.amount)}</span>
-                </div>
+                </label>
               ))}
 
               {selected.invoices.map(inv => (
@@ -246,8 +286,8 @@ export function SalesForecast({
                 <p className="text-xs text-nv-text-faint italic py-3 text-center border border-dashed border-nv-border rounded-lg">Rien de contracté ce mois-ci.</p>
               )}
             </div>
-            {selected.invoices.length > 0 && (
-              <p className="text-[10px] text-nv-text-faint mt-1.5">Décochez une facture pour la sortir du prévisionnel (choix mémorisé).</p>
+            {(selected.invoices.length > 0 || selected.retainers.length > 0) && (
+              <p className="text-[10px] text-nv-text-faint mt-1.5">Décochez un retainer ou une facture pour le sortir du prévisionnel (choix mémorisé, appliqué à tous les mois).</p>
             )}
           </div>
 
