@@ -3,6 +3,9 @@ import { prisma } from '@/lib/db'
 import { Target, FileSignature, ExternalLink, CheckCircle2, Clock } from 'lucide-react'
 import { AcquisitionBoard } from '@/components/acquisition/AcquisitionBoard'
 import { RevenueByProduct } from '@/components/acquisition/RevenueByProduct'
+import { AcquisitionTabs } from '@/components/acquisition/AcquisitionTabs'
+import { MrrForecastTimeline } from '@/components/acquisition/MrrForecastTimeline'
+import { computeMrrForecast } from '@/lib/mrr-forecast'
 import Link from 'next/link'
 
 // Plateforme de signature hébergée sur Netlify (site statique dédié)
@@ -135,29 +138,15 @@ export default async function AcquisitionPage() {
   const pendingContracts = signedContracts.filter(c => c.status === 'PENDING')
   const completedContracts = signedContracts.filter(c => c.status === 'SIGNED')
 
-  return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex items-start justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-            <Target size={24} className="text-primary" />
-            Acquisition
-          </h1>
-          <p className="text-sm text-nv-text-muted mt-1">
-            Tracker de leads — suivez vos prospects de la prospection à la signature
-          </p>
-        </div>
-        <a href={SIGNATURE_ADMIN} target="_blank" rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary/15 hover:bg-primary/25 border border-primary/30 text-primary text-sm font-medium rounded-xl transition-colors">
-          <FileSignature size={15} />
-          Plateforme de signature
-          <ExternalLink size={12} className="opacity-60" />
-        </a>
-      </div>
+  // Prévisionnel MRR — généré depuis les retainers contractés + factures en attente
+  const forecast = await computeMrrForecast(prisma as any, 6)
 
-      {/* ── Section Contrats ── */}
-      {signedContracts.length > 0 && (
-        <div className="rounded-xl border border-nv-border bg-nv-card p-4">
+  const contractsSection = (
+    <div className="rounded-xl border border-nv-border bg-nv-card p-4">
+      {signedContracts.length === 0 ? (
+        <p className="text-sm text-nv-text-faint text-center py-8">Aucun contrat pour l&apos;instant.</p>
+      ) : (
+        <>
           <div className="flex items-center gap-2 mb-4">
             <FileSignature size={15} className="text-primary" />
             <p className="text-sm font-semibold text-white">Contrats</p>
@@ -204,13 +193,37 @@ export default async function AcquisitionPage() {
               )
             })}
           </div>
-        </div>
+        </>
       )}
+    </div>
+  )
 
-      {/* ── Répartition CA par produit ── */}
-      <RevenueByProduct productStats={productStats} topClients={topClients} />
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <div className="flex items-start justify-between flex-wrap gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+            <Target size={24} className="text-primary" />
+            Acquisition
+          </h1>
+          <p className="text-sm text-nv-text-muted mt-1">
+            Pipeline, prévisionnel MRR, contrats et répartition du CA
+          </p>
+        </div>
+        <a href={SIGNATURE_ADMIN} target="_blank" rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary/15 hover:bg-primary/25 border border-primary/30 text-primary text-sm font-medium rounded-xl transition-colors">
+          <FileSignature size={15} />
+          Plateforme de signature
+          <ExternalLink size={12} className="opacity-60" />
+        </a>
+      </div>
 
-      <AcquisitionBoard initialLeads={serialized} initialStatuses={serializedStatuses} />
+      <AcquisitionTabs
+        pipeline={<AcquisitionBoard initialLeads={serialized} initialStatuses={serializedStatuses} />}
+        forecast={<MrrForecastTimeline months={forecast.months} suggestions={forecast.suggestions} />}
+        contracts={contractsSection}
+        products={<RevenueByProduct productStats={productStats} topClients={topClients} />}
+      />
     </div>
   )
 }
