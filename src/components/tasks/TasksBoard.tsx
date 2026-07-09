@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { formatDate, daysUntil, isOverdue, cn } from '@/lib/utils'
-import { Plus, Clock, Trash2, Settings } from 'lucide-react'
+import { Plus, Clock, Trash2, Settings, CheckCircle2 } from 'lucide-react'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 
@@ -20,8 +20,13 @@ interface Task {
   dueDate?: Date | string | null
   categoryId?: string | null
   categoryValue?: string | null
+  recurrence?: string | null
   project?: { id: string; title: string } | null
   assignedTo?: { id: string; name: string; avatar?: string | null } | null
+}
+
+const recurrenceLabel: Record<string, string> = {
+  DAILY: 'Quotidienne', WEEKLY: 'Hebdo', BIWEEKLY: 'Bimensuelle', MONTHLY: 'Mensuelle',
 }
 
 interface TaskCategory {
@@ -56,6 +61,7 @@ export function TasksBoard({ tasks: initialTasks, projects, users, categories, c
   const [form, setForm] = useState({
     title: '', description: '', projectId: '', assignedToId: '',
     priority: 'NORMALE', dueDate: '', categoryId: categories[0]?.id || '', categoryValue: '',
+    recurrence: '',
   })
 
   const sortedCategories = [...categories].sort((a, b) => a.order - b.order)
@@ -73,6 +79,7 @@ export function TasksBoard({ tasks: initialTasks, projects, users, categories, c
           assignedToId: form.assignedToId || undefined,
           categoryId: form.categoryId || undefined,
           categoryValue: form.categoryValue || undefined,
+          recurrence: form.recurrence || undefined,
         }),
       })
       if (!res.ok) { toast.error('Erreur'); return }
@@ -80,7 +87,7 @@ export function TasksBoard({ tasks: initialTasks, projects, users, categories, c
       setTasks(prev => [task, ...prev])
       toast.success('Tâche créée !')
       setShowModal(false)
-      setForm({ title: '', description: '', projectId: '', assignedToId: '', priority: 'NORMALE', dueDate: '', categoryId: categories[0]?.id || '', categoryValue: '' })
+      setForm({ title: '', description: '', projectId: '', assignedToId: '', priority: 'NORMALE', dueDate: '', categoryId: categories[0]?.id || '', categoryValue: '', recurrence: '' })
       router.refresh()
     } catch {
       toast.error('Erreur')
@@ -103,6 +110,23 @@ export function TasksBoard({ tasks: initialTasks, projects, users, categories, c
     await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' })
     setTasks(prev => prev.filter(t => t.id !== taskId))
     toast.success('Tâche supprimée')
+  }
+
+  // Termine la tâche : si elle est récurrente, le serveur crée la prochaine occurrence
+  const completeTask = async (task: Task) => {
+    const res = await fetch(`/api/tasks/${task.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'TERMINÉE' }),
+    })
+    if (!res.ok) { toast.error('Erreur'); return }
+    const json = await res.json()
+    setTasks(prev => {
+      const without = prev.filter(t => t.id !== task.id)
+      return json.nextOccurrence ? [json.nextOccurrence, ...without] : without
+    })
+    toast.success(json.nextOccurrence ? '✅ Tâche terminée — prochaine occurrence créée' : '✅ Tâche terminée')
+    router.refresh()
   }
 
   const selectedCategoryOptions = categories.find(c => c.id === form.categoryId)?.options || []
@@ -148,9 +172,19 @@ export function TasksBoard({ tasks: initialTasks, projects, users, categories, c
                       <div key={task.id} className="bg-nv-card border border-nv-border rounded-xl p-3 group hover:border-nv-border-light transition-colors">
                         <div className="flex items-start justify-between gap-2 mb-2">
                           <p className="text-sm font-medium text-white flex-1 leading-tight">{task.title}</p>
-                          <Badge variant={priorityBadge[task.priority] || 'muted'} className="shrink-0 text-[10px]">
-                            {priorityLabel[task.priority]}
-                          </Badge>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {task.recurrence && (
+                              <span
+                                className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary/10 border border-primary/25 text-primary"
+                                title={`Tâche récurrente (${recurrenceLabel[task.recurrence] ?? task.recurrence}) — la prochaine occurrence se crée automatiquement à la complétion`}
+                              >
+                                🔁 {recurrenceLabel[task.recurrence] ?? task.recurrence}
+                              </span>
+                            )}
+                            <Badge variant={priorityBadge[task.priority] || 'muted'} className="shrink-0 text-[10px]">
+                              {priorityLabel[task.priority]}
+                            </Badge>
+                          </div>
                         </div>
                         {task.project && (
                           <p className="text-[10px] text-nv-text-faint mb-2 truncate">{task.project.title}</p>
@@ -195,6 +229,11 @@ export function TasksBoard({ tasks: initialTasks, projects, users, categories, c
                                 )}
                               </div>
                             )}
+                            <button onClick={() => completeTask(task)}
+                              title="Marquer comme terminée"
+                              className="opacity-0 group-hover:opacity-100 p-0.5 text-nv-text-faint hover:text-emerald-400 transition-all">
+                              <CheckCircle2 size={12} />
+                            </button>
                             <button onClick={() => deleteTask(task.id)}
                               className="opacity-0 group-hover:opacity-100 p-0.5 text-nv-text-faint hover:text-red-400 transition-all">
                               <Trash2 size={12} />
@@ -245,9 +284,19 @@ export function TasksBoard({ tasks: initialTasks, projects, users, categories, c
                       <div key={task.id} className="bg-nv-card border border-nv-border rounded-xl p-3 group hover:border-nv-border-light transition-colors">
                         <div className="flex items-start justify-between gap-2 mb-2">
                           <p className="text-sm font-medium text-white flex-1 leading-tight">{task.title}</p>
-                          <Badge variant={priorityBadge[task.priority] || 'muted'} className="shrink-0 text-[10px]">
-                            {priorityLabel[task.priority]}
-                          </Badge>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {task.recurrence && (
+                              <span
+                                className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary/10 border border-primary/25 text-primary"
+                                title={`Tâche récurrente (${recurrenceLabel[task.recurrence] ?? task.recurrence}) — la prochaine occurrence se crée automatiquement à la complétion`}
+                              >
+                                🔁 {recurrenceLabel[task.recurrence] ?? task.recurrence}
+                              </span>
+                            )}
+                            <Badge variant={priorityBadge[task.priority] || 'muted'} className="shrink-0 text-[10px]">
+                              {priorityLabel[task.priority]}
+                            </Badge>
+                          </div>
                         </div>
                         {task.project && (
                           <p className="text-[10px] text-nv-text-faint mb-2 truncate">{task.project.title}</p>
@@ -306,6 +355,22 @@ export function TasksBoard({ tasks: initialTasks, projects, users, categories, c
               ]}
             />
             <Input label="Échéance" type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
+          </div>
+          <div>
+            <Select label="Récurrence" value={form.recurrence} onChange={(e) => setForm({ ...form, recurrence: e.target.value })}
+              options={[
+                { value: '', label: '— Aucune (tâche unique) —' },
+                { value: 'DAILY', label: 'Quotidienne — tous les jours' },
+                { value: 'WEEKLY', label: 'Hebdomadaire — toutes les semaines' },
+                { value: 'BIWEEKLY', label: 'Bimensuelle — toutes les 2 semaines' },
+                { value: 'MONTHLY', label: 'Mensuelle — tous les mois' },
+              ]}
+            />
+            {form.recurrence && (
+              <p className="text-[11px] text-nv-text-faint mt-1">
+                🔁 Quand cette tâche sera terminée, la prochaine occurrence se créera automatiquement avec l&apos;échéance décalée.
+              </p>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-4">
             <Select label="Projet" value={form.projectId} onChange={(e) => setForm({ ...form, projectId: e.target.value })}

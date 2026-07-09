@@ -286,6 +286,7 @@ model Task {
   categoryId     String?
   categoryValue  String?
   dueDate        DateTime?
+  recurrence     String?      // DAILY | WEEKLY | BIWEEKLY | MONTHLY — la prochaine occurrence se crée à la complétion
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 

@@ -13,6 +13,7 @@ const createTaskSchema = z.object({
   dueDate: z.string().optional(),
   categoryId: z.string().optional(),
   categoryValue: z.string().optional(),
+  recurrence: z.enum(['DAILY', 'WEEKLY', 'BIWEEKLY', 'MONTHLY']).optional(),
 })
 
 export async function GET(req: NextRequest) {
@@ -58,7 +59,7 @@ export async function POST(req: NextRequest) {
       ...rest,
       createdById: userExists ? session.user.id : null,
       dueDate: dueDate ? new Date(dueDate) : null,
-    },
+    } as any,
     include: {
       project: { select: { id: true, title: true } },
       assignedTo: { select: { id: true, name: true } },

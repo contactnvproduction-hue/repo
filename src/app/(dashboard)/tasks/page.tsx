@@ -13,6 +13,8 @@ export default async function TasksPage() {
 
   const [tasks, projects, users, categories, prospectsToRelance] = await Promise.all([
     prisma.task.findMany({
+      // Les tâches terminées sortent du board (historique conservé en base)
+      where: { status: { not: 'TERMINÉE' } },
       include: {
         project: { select: { id: true, title: true } },
         assignedTo: { select: { id: true, name: true, avatar: true } },
