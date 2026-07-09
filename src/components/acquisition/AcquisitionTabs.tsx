@@ -20,7 +20,7 @@ export function AcquisitionTabs({
 
   const tabs = [
     { id: 'pipeline', label: 'Pipeline', icon: Target },
-    { id: 'forecast', label: 'Prévisionnel MRR', icon: TrendingUp },
+    { id: 'forecast', label: 'Prévisionnel', icon: TrendingUp },
     { id: 'contracts', label: 'Contrats', icon: FileSignature },
     { id: 'products', label: 'Répartition CA', icon: PieChart },
   ] as const

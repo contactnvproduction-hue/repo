@@ -3,8 +3,6 @@ import { prisma } from '@/lib/db'
 import { BarChart3, TrendingUp } from 'lucide-react'
 import Link from 'next/link'
 import { PrevisionelClient } from '@/components/previsionnel/PrevisionelClient'
-import { MrrForecastTimeline } from '@/components/acquisition/MrrForecastTimeline'
-import { computeMrrForecast } from '@/lib/mrr-forecast'
 
 function getMonthLabel(date: Date) {
   return date.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' })
@@ -54,9 +52,6 @@ export default async function PrevisionelPage() {
     profit: d.revenus - d.charges,
   }))
 
-  // Frise du CA contracté (retainers + factures en attente) — même vue que l'onglet Acquisition
-  const forecast = await computeMrrForecast(prisma as any, 6)
-
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
@@ -72,14 +67,14 @@ export default async function PrevisionelPage() {
         </Link>
       </div>
 
-      {/* CA contracté à venir — généré depuis les retainers signés */}
-      <div>
-        <h2 className="text-sm font-semibold text-white flex items-center gap-2 mb-3">
-          <TrendingUp size={16} className="text-primary" />
-          CA contracté — 6 prochains mois
-        </h2>
-        <MrrForecastTimeline months={forecast.months} suggestions={forecast.suggestions} />
-      </div>
+      {/* Le CA contracté (retainers, factures, profit prévisionnel) vit dans Sales → Prévisionnel */}
+      <Link
+        href="/sales"
+        className="flex items-center gap-2 px-4 py-3 rounded-xl border border-primary/25 bg-primary/5 text-sm text-primary hover:bg-primary/10 transition-colors"
+      >
+        <TrendingUp size={15} />
+        Le prévisionnel du CA contracté (retainers, factures, profit net) est dans <span className="font-semibold">Sales → Prévisionnel</span>
+      </Link>
 
       <PrevisionelClient
         entries={entries.map(e => ({ ...e, date: e.date.toISOString() }))}

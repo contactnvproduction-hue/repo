@@ -14,18 +14,18 @@ import {
 const navItems = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { href: '/ceo', icon: Briefcase, label: 'Espace CEO' },
-  { href: '/acquisition', icon: Crosshair, label: 'Acquisition' },
-  { href: '/clients', icon: Users, label: 'Clients' },
-  { href: '/onboardings', icon: ClipboardCheck, label: 'Onboarding' },
-  { href: '/projects', icon: FolderKanban, label: 'Projets' },
   {
-    label: 'Facturation',
-    icon: Receipt,
+    label: 'Sales',
+    icon: Crosshair,
     children: [
+      { href: '/sales', label: 'Pipeline & Prévisionnel' },
       { href: '/quotes', label: 'Devis' },
       { href: '/invoices', label: 'Factures' },
     ],
   },
+  { href: '/clients', icon: Users, label: 'Clients' },
+  { href: '/onboardings', icon: ClipboardCheck, label: 'Onboarding' },
+  { href: '/projects', icon: FolderKanban, label: 'Projets' },
   {
     label: 'Finance',
     icon: BarChart3,
