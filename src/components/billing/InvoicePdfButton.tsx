@@ -1,13 +1,13 @@
 'use client'
 
 import { useState } from 'react'
-import { FileDown, Loader2 } from 'lucide-react'
+import { FileDown, Loader2, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 
-// Or NV Production (DA) + noir profond
-const GOLD: [number, number, number] = [201, 169, 110]
-const DARK: [number, number, number] = [20, 20, 20]
-const GREY: [number, number, number] = [110, 110, 110]
+// Palette sobre du modèle comptable (facture Qonto NV Production)
+const BLACK: [number, number, number] = [30, 30, 30]
+const GREY: [number, number, number] = [120, 120, 120]
+const LIGHT: [number, number, number] = [225, 225, 225]
 
 const eur = (n: number) =>
   `${n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
@@ -15,8 +15,16 @@ const eur = (n: number) =>
 const frDate = (d: string | Date | null | undefined) =>
   d ? new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'
 
-// Génère et télécharge la facture PDF en un clic : infos société + client,
-// lignes de prestation, totaux, RIB pour le règlement, mentions légales.
+// Extrait IBAN et BIC du champ libre « Coordonnées bancaires » des paramètres
+function parseBank(bankDetails: string): { iban: string | null; bic: string | null } {
+  const ibanMatch = bankDetails.replace(/\s/g, '').match(/FR\d{2}[A-Z0-9]{23}/i)
+  const bicMatch = bankDetails.match(/\b[A-Z]{4}FR[A-Z0-9]{2}(?:[A-Z0-9]{3})?\b/)
+  return { iban: ibanMatch ? ibanMatch[0].toUpperCase() : null, bic: bicMatch ? bicMatch[0] : null }
+}
+
+// Bouton de téléchargement de facture PDF : ouvre d'abord un champ pour
+// renseigner le détail de la prestation (livrables), puis génère le document
+// au format du modèle comptable NV (persisté pour les prochains exports).
 export function InvoicePdfButton({
   invoiceId,
   invoiceNumber,
@@ -26,12 +34,17 @@ export function InvoicePdfButton({
   invoiceNumber?: string
   variant?: 'button' | 'icon'
 }) {
+  const [open, setOpen] = useState(false)
+  const [loading, setLoading] = useState(false)
   const [generating, setGenerating] = useState(false)
+  const [detail, setDetail] = useState('')
+  const [data, setData] = useState<{ inv: any; agency: any } | null>(null)
 
-  const generate = async (e: React.MouseEvent) => {
+  // Étape 1 — charge la facture et ouvre le champ « détail de la presta »
+  const openModal = async (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    setGenerating(true)
+    setLoading(true)
     try {
       const [invRes, setRes] = await Promise.all([
         fetch(`/api/invoices/${invoiceId}`),
@@ -40,201 +53,225 @@ export function InvoicePdfButton({
       if (!invRes.ok) throw new Error('Facture introuvable')
       const inv = await invRes.json()
       const agency = setRes.ok ? await setRes.json() : {}
+      setData({ inv, agency })
+      setDetail(inv.lines?.[0]?.description ?? '')
+      setOpen(true)
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Erreur de chargement')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Étape 2 — persiste le détail puis génère le PDF
+  const generate = async () => {
+    if (!data) return
+    setGenerating(true)
+    try {
+      const { inv, agency } = data
+      const prestaDetail = detail.trim()
+
+      if (prestaDetail && prestaDetail !== (inv.lines?.[0]?.description ?? '')) {
+        await fetch(`/api/invoices/${invoiceId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prestaDetail }),
+        }).catch(() => {})
+      }
 
       const { jsPDF } = await import('jspdf' as any)
       const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' })
       const W = 210
-      const M = 18
+      const M = 16
       const CW = W - M * 2
-      let y = 0
+      let y = 22
 
-      // ── Bandeau supérieur or ──
-      pdf.setFillColor(...GOLD)
-      pdf.rect(0, 0, W, 4, 'F')
-      y = 18
-
-      // ── En-tête : société / FACTURE ──
+      // ── Titre ──
       pdf.setFont('helvetica', 'bold')
-      pdf.setFontSize(17)
-      pdf.setTextColor(...DARK)
-      pdf.text((agency.name ?? 'New Vision Production').toUpperCase(), M, y)
+      pdf.setFontSize(19)
+      pdf.setTextColor(...BLACK)
+      pdf.text('Facture', M, y)
+      y += 12
 
-      pdf.setFontSize(24)
-      pdf.setTextColor(...GOLD)
-      pdf.text('FACTURE', W - M, y, { align: 'right' })
-      y += 7
+      // ── Métadonnées (label gris / valeur noire) ──
+      const meta: [string, string][] = [
+        ['Numéro de facture', String(inv.number ?? '')],
+        ["Date d'émission", frDate(inv.issueDate)],
+        ["Date d'échéance", frDate(inv.dueDate)],
+      ]
+      pdf.setFontSize(9)
+      for (const [label, value] of meta) {
+        pdf.setFont('helvetica', 'normal')
+        pdf.setTextColor(...GREY)
+        pdf.text(label, M, y)
+        pdf.setFont('helvetica', 'bold')
+        pdf.setTextColor(...BLACK)
+        pdf.text(value, M + 48, y)
+        y += 5.2
+      }
+      y += 8
 
+      // ── Émetteur (gauche) / Client (droite) ──
+      const rx = W / 2 + 8
+      const startY = y
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(9.5)
+      pdf.setTextColor(...BLACK)
+      pdf.text(agency.name ?? 'SAS NEW VISION PRODUCTION', M, y)
+      y += 4.8
       pdf.setFont('helvetica', 'normal')
       pdf.setFontSize(8.5)
       pdf.setTextColor(...GREY)
       const agencyLines = [
-        agency.address,
-        [agency.email, agency.phone].filter(Boolean).join('  ·  '),
-        agency.siret ? `SIRET ${agency.siret}` : null,
-        agency.tvaNumber ? `TVA ${agency.tvaNumber}` : null,
+        ...(agency.address ? String(agency.address).split('\n') : []),
+        agency.email,
+        agency.siret,
+        agency.tvaNumber ? `Numéro de TVA : ${agency.tvaNumber}` : null,
       ].filter(Boolean) as string[]
       for (const line of agencyLines) {
-        pdf.text(line, M, y)
-        y += 4.2
+        pdf.text(String(line), M, y)
+        y += 4.4
       }
 
-      // Numéro + dates à droite
-      let ry = 25
-      pdf.setFontSize(10)
-      pdf.setTextColor(...DARK)
+      let ryy = startY
       pdf.setFont('helvetica', 'bold')
-      pdf.text(inv.number, W - M, ry, { align: 'right' }); ry += 5.5
+      pdf.setFontSize(9.5)
+      pdf.setTextColor(...BLACK)
+      pdf.text((inv.client?.company || inv.client?.name || 'Client').toUpperCase(), rx, ryy)
+      ryy += 4.8
       pdf.setFont('helvetica', 'normal')
       pdf.setFontSize(8.5)
       pdf.setTextColor(...GREY)
-      pdf.text(`Date d'émission : ${frDate(inv.issueDate)}`, W - M, ry, { align: 'right' }); ry += 4.2
-      pdf.text(`Échéance : ${frDate(inv.dueDate)}`, W - M, ry, { align: 'right' }); ry += 4.2
-
-      y = Math.max(y, ry) + 8
-
-      // ── Bloc client ──
-      pdf.setFillColor(246, 244, 240)
-      pdf.roundedRect(M, y, CW / 2 - 4, 30, 2, 2, 'F')
-      pdf.setFontSize(7.5)
-      pdf.setTextColor(...GOLD)
-      pdf.setFont('helvetica', 'bold')
-      pdf.text('FACTURÉ À', M + 5, y + 6)
-      pdf.setFontSize(10)
-      pdf.setTextColor(...DARK)
-      pdf.text(inv.client?.name ?? 'Client', M + 5, y + 12)
-      pdf.setFont('helvetica', 'normal')
-      pdf.setFontSize(8.5)
-      pdf.setTextColor(...GREY)
-      let cy = y + 17
-      for (const line of [inv.client?.company, inv.client?.address, inv.client?.email].filter(Boolean) as string[]) {
-        pdf.text(String(line).slice(0, 55), M + 5, cy)
-        cy += 4.2
+      const clientLines = [
+        inv.client?.company ? inv.client?.name : null,
+        ...(inv.client?.address ? String(inv.client.address).split('\n') : []),
+        inv.client?.email,
+        inv.client?.siret,
+      ].filter(Boolean) as string[]
+      for (const line of clientLines) {
+        pdf.text(String(line).slice(0, 48), rx, ryy)
+        ryy += 4.4
       }
-      y += 38
 
-      // ── Tableau des lignes ──
-      const cols = { desc: M, qty: M + CW - 62, pu: M + CW - 44, tva: M + CW - 24, total: M + CW }
-      pdf.setFillColor(...DARK)
-      pdf.rect(M, y, CW, 8, 'F')
-      pdf.setFontSize(7.5)
+      y = Math.max(y, ryy) + 10
+
+      // ── Tableau ──
+      const cols = { qty: M + CW - 66, pu: M + CW - 44, tva: M + CW - 24, total: M + CW }
+      pdf.setDrawColor(...LIGHT)
+      pdf.setLineWidth(0.3)
+      pdf.line(M, y, M + CW, y)
+      y += 5
       pdf.setFont('helvetica', 'bold')
-      pdf.setTextColor(255, 255, 255)
-      pdf.text('DESCRIPTION', cols.desc + 3, y + 5.3)
-      pdf.text('QTÉ', cols.qty, y + 5.3, { align: 'right' })
-      pdf.text('PU HT', cols.pu, y + 5.3, { align: 'right' })
-      pdf.text('TVA', cols.tva, y + 5.3, { align: 'right' })
-      pdf.text('TOTAL HT', cols.total - 3, y + 5.3, { align: 'right' })
-      y += 8
+      pdf.setFontSize(8.5)
+      pdf.setTextColor(...BLACK)
+      pdf.text('Description', M, y)
+      pdf.text('Qté', cols.qty, y, { align: 'right' })
+      pdf.text('Prix unitaire', cols.pu, y, { align: 'right' })
+      pdf.text('TVA (%)', cols.tva, y, { align: 'right' })
+      pdf.text('Total HT', cols.total, y, { align: 'right' })
+      y += 3
+      pdf.line(M, y, M + CW, y)
+      y += 6
 
       const lines = (inv.lines ?? []).length > 0
-        ? inv.lines
-        : [{ description: inv.notes || 'Prestation', quantity: 1, unitPrice: inv.totalHT, vatRate: 20, total: inv.totalHT }]
+        ? inv.lines.map((l: any, i: number) => i === 0 && prestaDetail ? { ...l, description: prestaDetail } : l)
+        : [{ description: prestaDetail || 'Prestation', quantity: 1, unitPrice: inv.totalHT, vatRate: 20, total: inv.totalHT }]
 
       pdf.setFont('helvetica', 'normal')
       pdf.setFontSize(9)
-      let alt = false
       for (const line of lines) {
-        const descLines: string[] = pdf.splitTextToSize(String(line.description ?? ''), CW - 70)
-        const rowH = Math.max(9, descLines.length * 4.4 + 4.5)
-        if (alt) {
-          pdf.setFillColor(248, 247, 244)
-          pdf.rect(M, y, CW, rowH, 'F')
-        }
-        pdf.setTextColor(...DARK)
-        pdf.text(descLines, cols.desc + 3, y + 6)
-        pdf.text(String(line.quantity ?? 1), cols.qty, y + 6, { align: 'right' })
-        pdf.text(eur(line.unitPrice ?? 0), cols.pu, y + 6, { align: 'right' })
-        pdf.text(`${line.vatRate ?? 20}%`, cols.tva, y + 6, { align: 'right' })
-        pdf.setFont('helvetica', 'bold')
-        pdf.text(eur(line.total ?? 0), cols.total - 3, y + 6, { align: 'right' })
-        pdf.setFont('helvetica', 'normal')
-        y += rowH
-        alt = !alt
+        const descLines: string[] = pdf.splitTextToSize(String(line.description ?? ''), CW - 74)
+        pdf.setTextColor(...BLACK)
+        pdf.text(descLines, M, y)
+        // Valeurs alignées au centre vertical du bloc description (comme le modèle)
+        const midY = y + ((descLines.length - 1) * 4.2) / 2
+        pdf.text(`${line.quantity ?? 1} unité${(line.quantity ?? 1) > 1 ? 's' : ''}`, cols.qty, midY, { align: 'right' })
+        pdf.text(eur(line.unitPrice ?? 0), cols.pu, midY, { align: 'right' })
+        pdf.text(`${line.vatRate ?? 20} %`, cols.tva, midY, { align: 'right' })
+        pdf.text(eur(line.total ?? 0), cols.total, midY, { align: 'right' })
+        y += descLines.length * 4.2 + 6
       }
-      pdf.setDrawColor(...GOLD)
-      pdf.setLineWidth(0.4)
+      pdf.setDrawColor(...LIGHT)
       pdf.line(M, y, M + CW, y)
       y += 8
 
-      // ── Totaux ──
-      const tx = M + CW - 70
+      // ── Totaux (alignés à droite, TTC en gras) ──
+      const totals: [string, string, boolean][] = [
+        ['Total HT', eur(inv.totalHT ?? 0), false],
+        ['Montant total de la TVA', eur(inv.totalTVA ?? 0), false],
+        ['Total TTC', eur(inv.totalTTC ?? 0), true],
+      ]
       pdf.setFontSize(9)
-      pdf.setTextColor(...GREY)
-      pdf.text('Total HT', tx, y)
-      pdf.setTextColor(...DARK)
-      pdf.text(eur(inv.totalHT ?? 0), cols.total - 3, y, { align: 'right' }); y += 5.5
-      pdf.setTextColor(...GREY)
-      pdf.text(`TVA`, tx, y)
-      pdf.setTextColor(...DARK)
-      pdf.text(eur(inv.totalTVA ?? 0), cols.total - 3, y, { align: 'right' }); y += 4
-
-      pdf.setFillColor(...GOLD)
-      pdf.roundedRect(tx - 4, y, 74 - M + 14, 10, 1.5, 1.5, 'F')
-      pdf.setFont('helvetica', 'bold')
-      pdf.setFontSize(10.5)
-      pdf.setTextColor(255, 255, 255)
-      pdf.text('TOTAL TTC', tx, y + 6.8)
-      pdf.text(eur(inv.totalTTC ?? 0), cols.total - 3, y + 6.8, { align: 'right' })
-      y += 16
-
-      // Statut de paiement
-      const paid = (inv.payments ?? []).filter((p: any) => p.confirmed).reduce((s: number, p: any) => s + p.amount, 0)
-      const remaining = Math.max(0, (inv.totalTTC ?? 0) - paid)
-      pdf.setFontSize(9)
-      if (remaining <= 0) {
-        pdf.setTextColor(46, 160, 90)
-        pdf.setFont('helvetica', 'bold')
-        pdf.text('✓ FACTURE ACQUITTÉE', W - M, y, { align: 'right' })
-        y += 6
-      } else if (paid > 0) {
-        pdf.setTextColor(...GREY)
-        pdf.setFont('helvetica', 'normal')
-        pdf.text(`Déjà réglé : ${eur(paid)}  ·  Reste à payer : ${eur(remaining)}`, W - M, y, { align: 'right' })
-        y += 6
+      for (const [label, value, bold] of totals) {
+        pdf.setFont('helvetica', bold ? 'bold' : 'normal')
+        pdf.setTextColor(...BLACK)
+        pdf.text(label, cols.qty - 10, y)
+        pdf.text(value, cols.total, y, { align: 'right' })
+        y += 7
       }
       y += 4
 
-      // ── Règlement / RIB ──
-      const ribText: string = agency.bankDetails || ''
-      const ribLines: string[] = ribText ? pdf.splitTextToSize(ribText, CW - 10) : []
-      const ribH = 16 + ribLines.length * 4.4
-      pdf.setDrawColor(...GOLD)
-      pdf.setLineWidth(0.5)
-      pdf.roundedRect(M, y, CW, ribH, 2, 2, 'S')
-      pdf.setFont('helvetica', 'bold')
-      pdf.setFontSize(8.5)
-      pdf.setTextColor(...GOLD)
-      pdf.text('RÈGLEMENT PAR VIREMENT BANCAIRE', M + 5, y + 6.5)
+      // ── Mentions (comme le modèle) ──
       pdf.setFont('helvetica', 'normal')
-      pdf.setFontSize(9)
-      pdf.setTextColor(...DARK)
-      if (ribLines.length > 0) {
-        pdf.text(ribLines, M + 5, y + 12.5)
-      } else {
-        pdf.setTextColor(...GREY)
-        pdf.text('RIB à renseigner dans Paramètres → Coordonnées bancaires', M + 5, y + 12.5)
-      }
-      y += ribH + 8
-
-      // ── Mentions légales ──
-      pdf.setFontSize(6.8)
-      pdf.setTextColor(150, 150, 150)
-      const legal = [
-        `En cas de retard de paiement, pénalités de 3 fois le taux d'intérêt légal et indemnité forfaitaire de 40 € pour frais de recouvrement (art. L441-10 du Code de commerce). Pas d'escompte pour paiement anticipé.`,
-        [agency.name ?? 'New Vision Production', agency.siret ? `SIRET ${agency.siret}` : null, agency.tvaNumber ? `TVA intracommunautaire ${agency.tvaNumber}` : null, agency.address].filter(Boolean).join(' — '),
+      pdf.setFontSize(8)
+      pdf.setTextColor(...GREY)
+      const mentions = [
+        'Type de transaction : Services',
+        'Conditions de paiement de la TVA : Sur les encaissements',
+        "Pas d'escompte accordé pour paiement anticipé.",
+        "En cas de non-paiement à la date d'échéance, des pénalités calculées à trois fois le taux d'intérêt légal seront appliquées.",
+        'Tout retard de paiement entraînera une indemnité forfaitaire pour frais de recouvrement de 40€.',
+        'NV PRODUCTION',
       ]
-      for (const l of legal) {
-        const wrapped: string[] = pdf.splitTextToSize(l, CW)
+      for (const m of mentions) {
+        const wrapped: string[] = pdf.splitTextToSize(m, CW)
         pdf.text(wrapped, M, y)
-        y += wrapped.length * 3.4 + 1.5
+        y += wrapped.length * 3.9 + 1
       }
 
-      // Bandeau bas
-      pdf.setFillColor(...GOLD)
-      pdf.rect(0, 293, W, 4, 'F')
+      // ── Détails du paiement (ancré vers le bas de page) ──
+      const bank = parseBank(String(agency.bankDetails ?? ''))
+      let py = Math.max(y + 10, 236)
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(9.5)
+      pdf.setTextColor(...BLACK)
+      pdf.text('Détails du paiement', M, py)
+      py += 6.5
+      pdf.setFontSize(8.5)
+      const payRows: [string, string][] = [
+        ['Nom du bénéficiaire', agency.name ?? 'SAS NEW VISION PRODUCTION'],
+        ...(bank.bic ? [['BIC', bank.bic] as [string, string]] : []),
+        ...(bank.iban ? [['IBAN', bank.iban] as [string, string]] : []),
+        ['Référence', String(inv.number ?? '')],
+      ]
+      if (!bank.iban && !bank.bic && agency.bankDetails) {
+        // RIB non parsable → affiché tel quel
+        pdf.setFont('helvetica', 'normal')
+        pdf.setTextColor(...BLACK)
+        const raw: string[] = pdf.splitTextToSize(String(agency.bankDetails), CW)
+        pdf.text(raw, M, py)
+        py += raw.length * 4.4
+      } else {
+        for (const [label, value] of payRows) {
+          pdf.setFont('helvetica', 'normal')
+          pdf.setTextColor(...GREY)
+          pdf.text(label, M, py)
+          pdf.setFont('helvetica', 'bold')
+          pdf.setTextColor(...BLACK)
+          pdf.text(value, M + 52, py)
+          py += 5
+        }
+      }
+
+      // ── Footer ──
+      pdf.setFont('helvetica', 'normal')
+      pdf.setFontSize(7.5)
+      pdf.setTextColor(...GREY)
+      pdf.text(`${agency.name ?? 'SAS NEW VISION PRODUCTION'}, SAS au capital de 500,00 €`, M, 288)
 
       pdf.save(`${inv.number}.pdf`)
       toast.success(`${inv.number}.pdf téléchargé`)
+      setOpen(false)
     } catch (err: any) {
       toast.error(err?.message ?? 'Erreur de génération du PDF')
     } finally {
@@ -242,29 +279,86 @@ export function InvoicePdfButton({
     }
   }
 
-  if (variant === 'icon') {
-    return (
-      <button
-        type="button"
-        onClick={generate}
-        disabled={generating}
-        title={`Télécharger ${invoiceNumber ?? 'la facture'} en PDF`}
-        className="p-1.5 rounded-lg text-nv-text-muted hover:text-primary hover:bg-primary/10 transition-colors disabled:opacity-60 shrink-0"
-      >
-        {generating ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
-      </button>
-    )
-  }
-
-  return (
+  const trigger = variant === 'icon' ? (
     <button
       type="button"
-      onClick={generate}
-      disabled={generating}
+      onClick={openModal}
+      disabled={loading}
+      title={`Télécharger ${invoiceNumber ?? 'la facture'} en PDF`}
+      className="p-1.5 rounded-lg text-nv-text-muted hover:text-primary hover:bg-primary/10 transition-colors disabled:opacity-60 shrink-0"
+    >
+      {loading ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
+    </button>
+  ) : (
+    <button
+      type="button"
+      onClick={openModal}
+      disabled={loading}
       className="flex items-center gap-1.5 px-4 py-2 text-sm bg-primary text-nv-black rounded-lg font-medium hover:bg-primary-hover transition-colors disabled:opacity-60"
     >
-      {generating ? <Loader2 size={15} className="animate-spin" /> : <FileDown size={15} />}
+      {loading ? <Loader2 size={15} className="animate-spin" /> : <FileDown size={15} />}
       Télécharger le PDF
     </button>
+  )
+
+  return (
+    <>
+      {trigger}
+      {open && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(3px)' }}
+          onClick={e => { e.preventDefault(); e.stopPropagation(); setOpen(false) }}
+        >
+          <div
+            className="w-full max-w-lg bg-nv-dark border border-nv-border rounded-2xl p-5"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-base font-semibold text-white">
+                Détail de la prestation — {data?.inv?.number}
+              </h3>
+              <button type="button" onClick={() => setOpen(false)} className="p-1 text-nv-text-muted hover:text-white transition-colors">
+                <X size={16} />
+              </button>
+            </div>
+            <p className="text-xs text-nv-text-muted mb-3">
+              Ce contenu apparaît dans la colonne Description de la facture. Première ligne = titre de la presta, puis un livrable par ligne. Mémorisé pour les prochains téléchargements.
+            </p>
+            <textarea
+              value={detail}
+              onChange={e => setDetail(e.target.value)}
+              rows={7}
+              autoFocus
+              placeholder={'Accompagnement création de contenu\n16 contenus shortform (Instagram)\n4 contenus longform (YouTube)\n16 miniatures contenus courts\nProgrammation et gestion du contenu'}
+              className="w-full bg-nv-black border border-nv-border rounded-xl px-4 py-3 text-sm text-white placeholder-nv-text-faint focus:outline-none focus:border-primary/60 resize-none leading-relaxed"
+            />
+            <div className="flex items-center justify-between mt-4">
+              <p className="text-xs text-nv-text-faint">
+                {data?.inv ? `${eur(data.inv.totalTTC ?? 0)} TTC — ${data.inv.client?.name ?? ''}` : ''}
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  className="px-4 py-2 text-sm border border-nv-border text-nv-text-muted rounded-lg hover:text-white transition-colors"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  onClick={generate}
+                  disabled={generating}
+                  className="flex items-center gap-1.5 px-4 py-2 text-sm bg-primary text-nv-black rounded-lg font-medium hover:bg-primary-hover transition-colors disabled:opacity-60"
+                >
+                  {generating ? <Loader2 size={15} className="animate-spin" /> : <FileDown size={15} />}
+                  Télécharger le PDF
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
