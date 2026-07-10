@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { Receipt, Building2, ArrowRight } from 'lucide-react'
 import { InvoiceActions } from '@/components/billing/InvoiceActions'
+import { InvoicePdfButton } from '@/components/billing/InvoicePdfButton'
 import { PaymentManager } from '@/components/billing/PaymentManager'
 import { BillingExtras } from '@/components/billing/BillingExtras'
 
@@ -60,7 +61,10 @@ export default async function InvoiceDetailPage({ params }: PageProps) {
             {invoice.dueDate && ` · Échéance ${formatDate(invoice.dueDate)}`}
           </p>
         </div>
-        <InvoiceActions invoiceId={invoice.id} invoiceNumber={invoice.number} status={invoice.status} />
+        <div className="flex items-center gap-2">
+          <InvoicePdfButton invoiceId={invoice.id} invoiceNumber={invoice.number} />
+          <InvoiceActions invoiceId={invoice.id} invoiceNumber={invoice.number} status={invoice.status} />
+        </div>
       </div>
 
       {/* Résumé paiement */}

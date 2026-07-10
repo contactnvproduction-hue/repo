@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { Receipt, Plus, AlertTriangle, Clock, CheckCircle2 } from 'lucide-react'
+import { InvoicePdfButton } from '@/components/billing/InvoicePdfButton'
 
 const statusBadge: Record<string, 'success' | 'warning' | 'danger' | 'info' | 'muted'> = {
   PAYÉE: 'success', EN_ATTENTE: 'warning', EN_RETARD: 'danger',
@@ -79,8 +80,9 @@ export default async function InvoicesPage() {
               return (
                 <Link key={inv.id} href={`/invoices/${inv.id}`}
                   className="grid grid-cols-12 gap-4 px-6 py-4 border-b border-nv-border/50 hover:bg-white/2 transition-colors items-center group">
-                  <div className="col-span-2">
+                  <div className="col-span-2 flex items-center gap-1">
                     <p className="text-sm font-mono text-white group-hover:text-primary transition-colors">{inv.number}</p>
+                    <InvoicePdfButton invoiceId={inv.id} invoiceNumber={inv.number} variant="icon" />
                   </div>
                   <div className="col-span-3 min-w-0">
                     <p className="text-sm font-medium text-white truncate">{inv.client?.name ?? '—'}</p>

@@ -18,6 +18,7 @@ import { DeleteButton } from '@/components/ui/DeleteButton'
 import { ClientInteractions } from '@/components/clients/ClientInteractions'
 import { ClientRetainerManager } from '@/components/clients/ClientRetainerManager'
 import { FollowUpPrompt } from '@/components/clients/FollowUpPrompt'
+import { InvoicePdfButton } from '@/components/billing/InvoicePdfButton'
 import { ClientChargesSection } from '@/components/clients/ClientChargesSection'
 import { ClientDocumentsSection } from '@/components/clients/ClientDocumentsSection'
 import { ClientOnboardingFormSection } from '@/components/clients/ClientOnboardingFormSection'
@@ -472,9 +473,12 @@ export default async function ClientDetailPage({ params }: PageProps) {
                           <p className="text-sm font-medium text-white">{inv.number}</p>
                           <p className="text-xs text-nv-text-muted">Échéance : {inv.dueDate ? formatDate(inv.dueDate) : '—'}</p>
                         </div>
-                        <div className="text-right">
-                          <p className="text-sm font-medium text-white">{formatCurrency(inv.totalTTC)}</p>
-                          <Badge variant={invoiceStatusBadge[inv.status] || 'muted'} className="text-xs">{invoiceStatusLabel[inv.status]}</Badge>
+                        <div className="flex items-center gap-2">
+                          <div className="text-right">
+                            <p className="text-sm font-medium text-white">{formatCurrency(inv.totalTTC)}</p>
+                            <Badge variant={invoiceStatusBadge[inv.status] || 'muted'} className="text-xs">{invoiceStatusLabel[inv.status]}</Badge>
+                          </div>
+                          <InvoicePdfButton invoiceId={inv.id} invoiceNumber={inv.number} variant="icon" />
                         </div>
                       </Link>
                     )

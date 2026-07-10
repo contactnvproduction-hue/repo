@@ -2,6 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 
+// Infos agence (coordonnées, SIRET, TVA, RIB) — utilisées par la génération de factures PDF
+export async function GET() {
+  const session = await auth()
+  if (!session?.user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+
+  const settings = await prisma.agencySetting.findFirst()
+  return NextResponse.json(settings ?? {})
+}
+
 export async function PATCH(req: NextRequest) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
