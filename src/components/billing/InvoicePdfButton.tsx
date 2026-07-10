@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { FileDown, Loader2, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -279,16 +280,20 @@ export function InvoicePdfButton({
     }
   }
 
+  // Le trigger icône vit souvent DANS un <Link> (liste factures, fiche client) :
+  // un <button> dans un <a> est du HTML invalide que le navigateur restructure
+  // à l'hydratation (clic mort) — on utilise un <span role="button">.
   const trigger = variant === 'icon' ? (
-    <button
-      type="button"
+    <span
+      role="button"
+      tabIndex={0}
       onClick={openModal}
-      disabled={loading}
+      onKeyDown={e => { if (e.key === 'Enter') openModal(e as any) }}
       title={`Télécharger ${invoiceNumber ?? 'la facture'} en PDF`}
-      className="p-1.5 rounded-lg text-nv-text-muted hover:text-primary hover:bg-primary/10 transition-colors disabled:opacity-60 shrink-0"
+      className={`inline-flex p-1.5 rounded-lg text-nv-text-muted hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer shrink-0 ${loading ? 'opacity-60 pointer-events-none' : ''}`}
     >
       {loading ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
-    </button>
+    </span>
   ) : (
     <button
       type="button"
@@ -301,10 +306,10 @@ export function InvoicePdfButton({
     </button>
   )
 
-  return (
-    <>
-      {trigger}
-      {open && (
+  // Portal vers <body> : le modal sort du <Link> parent (sinon clics avalés
+  // par la navigation et positionnement fixed cassé par les contextes CSS)
+  const modal = open && typeof document !== 'undefined' ? createPortal(
+    (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(3px)' }}
@@ -358,7 +363,14 @@ export function InvoicePdfButton({
             </div>
           </div>
         </div>
-      )}
+    ),
+    document.body
+  ) : null
+
+  return (
+    <>
+      {trigger}
+      {modal}
     </>
   )
 }
