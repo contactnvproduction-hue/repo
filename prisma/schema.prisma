@@ -96,6 +96,8 @@ model Client {
   lastBilanDate       DateTime?  // Date du dernier bilan mensuel effectué
   nextBilanDate       DateTime?  // Prochain bilan programmé
   followUpEnabled     Boolean    @default(false) // Suivi mensuel opt-in (clients hors retainer)
+  mensualise          Boolean    @default(false) // paiements mensuels prévus SANS engagement (prévisionnel roulant)
+  mensualiteAmount    Float?     // montant mensuel prévu quand mensualise = true
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 

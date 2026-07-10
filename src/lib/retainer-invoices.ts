@@ -48,9 +48,11 @@ export async function ensureRetainerInvoices(db: any): Promise<number> {
 
     for (const { r, startIdx, endIdxExcl } of active) {
       const startDay = Math.min(new Date(r.startDate).getDate(), 28)
-      const firstIdx = Math.max(startIdx, currentIdx)
 
-      for (let mIdx = firstIdx; mIdx < endIdxExcl; mIdx++) {
+      // Depuis le DÉBUT du contrat (mois passés compris) : un contrat de 3 mois
+      // doit avoir 3 mensualités, même si le 1er mois est déjà passé — sinon
+      // il manque des factures (ex: Elouan, 2 affichées au lieu de 3)
+      for (let mIdx = startIdx; mIdx < endIdxExcl; mIdx++) {
         const key = `${r.clientId}_${monthKeyOf(mIdx)}`
         if (covered.has(key)) continue
         covered.add(key)

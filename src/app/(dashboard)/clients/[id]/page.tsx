@@ -522,6 +522,8 @@ export default async function ClientDetailPage({ params }: PageProps) {
                   startDate: r.startDate.toISOString(),
                   createdAt: r.createdAt.toISOString(),
                 }))}
+                initialMensualise={(client as any).mensualise ?? false}
+                initialMensualiteAmount={(client as any).mensualiteAmount ?? null}
               />
             </CardContent>
           </Card>

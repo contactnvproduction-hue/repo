@@ -38,19 +38,27 @@ export function SalesForecast({
     return { ...m, mrrTotal, invoicesTotal, caTotal, profit: caTotal - m.chargesTotal }
   }
 
-  // Inclure / exclure un retainer du prévisionnel (persisté — tous les mois concernés)
-  const toggleRetainer = async (retainerId: string, clientId: string, included: boolean) => {
+  // Inclure / exclure un retainer du prévisionnel (persisté — tous les mois concernés).
+  // Lignes roulantes (mensualisation sans engagement) : le toggle active/désactive
+  // la case Mensualiser de la fiche client.
+  const toggleRetainer = async (retainerId: string, clientId: string, included: boolean, rolling?: boolean) => {
     setToggling(retainerId)
     setMonths(ms => ms.map(m => recompute({
       ...m,
       retainers: m.retainers.map(r => r.retainerId === retainerId ? { ...r, included } : r),
     })))
     try {
-      const res = await fetch(`/api/clients/${clientId}/retainers/${retainerId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ forecastIncluded: included }),
-      })
+      const res = rolling
+        ? await fetch(`/api/clients/${clientId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mensualise: included }),
+          })
+        : await fetch(`/api/clients/${clientId}/retainers/${retainerId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ forecastIncluded: included }),
+          })
       if (!res.ok) throw new Error()
     } catch {
       toast.error('Erreur de sauvegarde')
@@ -247,13 +255,15 @@ export function SalesForecast({
                     type="checkbox"
                     checked={r.included}
                     disabled={toggling === r.retainerId}
-                    onChange={e => toggleRetainer(r.retainerId, r.clientId, e.target.checked)}
+                    onChange={e => toggleRetainer(r.retainerId, r.clientId, e.target.checked, r.rolling)}
                     className="w-3.5 h-3.5 accent-[#e8b84b] shrink-0"
                   />
-                  <Repeat className="w-3.5 h-3.5 text-primary shrink-0" />
+                  <Repeat className={`w-3.5 h-3.5 shrink-0 ${r.rolling ? 'text-blue-400' : 'text-primary'}`} />
                   <div className="flex-1 min-w-0">
                     <Link href={`/clients/${r.clientId}`} onClick={e => e.stopPropagation()} className="text-nv-text hover:text-primary transition-colors truncate block">{r.clientName}</Link>
-                    <span className="text-[10px] text-nv-text-faint">Retainer{r.isLastMonth ? ` · dernier mois (${r.endLabel})` : ''}</span>
+                    <span className="text-[10px] text-nv-text-faint">
+                      {r.rolling ? 'Mensualisé · sans engagement' : `Retainer${r.isLastMonth ? ` · dernier mois (${r.endLabel})` : ''}`}
+                    </span>
                   </div>
                   <span className="font-semibold text-nv-text shrink-0">{eur(r.amount)}</span>
                 </label>

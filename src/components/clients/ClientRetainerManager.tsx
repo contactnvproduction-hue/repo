@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { Plus, Trash2, TrendingUp, Calendar, Clock } from 'lucide-react'
+import { Plus, Trash2, TrendingUp, Calendar, Clock, Repeat } from 'lucide-react'
+import toast from 'react-hot-toast'
 
 interface Retainer {
   id: string
@@ -16,6 +17,8 @@ interface Retainer {
 interface Props {
   clientId: string
   initialRetainers: Retainer[]
+  initialMensualise?: boolean
+  initialMensualiteAmount?: number | null
 }
 
 function getEndDate(startDate: string, durationMonths: number): Date {
@@ -31,7 +34,7 @@ function isActive(r: Retainer): boolean {
   return now >= start && now < end
 }
 
-export function ClientRetainerManager({ clientId, initialRetainers }: Props) {
+export function ClientRetainerManager({ clientId, initialRetainers, initialMensualise = false, initialMensualiteAmount = null }: Props) {
   const [retainers, setRetainers] = useState<Retainer[]>(initialRetainers)
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -41,6 +44,32 @@ export function ClientRetainerManager({ clientId, initialRetainers }: Props) {
     startDate: new Date().toISOString().split('T')[0],
     durationMonths: '12',
   })
+
+  // Mensualisation sans engagement : prévoit les paiements dans le prévisionnel Sales
+  const [mensualise, setMensualise] = useState(initialMensualise)
+  const [mensualiteAmount, setMensualiteAmount] = useState(initialMensualiteAmount != null ? String(initialMensualiteAmount) : '')
+  const [savingMensualise, setSavingMensualise] = useState(false)
+
+  const saveMensualisation = async (nextMensualise: boolean, amountStr: string) => {
+    setSavingMensualise(true)
+    try {
+      const res = await fetch(`/api/clients/${clientId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mensualise: nextMensualise,
+          mensualiteAmount: amountStr ? parseFloat(amountStr) : null,
+        }),
+      })
+      if (!res.ok) throw new Error()
+      toast.success(nextMensualise ? 'Mensualisation activée — visible dans le prévisionnel Sales' : 'Mensualisation désactivée')
+    } catch {
+      toast.error('Erreur de sauvegarde')
+      setMensualise(!nextMensualise)
+    } finally {
+      setSavingMensualise(false)
+    }
+  }
 
   const activeMRR = retainers.filter(isActive).reduce((s, r) => s + r.monthlyAmount, 0)
   const totalLTV = retainers.reduce((s, r) => s + r.monthlyAmount * r.durationMonths, 0)
@@ -84,6 +113,44 @@ export function ClientRetainerManager({ clientId, initialRetainers }: Props) {
           </div>
           <p className="text-lg font-bold text-emerald-400">{formatCurrency(totalLTV)}</p>
         </div>
+      </div>
+
+      {/* Mensualisation sans engagement — alternative légère au retainer */}
+      <div className={`rounded-xl border p-3 transition-colors ${mensualise ? 'border-primary/30 bg-primary/5' : 'border-nv-border bg-nv-bg'}`}>
+        <div className="flex items-center gap-3 flex-wrap">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={mensualise}
+              disabled={savingMensualise}
+              onChange={e => {
+                setMensualise(e.target.checked)
+                saveMensualisation(e.target.checked, mensualiteAmount)
+              }}
+              className="w-4 h-4 accent-[#e8b84b]"
+            />
+            <span className="text-sm font-medium text-white flex items-center gap-1.5">
+              <Repeat size={13} className="text-primary" />
+              Mensualiser
+            </span>
+          </label>
+          {mensualise && (
+            <div className="flex items-center gap-1.5">
+              <input
+                type="number"
+                placeholder="Montant"
+                value={mensualiteAmount}
+                onChange={e => setMensualiteAmount(e.target.value)}
+                onBlur={() => saveMensualisation(mensualise, mensualiteAmount)}
+                className="w-28 bg-nv-black border border-nv-border rounded-lg px-3 py-1.5 text-sm text-white text-right focus:outline-none focus:border-primary/60"
+              />
+              <span className="text-xs text-nv-text-muted">€/mois</span>
+            </div>
+          )}
+        </div>
+        <p className="text-[11px] text-nv-text-faint mt-1.5">
+          Sans engagement : prévoit les prochains paiements du client dans le prévisionnel Sales, tous les mois, tant que la case est cochée. Les retainers signés (engagement + durée) priment sur les mois qu&apos;ils couvrent.
+        </p>
       </div>
 
       {/* Liste des retainers */}

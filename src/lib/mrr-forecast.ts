@@ -12,6 +12,7 @@ export type ForecastRetainer = {
   isLastMonth: boolean
   endLabel: string
   included: boolean // sélectionné dans le prévisionnel (toggle)
+  rolling?: boolean // mensualisation SANS engagement (case cochée sur la fiche client)
 }
 
 export type ForecastInvoice = {
@@ -59,7 +60,7 @@ export async function computeSalesForecast(db: any, monthsAhead = 6): Promise<{
   const currentIdx = monthIndex(now)
   const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 
-  const [retainers, pendingInvoices, recurringExpenses, teamPayments] = await Promise.all([
+  const [retainers, pendingInvoices, recurringExpenses, teamPayments, monthlyClients] = await Promise.all([
     db.clientRetainer.findMany({
       include: { client: { select: { id: true, name: true } } },
     }),
@@ -78,6 +79,15 @@ export async function computeSalesForecast(db: any, monthsAhead = 6): Promise<{
     (async () => {
       try {
         return await db.memberPayment.findMany({ select: { month: true, amount: true } })
+      } catch { return [] }
+    })(),
+    // Clients mensualisés SANS engagement (case cochée sur la fiche client)
+    (async () => {
+      try {
+        return await db.client.findMany({
+          where: { mensualise: true },
+          select: { id: true, name: true, mensualiteAmount: true },
+        })
       } catch { return [] }
     })(),
   ])
@@ -121,6 +131,25 @@ export async function computeSalesForecast(db: any, monthsAhead = 6): Promise<{
         }
       })
       .sort((a: ForecastRetainer, b: ForecastRetainer) => b.amount - a.amount)
+
+    // Mensualisation sans engagement : ligne roulante chaque mois, SAUF si un
+    // retainer signé du même client couvre déjà ce mois (l'engagement prime)
+    const clientsWithRetainer = new Set(monthRetainers.map(r => r.clientId))
+    for (const mc of monthlyClients) {
+      if (!mc.mensualiteAmount || mc.mensualiteAmount <= 0) continue
+      if (clientsWithRetainer.has(mc.id)) continue
+      monthRetainers.push({
+        retainerId: `rolling_${mc.id}`,
+        clientId: mc.id,
+        clientName: mc.name,
+        description: 'Mensualisation sans engagement',
+        amount: mc.mensualiteAmount,
+        isLastMonth: false,
+        endLabel: '',
+        included: true,
+        rolling: true,
+      })
+    }
 
     const monthInvoices: ForecastInvoice[] = pendingInvoices
       // Les mensualités de retainer sont représentées par le MRR — on les
