@@ -8,6 +8,7 @@ import { Users, Plus, Building2, User, Briefcase, Mail, Phone, Archive, AlertCir
 import { ClientsHeader } from '@/components/clients/ClientsHeader'
 import { ClientRowActions } from '@/components/clients/ClientRowActions'
 import { DuplicateClientsBanner } from '@/components/clients/DuplicateClientsBanner'
+import { FollowUpPrompt } from '@/components/clients/FollowUpPrompt'
 import { detectDuplicates } from '@/lib/client-matching'
 
 const statusBadge: Record<string, 'success' | 'info' | 'warning' | 'muted'> = {
@@ -32,28 +33,6 @@ const typeIcon = {
 
 interface PageProps {
   searchParams: Promise<{ search?: string; status?: string; type?: string; archived?: string }>
-}
-
-// Chip affiché seulement pour les clients avec retainer actif OU followUpEnabled
-function bilanChip(
-  status: string,
-  lastBilanDate: Date | null,
-  nextBilanDate: Date | null,
-  followUpEnabled: boolean,
-  retainers: Array<{ startDate: Date; durationMonths: number }>,
-): 'scheduled' | 'overdue' | null {
-  if (status !== 'ACTIF') return null
-  const now = new Date()
-  const hasActiveRetainer = retainers.some(r => {
-    const end = new Date(r.startDate)
-    end.setMonth(end.getMonth() + r.durationMonths)
-    return end > now
-  })
-  if (!hasActiveRetainer && !followUpEnabled) return null
-  const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-  if (nextBilanDate && nextBilanDate >= now) return 'scheduled'
-  if (lastBilanDate && lastBilanDate >= firstOfMonth) return null
-  return 'overdue'
 }
 
 export default async function ClientsPage({ searchParams }: PageProps) {
@@ -86,12 +65,25 @@ export default async function ClientsPage({ searchParams }: PageProps) {
     select: {
       id: true, name: true, company: true, email: true, phone: true,
       type: true, status: true, avatar: true, createdAt: true,
-      lastBilanDate: true, nextBilanDate: true, followUpEnabled: true,
       retainers: { select: { startDate: true, durationMonths: true } },
       _count: { select: { projects: true, invoices: true } },
     },
     orderBy: { updatedAt: 'desc' },
   })
+
+  // lastFollowUpAt via cast (client Prisma local pas régénéré)
+  const followUpDates: { id: string; lastFollowUpAt: Date | null }[] = await (async () => {
+    try {
+      return await (prisma as any).client.findMany({
+        where: { id: { in: clients.map(c => c.id) } },
+        select: { id: true, lastFollowUpAt: true },
+      })
+    } catch { return [] }
+  })()
+  const lastFollowUpById: Record<string, string | null> = {}
+  for (const f of followUpDates) {
+    lastFollowUpById[f.id] = f.lastFollowUpAt ? new Date(f.lastFollowUpAt).toISOString() : null
+  }
 
   const [totalCount, archivedCount] = await Promise.all([
     prisma.client.count({ where: { status: { not: 'ARCHIVÉ' as any } } }),
@@ -161,7 +153,6 @@ export default async function ClientsPage({ searchParams }: PageProps) {
           ) : (
             clients.map((client) => {
               const TypeIcon = typeIcon[client.type] || User
-              const chip = bilanChip(client.status, client.lastBilanDate, client.nextBilanDate, client.followUpEnabled, client.retainers)
               return (
                 <Link
                   key={client.id}
@@ -179,15 +170,13 @@ export default async function ClientsPage({ searchParams }: PageProps) {
                       )}
                     </div>
                     <div className="min-w-0">
-                      {chip === 'overdue' && (
-                        <span className="inline-flex items-center gap-1 text-[9px] font-semibold text-red-400 bg-red-400/10 border border-red-400/20 px-1.5 py-0.5 rounded-full mb-0.5">
-                          <AlertCircle size={8} />Follow-up à planifier
-                        </span>
-                      )}
-                      {chip === 'scheduled' && (
-                        <span className="inline-flex items-center gap-1 text-[9px] font-semibold text-emerald-400 bg-emerald-400/10 border border-emerald-400/20 px-1.5 py-0.5 rounded-full mb-0.5">
-                          <CheckCircle2 size={8} />Follow-up validé
-                        </span>
+                      {client.status === 'ACTIF' && (
+                        <FollowUpPrompt
+                          clientId={client.id}
+                          clientName={client.name}
+                          lastFollowUpAt={lastFollowUpById[client.id] ?? null}
+                          variant="row"
+                        />
                       )}
                       <p className="text-sm font-medium text-white group-hover:text-primary transition-colors truncate">{client.name}</p>
                       {client.company && <p className="text-xs text-nv-text-muted truncate">{client.company}</p>}

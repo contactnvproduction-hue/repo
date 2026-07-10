@@ -73,11 +73,23 @@ async function getDashboardData(userId: string) {
     }),
     prisma.ceoMeeting.findMany({ where: { date: { gte: now } }, orderBy: { date: 'asc' }, take: 5 }),
     prisma.userDailyCheckin.findFirst({ where: { userId, date: todayStr() } }),
-    prisma.client.findMany({
-      where: { status: 'ACTIF', nextBilanDate: { gte: now, lte: new Date(now.getTime() + 7 * 86_400_000) } },
-      select: { id: true, name: true, company: true, nextBilanDate: true },
-      orderBy: { nextBilanDate: 'asc' },
-    }),
+    // Clients actifs sans relance depuis plus de 3 jours (« Client relancé ? »)
+    (async () => {
+      try {
+        return await (prisma as any).client.findMany({
+          where: {
+            status: 'ACTIF',
+            OR: [
+              { lastFollowUpAt: null },
+              { lastFollowUpAt: { lt: new Date(now.getTime() - 3 * 86_400_000) } },
+            ],
+          },
+          select: { id: true, name: true, company: true, lastFollowUpAt: true },
+          orderBy: { lastFollowUpAt: 'asc' },
+          take: 8,
+        })
+      } catch { return [] }
+    })(),
     prisma.invoice.findMany({
       where: { status: { in: ['EN_ATTENTE', 'PARTIELLEMENT_PAYÉE', 'EN_RETARD', 'PAYÉE'] }, type: { in: ['TOTALE', 'SOLDE'] } },
       orderBy: { createdAt: 'desc' },
@@ -132,7 +144,10 @@ async function getDashboardData(userId: string) {
     }),
     retainersEndingSoon: retainersEndingSoon.filter(r => r.client).map(r => ({ id: r.id, clientId: r.client!.id, clientName: r.client!.name, clientCompany: r.client!.company, monthlyAmount: r.monthlyAmount, daysLeft: r.daysLeft, endDate: r.endDate })),
     leadsFollowUp: leadsFollowUp.map(l => ({ ...l, followUpDate: l.followUpDate!.toISOString(), isToday: l.followUpDate! >= todayStart && l.followUpDate! < todayEnd })),
-    upcomingBilans: upcomingBilans.map(c => ({ id: c.id, name: c.name, company: c.company, nextBilanDate: c.nextBilanDate!.toISOString() })),
+    clientsToFollowUp: (upcomingBilans as any[]).map((c: any) => ({
+      id: c.id, name: c.name, company: c.company,
+      lastFollowUpAt: c.lastFollowUpAt ? new Date(c.lastFollowUpAt).toISOString() : null,
+    })),
   }
 }
 
@@ -350,40 +365,38 @@ export default async function DashboardPage() {
 
       {/* ── Bilans & Réunions ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Bilans mensuels */}
-        {data.upcomingBilans.length > 0 && (
-          <div className="rounded-2xl border border-blue-400/25 bg-blue-400/5 p-4">
+        {/* Clients à relancer (>3 jours sans relance) */}
+        {data.clientsToFollowUp.length > 0 && (
+          <div className="rounded-2xl border border-amber-400/25 bg-amber-400/5 p-4">
             <div className="flex items-center gap-2 mb-3">
-              <div className="w-6 h-6 rounded-lg bg-blue-400/20 flex items-center justify-center shrink-0">
-                <Phone size={12} className="text-blue-400" />
+              <div className="w-6 h-6 rounded-lg bg-amber-400/20 flex items-center justify-center shrink-0">
+                <Phone size={12} className="text-amber-400" />
               </div>
-              <p className="text-sm font-semibold text-blue-300">
-                {data.upcomingBilans.length} bilan{data.upcomingBilans.length > 1 ? 's' : ''} cette semaine
+              <p className="text-sm font-semibold text-amber-300">
+                {data.clientsToFollowUp.length} client{data.clientsToFollowUp.length > 1 ? 's' : ''} à relancer
               </p>
               <Link href="/clients" className="ml-auto text-xs text-nv-text-muted hover:text-white transition-colors flex items-center gap-1">
                 Clients <ArrowRight size={11} />
               </Link>
             </div>
             <div className="space-y-1.5">
-              {data.upcomingBilans.map(c => {
-                const d = new Date(c.nextBilanDate)
-                const daysLeft = Math.ceil((d.getTime() - Date.now()) / 86_400_000)
+              {data.clientsToFollowUp.map(c => {
+                const daysSince = c.lastFollowUpAt
+                  ? Math.floor((Date.now() - new Date(c.lastFollowUpAt).getTime()) / 86_400_000)
+                  : null
                 return (
                   <Link key={c.id} href={`/clients/${c.id}`}
-                    className="flex items-center justify-between px-3 py-2 rounded-xl bg-blue-400/5 border border-blue-400/10 hover:border-blue-400/30 transition-colors group">
+                    className="flex items-center justify-between px-3 py-2 rounded-xl bg-amber-400/5 border border-amber-400/10 hover:border-amber-400/30 transition-colors group">
                     <div className="flex items-center gap-2.5">
-                      <div className="w-6 h-6 rounded-lg bg-blue-400/20 flex items-center justify-center text-xs font-bold text-blue-400 shrink-0">{c.name.charAt(0).toUpperCase()}</div>
+                      <div className="w-6 h-6 rounded-lg bg-amber-400/20 flex items-center justify-center text-xs font-bold text-amber-400 shrink-0">{c.name.charAt(0).toUpperCase()}</div>
                       <div>
                         <p className="text-sm font-medium text-white">{c.name}</p>
                         {c.company && <p className="text-xs text-nv-text-muted">{c.company}</p>}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-xs text-blue-300">{d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })}</span>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${daysLeft <= 1 ? 'bg-blue-400/25 text-blue-200' : 'bg-blue-400/12 text-blue-300'}`}>
-                        {daysLeft <= 0 ? "Auj." : daysLeft === 1 ? 'Demain' : `J-${daysLeft}`}
-                      </span>
-                    </div>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold shrink-0 ${daysSince === null || daysSince >= 7 ? 'bg-red-400/20 text-red-300' : 'bg-amber-400/15 text-amber-300'}`}>
+                      {daysSince === null ? 'Jamais relancé' : `${daysSince} j sans relance`}
+                    </span>
                   </Link>
                 )
               })}

@@ -17,7 +17,7 @@ import { ClientSocialKPIs } from '@/components/clients/ClientSocialKPIs'
 import { DeleteButton } from '@/components/ui/DeleteButton'
 import { ClientInteractions } from '@/components/clients/ClientInteractions'
 import { ClientRetainerManager } from '@/components/clients/ClientRetainerManager'
-import { ClientBilanSection } from '@/components/clients/ClientBilanSection'
+import { FollowUpPrompt } from '@/components/clients/FollowUpPrompt'
 import { ClientChargesSection } from '@/components/clients/ClientChargesSection'
 import { ClientDocumentsSection } from '@/components/clients/ClientDocumentsSection'
 import { ClientOnboardingFormSection } from '@/components/clients/ClientOnboardingFormSection'
@@ -205,6 +205,16 @@ export default async function ClientDetailPage({ params }: PageProps) {
         </div>
       </div>
 
+      {/* « Client relancé ? » — revient tous les 3 jours */}
+      {client.status === 'ACTIF' && (
+        <FollowUpPrompt
+          clientId={client.id}
+          clientName={client.name}
+          lastFollowUpAt={(client as any).lastFollowUpAt ? new Date((client as any).lastFollowUpAt).toISOString() : null}
+          variant="banner"
+        />
+      )}
+
       {/* KPIs client */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-nv-card border border-nv-border rounded-xl p-4">
@@ -340,18 +350,6 @@ export default async function ClientDetailPage({ params }: PageProps) {
               </div>
             </CardContent>
           </Card>
-
-          {/* Suivi mensuel */}
-          {client.status === 'ACTIF' && (
-            <ClientBilanSection
-              clientId={client.id}
-              clientName={client.name}
-              lastBilanDate={client.lastBilanDate?.toISOString() ?? null}
-              nextBilanDate={client.nextBilanDate?.toISOString() ?? null}
-              followUpEnabled={client.followUpEnabled}
-              hasActiveRetainer={hasActiveRetainer}
-            />
-          )}
 
           {/* Charges client */}
           <ClientChargesSection

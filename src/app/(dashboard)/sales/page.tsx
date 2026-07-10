@@ -9,6 +9,7 @@ import { computeSalesForecast } from '@/lib/mrr-forecast'
 import { ensureRetainerInvoices } from '@/lib/retainer-invoices'
 import { FinanceOverview } from '@/components/finance/FinanceOverview'
 import { TreasurySection } from '@/components/finance/TreasurySection'
+import { FollowUpStats } from '@/components/sales/FollowUpStats'
 import Link from 'next/link'
 
 // Plateforme de signature hébergée sur Netlify (site statique dédié)
@@ -226,7 +227,7 @@ export default async function SalesPage() {
       </div>
 
       <AcquisitionTabs
-        pipeline={<AcquisitionBoard initialLeads={serialized} initialStatuses={serializedStatuses} />}
+        pipeline={<><FollowUpStats /><AcquisitionBoard initialLeads={serialized} initialStatuses={serializedStatuses} /></>}
         forecast={<SalesForecast months={forecast.months} suggestions={forecast.suggestions} />}
         finance={<><FinanceOverview /><TreasurySection /></>}
         contracts={contractsSection}

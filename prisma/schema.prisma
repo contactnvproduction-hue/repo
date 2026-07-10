@@ -98,6 +98,7 @@ model Client {
   followUpEnabled     Boolean    @default(false) // Suivi mensuel opt-in (clients hors retainer)
   mensualise          Boolean    @default(false) // paiements mensuels prévus SANS engagement (prévisionnel roulant)
   mensualiteAmount    Float?     // montant mensuel prévu quand mensualise = true
+  lastFollowUpAt      DateTime?  // dernière relance confirmée — le prompt « Client relancé ? » revient tous les 3 jours
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
@@ -120,6 +121,7 @@ model Client {
   spotSelections  ClientSpotSelection[]
   contentTopics   ClientContentTopic[]
   products        ClientProduct[]
+  followUps       ClientFollowUp[]
 
   @@map("clients")
 }
@@ -809,6 +811,19 @@ model ClientRetainer {
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@map("client_retainers")
+}
+
+// ─── RELANCES CLIENTS (« Client relancé ? » tous les 3 jours) ────────────────
+
+model ClientFollowUp {
+  id          String   @id @default(cuid())
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  date        DateTime @default(now())
+  callPlanned Boolean  @default(false) // un call de follow-up est planifié
+  createdAt   DateTime @default(now())
+
+  @@map("client_follow_ups")
 }
 
 // ─── CHARGES CLIENTS ─────────────────────────────────────────────────────────
