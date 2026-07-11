@@ -10,11 +10,15 @@ const BLACK: [number, number, number] = [30, 30, 30]
 const GREY: [number, number, number] = [120, 120, 120]
 const LIGHT: [number, number, number] = [225, 225, 225]
 
+// Remplace les espaces insécables (U+202F narrow, U+00A0) que les polices
+// standard de jsPDF affichent en « / » — bug d'affichage des montants FR
+const noNbsp = (s: string) => s.replace(/[  ]/g, ' ')
+
 const eur = (n: number) =>
-  `${n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
+  noNbsp(`${n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`)
 
 const frDate = (d: string | Date | null | undefined) =>
-  d ? new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'
+  d ? noNbsp(new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })) : '-'
 
 // Extrait IBAN et BIC du champ libre « Coordonnées bancaires » des paramètres
 function parseBank(bankDetails: string): { iban: string | null; bic: string | null } {
@@ -216,6 +220,9 @@ export function InvoicePdfButton({
       pdf.line(M, y, M + CW, y)
       y += 6
 
+      // Exonération art. 259-1 CGI (client étranger / facture sans TVA)
+      const vatExempt = inv.client?.vatExempt === true || (inv.totalTVA ?? 0) === 0
+
       const lines = (inv.lines ?? []).length > 0
         ? inv.lines.map((l: any, i: number) => i === 0 && prestaDetail ? { ...l, description: prestaDetail } : l)
         : [{ description: prestaDetail || 'Prestation', quantity: 1, unitPrice: inv.totalHT, vatRate: 20, total: inv.totalHT }]
@@ -223,7 +230,7 @@ export function InvoicePdfButton({
       pdf.setFont('helvetica', 'normal')
       pdf.setFontSize(9)
       for (const line of lines) {
-        const descLines: string[] = pdf.splitTextToSize(String(line.description ?? ''), CW - 74)
+        const descLines: string[] = pdf.splitTextToSize(noNbsp(String(line.description ?? '')), CW - 74)
         pdf.setTextColor(...BLACK)
         pdf.text(descLines, M, y)
         // Valeurs alignées au centre vertical du bloc description (comme le modèle)
@@ -234,16 +241,28 @@ export function InvoicePdfButton({
         pdf.text(eur(line.total ?? 0), cols.total, midY, { align: 'right' })
         y += descLines.length * 4.2 + 6
       }
+
+      // Mention d'exonération dans la colonne Description (nom exact de l'article)
+      if (vatExempt) {
+        pdf.setFont('helvetica', 'italic')
+        pdf.setFontSize(8)
+        pdf.setTextColor(...GREY)
+        const exo: string[] = pdf.splitTextToSize(noNbsp(
+          "TVA non applicable - article 259-1 du Code général des impôts (lieu des prestations de services - preneur assujetti établi hors de France, autoliquidation par le preneur).",
+        ), CW - 4)
+        pdf.text(exo, M, y)
+        y += exo.length * 3.8 + 3
+        pdf.setFont('helvetica', 'normal')
+      }
+
       pdf.setDrawColor(...LIGHT)
       pdf.line(M, y, M + CW, y)
       y += 8
 
       // ── Totaux (alignés à droite, TTC en gras) ──
-      // Client étranger / facture sans TVA → exonération art. 259-1 CGI
-      const vatExempt = inv.client?.vatExempt === true || (inv.totalTVA ?? 0) === 0
       const totals: [string, string, boolean][] = [
         ['Total HT', eur(inv.totalHT ?? 0), false],
-        [vatExempt ? 'TVA non applicable – article 259-1 du CGI' : 'Montant total de la TVA', eur(inv.totalTVA ?? 0), false],
+        [vatExempt ? 'TVA non applicable - art. 259-1 du CGI' : 'Montant total de la TVA', eur(inv.totalTVA ?? 0), false],
         ['Total TTC', eur(inv.totalTTC ?? 0), true],
       ]
       pdf.setFontSize(9)
@@ -263,13 +282,12 @@ export function InvoicePdfButton({
       const mentions = [
         'Type de transaction : Services',
         vatExempt
-          ? 'TVA non applicable – article 259-1 du CGI'
+          ? 'TVA non applicable - article 259-1 du CGI'
           : 'Conditions de paiement de la TVA : Sur les encaissements',
         "Pas d'escompte accordé pour paiement anticipé.",
-        "En cas de non-paiement à la date d'échéance, des pénalités calculées à trois fois le taux d'intérêt légal seront appliquées.",
-        'Tout retard de paiement entraînera une indemnité forfaitaire pour frais de recouvrement de 40€.',
+        'En cas de retard de paiement, une pénalité de 15 % du montant total de la prestation sera appliquée.',
         'NV PRODUCTION',
-      ]
+      ].map(noNbsp)
       for (const m of mentions) {
         const wrapped: string[] = pdf.splitTextToSize(m, CW)
         pdf.text(wrapped, M, y)
