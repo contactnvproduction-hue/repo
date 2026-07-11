@@ -243,7 +243,7 @@ export function InvoicePdfButton({
       const vatExempt = inv.client?.vatExempt === true || (inv.totalTVA ?? 0) === 0
       const totals: [string, string, boolean][] = [
         ['Total HT', eur(inv.totalHT ?? 0), false],
-        [vatExempt ? 'TVA (exonérée — art. 259-1 CGI)' : 'Montant total de la TVA', eur(inv.totalTVA ?? 0), false],
+        [vatExempt ? 'TVA non applicable – article 259-1 du CGI' : 'Montant total de la TVA', eur(inv.totalTVA ?? 0), false],
         ['Total TTC', eur(inv.totalTTC ?? 0), true],
       ]
       pdf.setFontSize(9)
@@ -263,7 +263,7 @@ export function InvoicePdfButton({
       const mentions = [
         'Type de transaction : Services',
         vatExempt
-          ? "Exonération de TVA en application de l'article 259-1 du CGI — TVA due par le preneur (autoliquidation)."
+          ? 'TVA non applicable – article 259-1 du CGI'
           : 'Conditions de paiement de la TVA : Sur les encaissements',
         "Pas d'escompte accordé pour paiement anticipé.",
         "En cas de non-paiement à la date d'échéance, des pénalités calculées à trois fois le taux d'intérêt légal seront appliquées.",
