@@ -1,20 +1,23 @@
 import { prisma } from '@/lib/db'
 import Link from 'next/link'
-import { PhoneCall, BellRing, Target } from 'lucide-react'
+import { BellRing } from 'lucide-react'
 
-// KPIs de relance clients (mois en cours) — objectif : chaque retainer
-// a au moins 1 call de follow-up par mois.
+const MONTHS_SHORT = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc']
+
+// Suivi des follow-ups retainers, MOIS PAR MOIS.
+// Objectif : chaque retainer actif a au moins 1 relance / mois.
 export async function FollowUpStats() {
   const db = prisma as any
   const now = new Date()
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+  const monthIdx = now.getFullYear() * 12 + now.getMonth()
+  const sixStart = new Date(now.getFullYear(), now.getMonth() - 5, 1)
 
   const [followUps, retainers] = await Promise.all([
     (async () => {
       try {
         return await db.clientFollowUp.findMany({
-          where: { date: { gte: monthStart } },
-          select: { clientId: true, callPlanned: true },
+          where: { date: { gte: sixStart } },
+          select: { clientId: true, callPlanned: true, date: true },
         })
       } catch { return [] }
     })(),
@@ -23,73 +26,68 @@ export async function FollowUpStats() {
     }),
   ])
 
-  // Clients avec retainer actif ce mois-ci
-  const monthIdx = now.getFullYear() * 12 + now.getMonth()
-  const activeRetainerClients = new Map<string, string>()
-  for (const r of retainers) {
-    const start = new Date(r.startDate)
-    const startIdx = start.getFullYear() * 12 + start.getMonth()
-    if (startIdx <= monthIdx && monthIdx < startIdx + r.durationMonths && r.client?.status === 'ACTIF') {
-      activeRetainerClients.set(r.clientId, r.client.name)
+  // Clients avec retainer actif sur un mois donné (idx)
+  const activeAt = (idx: number) => {
+    const m = new Map<string, string>()
+    for (const r of retainers) {
+      const s = new Date(r.startDate)
+      const si = s.getFullYear() * 12 + s.getMonth()
+      if (si <= idx && idx < si + r.durationMonths && r.client?.status === 'ACTIF') m.set(r.clientId, r.client.name)
     }
+    return m
   }
 
-  const totalRelances = followUps.length
-  const totalCalls = followUps.filter((f: any) => f.callPlanned).length
-  const followedUpClientIds = new Set(followUps.map((f: any) => f.clientId))
+  // 6 mois de données
+  const months = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1)
+    const idx = d.getFullYear() * 12 + d.getMonth()
+    const fu = followUps.filter((f: any) => { const fd = new Date(f.date); return fd.getFullYear() === d.getFullYear() && fd.getMonth() === d.getMonth() })
+    const followedIds = new Set(fu.map((f: any) => f.clientId))
+    const active = activeAt(idx)
+    const activeIds = [...active.keys()]
+    const covered = activeIds.filter(id => followedIds.has(id)).length
+    return {
+      month: d.getMonth(), isCurrent: i === 5,
+      relances: fu.length,
+      calls: fu.filter((f: any) => f.callPlanned).length,
+      coverage: activeIds.length ? Math.round((covered / activeIds.length) * 100) : null,
+      notCovered: activeIds.filter(id => !followedIds.has(id)).map(id => ({ id, name: active.get(id)! })),
+    }
+  })
 
-  const retainerClientIds = [...activeRetainerClients.keys()]
-  const coveredCount = retainerClientIds.filter(id => followedUpClientIds.has(id)).length
-  const coverage = retainerClientIds.length > 0 ? Math.round((coveredCount / retainerClientIds.length) * 100) : null
-  const notCovered = retainerClientIds
-    .filter(id => !followedUpClientIds.has(id))
-    .map(id => ({ id, name: activeRetainerClients.get(id)! }))
+  const current = months[5]
 
   return (
     <div className="bg-nv-card border border-nv-border rounded-xl p-4 mb-5">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-amber-400/15 flex items-center justify-center shrink-0">
-            <BellRing size={16} className="text-amber-400" />
-          </div>
-          <div>
-            <p className="text-lg font-bold text-white leading-tight">{totalRelances}</p>
-            <p className="text-xs text-nv-text-muted">Relances ce mois</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-emerald-400/15 flex items-center justify-center shrink-0">
-            <PhoneCall size={16} className="text-emerald-400" />
-          </div>
-          <div>
-            <p className="text-lg font-bold text-white leading-tight">{totalCalls}</p>
-            <p className="text-xs text-nv-text-muted">Calls de follow-up planifiés</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center shrink-0">
-            <Target size={16} className="text-primary" />
-          </div>
-          <div>
-            <p className={`text-lg font-bold leading-tight ${coverage === null ? 'text-nv-text-muted' : coverage >= 100 ? 'text-emerald-400' : coverage >= 50 ? 'text-amber-400' : 'text-red-400'}`}>
-              {coverage === null ? '—' : `${coverage}%`}
-            </p>
-            <p className="text-xs text-nv-text-muted">Retainers relancés ce mois <span className="text-nv-text-faint">(obj. 100%)</span></p>
-          </div>
-        </div>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-white flex items-center gap-2"><BellRing size={15} className="text-amber-400" /> Follow-ups retainers — 6 mois</h3>
+        <span className="text-xs text-nv-text-muted">Objectif : 100% des retainers relancés / mois</span>
       </div>
 
-      {notCovered.length > 0 && (
+      {/* Frise 6 mois : couverture % en barre */}
+      <div className="grid grid-cols-6 gap-2">
+        {months.map((m, i) => {
+          const cov = m.coverage
+          const color = cov === null ? '#3a3a3a' : cov >= 100 ? '#10b981' : cov >= 50 ? '#f59e0b' : '#ef4444'
+          return (
+            <div key={i} className={`rounded-xl p-2.5 border ${m.isCurrent ? 'border-primary/40 bg-primary/[0.04]' : 'border-nv-border bg-nv-dark'}`}>
+              <p className={`text-[11px] font-semibold ${m.isCurrent ? 'text-primary' : 'text-nv-text-muted'}`}>{MONTHS_SHORT[m.month]}</p>
+              <div className="h-16 flex items-end mt-1.5">
+                <div className="w-full rounded-t-md transition-all" style={{ height: `${Math.max(6, (cov ?? 0))}%`, backgroundColor: color }} />
+              </div>
+              <p className="text-sm font-bold text-white tabular-nums mt-1">{cov === null ? '—' : `${cov}%`}</p>
+              <p className="text-[10px] text-nv-text-faint tabular-nums">{m.relances} relances · {m.calls} 📞</p>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* À relancer ce mois */}
+      {current.notCovered.length > 0 && (
         <div className="mt-3 pt-3 border-t border-nv-border flex items-center gap-2 flex-wrap">
           <span className="text-[11px] text-nv-text-faint">À relancer ce mois :</span>
-          {notCovered.map(c => (
-            <Link
-              key={c.id}
-              href={`/clients/${c.id}`}
-              className="text-[11px] px-2 py-0.5 rounded-full bg-red-400/10 border border-red-400/25 text-red-300 hover:bg-red-400/20 transition-colors"
-            >
-              {c.name}
-            </Link>
+          {current.notCovered.map(c => (
+            <Link key={c.id} href={`/clients/${c.id}`} className="text-[11px] px-2 py-0.5 rounded-full bg-red-400/10 border border-red-400/25 text-red-300 hover:bg-red-400/20 transition-colors">{c.name}</Link>
           ))}
         </div>
       )}

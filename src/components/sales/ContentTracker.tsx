@@ -42,6 +42,7 @@ export function ContentTracker({ initialChannels, initialPieces }: { initialChan
   const [ownerFilter, setOwnerFilter] = useState<string>('')
   const [rankBy, setRankBy] = useState<'views' | 'engagement'>('views')
   const [syncing, setSyncing] = useState<string | null>(null)
+  const [syncingAll, setSyncingAll] = useState(false)
   const [showAddChannel, setShowAddChannel] = useState(false)
   const [showAddPiece, setShowAddPiece] = useState(false)
 
@@ -131,6 +132,23 @@ export function ContentTracker({ initialChannels, initialPieces }: { initialChan
     if (pr.ok) setPieces(await pr.json())
   }
 
+  const syncAll = async () => {
+    const auto = channels.filter(c => c.platform === 'YOUTUBE' || (c.platform === 'INSTAGRAM'))
+    if (auto.length === 0) { toast('Aucun canal à synchroniser automatiquement', { icon: 'ℹ️' }); return }
+    setSyncingAll(true)
+    let ok = 0
+    for (const ch of auto) {
+      try {
+        const res = await fetch('/api/content/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ channelId: ch.id }) })
+        const json = await res.json()
+        if (res.ok && !json.manualRequired) ok++
+      } catch {}
+    }
+    await reload()
+    setSyncingAll(false)
+    toast.success(`${ok} canal(aux) synchronisé(s)`)
+  }
+
   return (
     <div className="space-y-5">
       {/* Canaux */}
@@ -138,6 +156,11 @@ export function ContentTracker({ initialChannels, initialPieces }: { initialChan
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-white flex items-center gap-2"><Layers size={15} className="text-primary" /> Canaux suivis</h3>
           <div className="flex gap-2">
+            {channels.length > 0 && (
+              <button onClick={syncAll} disabled={syncingAll} className="text-xs px-3 py-1.5 rounded-lg border border-primary/40 text-primary hover:bg-primary/10 transition-colors flex items-center gap-1 disabled:opacity-60">
+                {syncingAll ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} Tout synchroniser
+              </button>
+            )}
             <button onClick={() => setShowAddPiece(true)} className="text-xs px-3 py-1.5 rounded-lg border border-nv-border text-nv-text-muted hover:text-nv-text transition-colors flex items-center gap-1">
               <Plus size={12} /> Contenu manuel
             </button>
@@ -310,20 +333,22 @@ function AddChannelModal({ onClose, onDone }: { onClose: () => void; onDone: () 
   const [owner, setOwner] = useState('')
   const [platform, setPlatform] = useState('INSTAGRAM')
   const [url, setUrl] = useState('')
+  const [accessToken, setAccessToken] = useState('')
+  const [platformUserId, setPlatformUserId] = useState('')
   const [saving, setSaving] = useState(false)
   const inp = 'w-full bg-nv-black border border-nv-border rounded-lg px-3 py-2 text-sm text-white placeholder-nv-text-faint focus:outline-none focus:border-primary/60'
   const save = async () => {
     if (!owner.trim() || !url.trim()) { toast.error('Compte et lien requis'); return }
     setSaving(true)
     try {
-      const res = await fetch('/api/content/channels', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ owner, platform, url }) })
+      const res = await fetch('/api/content/channels', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ owner, platform, url, accessToken, platformUserId }) })
       if (!res.ok) throw new Error()
       toast.success('Canal ajouté'); onDone(); onClose()
     } catch { toast.error('Erreur') } finally { setSaving(false) }
   }
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)' }} onClick={onClose}>
-      <div className="w-full max-w-sm bg-nv-dark border border-nv-border rounded-2xl p-5 space-y-3" onClick={e => e.stopPropagation()}>
+      <div className="w-full max-w-sm bg-nv-dark border border-nv-border rounded-2xl p-5 space-y-3 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between"><h3 className="text-base font-semibold text-white">Ajouter un canal</h3><button onClick={onClose}><X size={16} className="text-nv-text-muted" /></button></div>
         <input className={inp} placeholder="Compte (Noah, Maël, New Vision…)" value={owner} onChange={e => setOwner(e.target.value)} autoFocus />
         <div className="grid grid-cols-3 gap-2">
@@ -334,9 +359,16 @@ function AddChannelModal({ onClose, onDone }: { onClose: () => void; onDone: () 
           ))}
         </div>
         <input className={inp} placeholder={platform === 'YOUTUBE' ? 'https://youtube.com/@chaine' : 'https://instagram.com/compte'} value={url} onChange={e => setUrl(e.target.value)} />
-        {platform === 'YOUTUBE'
-          ? <p className="text-[11px] text-nv-text-faint">YouTube se synchronise automatiquement (vues, likes par vidéo) via la clé API des Paramètres.</p>
-          : <p className="text-[11px] text-nv-text-faint">Instagram/TikTok : ajoutez les contenus manuellement (pas d&apos;API publique fiable par publication).</p>}
+        {platform === 'YOUTUBE' && <p className="text-[11px] text-nv-text-faint">YouTube se synchronise automatiquement (vues, likes par vidéo) via la clé API des Paramètres.</p>}
+        {platform === 'TIKTOK' && <p className="text-[11px] text-nv-text-faint">TikTok : ajoutez les contenus manuellement (pas d&apos;API publique fiable).</p>}
+        {platform === 'INSTAGRAM' && (
+          <div className="space-y-2 pt-1 border-t border-nv-border">
+            <p className="text-[11px] text-nv-text-muted">Sync automatique (compte Business/Creator qui vous appartient) — sinon laissez vide et saisissez manuellement.</p>
+            <input className={inp} placeholder="ID du compte Instagram Business" value={platformUserId} onChange={e => setPlatformUserId(e.target.value)} />
+            <input className={inp} placeholder="Token Graph API (longue durée)" value={accessToken} onChange={e => setAccessToken(e.target.value)} />
+            <p className="text-[10px] text-nv-text-faint">Obtenez-les via developers.facebook.com → votre app → Instagram Graph API (compte lié à une Page Facebook). Permissions : instagram_basic, instagram_manage_insights.</p>
+          </div>
+        )}
         <button onClick={save} disabled={saving} className="w-full flex items-center justify-center gap-1.5 py-2 bg-primary text-nv-black rounded-lg font-medium disabled:opacity-60">
           {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Ajouter
         </button>

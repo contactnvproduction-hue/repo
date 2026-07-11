@@ -14,6 +14,70 @@ function parseDuration(iso: string): number {
 const engagement = (l: number, c: number, s: number, v: number) =>
   v > 0 ? Math.round(((l + c + s) / v) * 1000) / 10 : 0
 
+// ── Sync Instagram via Graph API (compte Business/Creator possédé) ────────────
+async function syncInstagram(db: any, channel: any) {
+  const token = channel.accessToken
+  const igId = channel.platformUserId
+  const GRAPH = 'https://graph.facebook.com/v19.0'
+
+  // Followers du compte
+  try {
+    const accRes = await fetch(`${GRAPH}/${igId}?fields=followers_count&access_token=${token}`)
+    const acc = await accRes.json()
+    if (acc.error) return NextResponse.json({ error: `Instagram : ${acc.error.message}` }, { status: 400 })
+    if (acc.followers_count != null) {
+      await db.contentChannel.update({ where: { id: channel.id }, data: { followers: acc.followers_count } })
+    }
+  } catch {}
+
+  // Médias récents
+  const fields = 'id,caption,media_type,media_product_type,permalink,timestamp,like_count,comments_count,thumbnail_url,media_url'
+  const mRes = await fetch(`${GRAPH}/${igId}/media?fields=${fields}&limit=50&access_token=${token}`)
+  const mData = await mRes.json()
+  if (mData.error) return NextResponse.json({ error: `Instagram : ${mData.error.message}` }, { status: 400 })
+
+  let synced = 0
+  for (const media of mData.data || []) {
+    const likes = media.like_count ?? 0
+    const comments = media.comments_count ?? 0
+    const isReel = media.media_product_type === 'REELS'
+    const isVideo = media.media_type === 'VIDEO' || isReel
+    const format = isReel ? 'REEL' : media.media_type === 'IMAGE' || media.media_type === 'CAROUSEL_ALBUM' ? 'POST' : 'AUTRE'
+
+    // Vues / reach via insights (réels et vidéos → plays ; sinon reach)
+    let views = 0
+    try {
+      const metric = isVideo ? 'plays,reach' : 'reach'
+      const iRes = await fetch(`${GRAPH}/${media.id}/insights?metric=${metric}&access_token=${token}`)
+      const iData = await iRes.json()
+      if (!iData.error) {
+        const plays = iData.data?.find((x: any) => x.name === 'plays')?.values?.[0]?.value
+        const reach = iData.data?.find((x: any) => x.name === 'reach')?.values?.[0]?.value
+        views = plays ?? reach ?? 0
+      }
+    } catch {}
+
+    const title = (media.caption || 'Publication Instagram').split('\n')[0].slice(0, 120)
+    await db.contentPiece.upsert({
+      where: { channelId_externalId: { channelId: channel.id, externalId: media.id } },
+      update: { views, likes, comments, engagementRate: engagement(likes, comments, 0, views) },
+      create: {
+        channelId: channel.id, externalId: media.id, title,
+        url: media.permalink || null,
+        thumbnail: media.thumbnail_url || media.media_url || null,
+        format,
+        publishedAt: media.timestamp ? new Date(media.timestamp) : new Date(),
+        views, likes, comments, shares: 0,
+        engagementRate: engagement(likes, comments, 0, views),
+      },
+    })
+    synced++
+  }
+
+  await db.contentChannel.update({ where: { id: channel.id }, data: { lastSyncedAt: new Date() } })
+  return NextResponse.json({ synced })
+}
+
 // Sync d'un canal : YouTube = données réelles par vidéo (Data API).
 // Instagram/TikTok = pas d'API publique fiable par-post → saisie manuelle.
 export async function POST(req: NextRequest) {
@@ -24,6 +88,17 @@ export async function POST(req: NextRequest) {
     const { channelId } = await req.json()
     const channel = await db.contentChannel.findUnique({ where: { id: channelId } })
     if (!channel) return NextResponse.json({ error: 'Canal introuvable' }, { status: 404 })
+
+    // ── Instagram : Graph API (compte Business/Creator qu'on possède) ──────────
+    if (channel.platform === 'INSTAGRAM') {
+      if (!channel.accessToken || !channel.platformUserId) {
+        return NextResponse.json({
+          manualRequired: true,
+          message: "Instagram : connectez le compte (token Graph API + ID du compte Business dans l'édition du canal) pour la synchronisation automatique, sinon saisissez les contenus manuellement.",
+        })
+      }
+      return await syncInstagram(db, channel)
+    }
 
     if (channel.platform !== 'YOUTUBE') {
       return NextResponse.json({

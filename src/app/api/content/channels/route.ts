@@ -30,11 +30,35 @@ export async function POST(req: NextRequest) {
       handle = m ? m[1] : null
     }
     const channel = await db.contentChannel.create({
-      data: { owner: b.owner.trim(), platform, url: b.url.trim(), handle },
+      data: {
+        owner: b.owner.trim(), platform, url: b.url.trim(), handle,
+        accessToken: b.accessToken?.trim() || null,
+        platformUserId: b.platformUserId?.trim() || null,
+      },
     })
     return NextResponse.json(channel, { status: 201 })
   } catch (e) {
     console.error('[content/channels POST]', e)
+    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
+  }
+}
+
+// Connecter/éditer un canal (ex : ajouter le token Instagram Graph API)
+export async function PATCH(req: NextRequest) {
+  const session = await auth()
+  if (!session?.user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  try {
+    const { id, ...b } = await req.json()
+    if (!id) return NextResponse.json({ error: 'id requis' }, { status: 400 })
+    const data: Record<string, unknown> = {}
+    if ('owner' in b) data.owner = String(b.owner).trim()
+    if ('handle' in b) data.handle = b.handle?.trim() || null
+    if ('accessToken' in b) data.accessToken = b.accessToken?.trim() || null
+    if ('platformUserId' in b) data.platformUserId = b.platformUserId?.trim() || null
+    const channel = await db.contentChannel.update({ where: { id }, data })
+    return NextResponse.json(channel)
+  } catch (e) {
+    console.error('[content/channels PATCH]', e)
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
   }
 }

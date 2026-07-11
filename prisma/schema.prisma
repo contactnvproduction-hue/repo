@@ -852,15 +852,17 @@ model ClientFollowUp {
 
 // Un canal = un compte (personne + plateforme). Ex: Noah/Instagram, Maël/YouTube, NV/YouTube
 model ContentChannel {
-  id           String   @id @default(cuid())
-  owner        String   // libellé libre : "Noah", "Maël", "New Vision"
-  platform     String   // INSTAGRAM | YOUTUBE | TIKTOK
-  handle       String?
-  url          String
-  followers    Int?
-  lastSyncedAt DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id             String   @id @default(cuid())
+  owner          String   // libellé libre : "Noah", "Maël", "New Vision"
+  platform       String   // INSTAGRAM | YOUTUBE | TIKTOK
+  handle         String?
+  url            String
+  followers      Int?
+  accessToken    String?  // Instagram Graph API : token longue durée (compte Business/Creator)
+  platformUserId String?  // Instagram Graph API : identifiant du compte IG Business
+  lastSyncedAt   DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   pieces ContentPiece[]
 
