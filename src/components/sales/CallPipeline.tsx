@@ -104,25 +104,29 @@ export function CallPipeline({
   // Tous les calls à plat (avec leur lead)
   const allCalls = useMemo(() => leads.flatMap(l => l.calls.map(c => ({ ...c, lead: l }))), [leads])
 
-  // Les 6 derniers mois → données par mois
+  // Les 6 derniers mois → funnel par LEAD (contacté → présent → qualifié → signé).
+  // Le closing se calcule sur l'état « Signé » du lead, pas sur une case par call.
   const months = useMemo(() => {
-    const closingMap: Record<string, MonthClosing> = {}
-    for (const c of closings6m) closingMap[monthKey(c.year, c.month)] = c
+    const amountMap: Record<string, number> = {}
+    for (const c of closings6m) amountMap[monthKey(c.year, c.month)] = c.amount
     return Array.from({ length: 6 }, (_, i) => {
       const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1)
       const key = monthKey(d.getFullYear(), d.getMonth())
       const monthCalls = allCalls.filter(c => { const cd = new Date(c.date); return cd.getFullYear() === d.getFullYear() && cd.getMonth() === d.getMonth() })
-      const shown = monthCalls.filter(c => c.showedUp).length
-      const qualified = monthCalls.filter(c => c.qualified).length
-      const closed = monthCalls.filter(c => c.closed).length
-      const cl = closingMap[key]
+      // Leads distincts touchés ce mois-ci
+      const leadIds = new Set(monthCalls.map(c => c.leadId))
+      const shownLeads = new Set(monthCalls.filter(c => c.showedUp).map(c => c.leadId))
+      const qualifiedLeads = new Set(monthCalls.filter(c => c.qualified).map(c => c.leadId))
+      const signedLeads = new Set(monthCalls.filter(c => c.lead.status?.isClosed || c.lead.convertedClientId).map(c => c.leadId))
+      const nContacted = leadIds.size
       return {
         key, year: d.getFullYear(), month: d.getMonth(), isCurrent: i === 5,
-        calls: monthCalls, nbCalls: monthCalls.length, shown, qualified, closed,
-        showupRate: monthCalls.length ? Math.round((shown / monthCalls.length) * 100) : 0,
-        qualifRate: shown ? Math.round((qualified / shown) * 100) : 0,
-        closingRate: qualified ? Math.round((closed / qualified) * 100) : 0,
-        closingsCount: cl?.count ?? 0, closingsAmount: cl?.amount ?? 0,
+        calls: monthCalls, nbCalls: monthCalls.length,
+        contacted: nContacted, shown: shownLeads.size, qualified: qualifiedLeads.size, signed: signedLeads.size,
+        showupRate: nContacted ? Math.round((shownLeads.size / nContacted) * 100) : 0,
+        qualifRate: nContacted ? Math.round((qualifiedLeads.size / nContacted) * 100) : 0,
+        closingRate: nContacted ? Math.round((signedLeads.size / nContacted) * 100) : 0,
+        closingsCount: signedLeads.size, closingsAmount: amountMap[key] ?? 0,
       }
     })
   }, [allCalls, closings6m, now])
@@ -219,15 +223,15 @@ export function CallPipeline({
         <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
           <h3 className="text-base font-bold text-white capitalize">{MONTHS_FR[selected.month]} {selected.year}</h3>
           <div className="flex items-center gap-4 text-sm">
-            <span className="text-nv-text-muted"><span className="font-bold text-white tabular-nums">{selected.nbCalls}</span> calls</span>
-            <span className="text-nv-text-muted"><span className="font-bold text-emerald-400 tabular-nums">{selected.closingsCount}</span> closings</span>
+            <span className="text-nv-text-muted"><span className="font-bold text-white tabular-nums">{selected.contacted}</span> contactés</span>
+            <span className="text-nv-text-muted"><span className="font-bold text-emerald-400 tabular-nums">{selected.signed}</span> signés</span>
             {selected.closingsAmount > 0 && <span className="text-primary font-bold tabular-nums">{eur(selected.closingsAmount)}</span>}
           </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Ring pct={selected.showupRate} color="#3b82f6" label="Show-up" sub={`${selected.shown}/${selected.nbCalls} présents`} />
+          <Ring pct={selected.showupRate} color="#3b82f6" label="Show-up" sub={`${selected.shown}/${selected.contacted} présents`} />
           <Ring pct={selected.qualifRate} color="#8b5cf6" label="Qualification" sub={`${selected.qualified} qualifiés`} />
-          <Ring pct={selected.closingRate} color="#10b981" label="Closing" sub={`${selected.closed} calls closés`} />
+          <Ring pct={selected.closingRate} color="#10b981" label="Closing" sub={`${selected.signed} signés`} />
         </div>
       </div>
 
@@ -320,10 +324,10 @@ function CallRow({ c, onPatch, onDelete }: { c: Call; onPatch: (id: string, p: P
       <div className="flex flex-wrap gap-1.5">
         <CallCheck label="Présent" checked={c.showedUp} color="#3b82f6" onToggle={() => onPatch(c.id, { showedUp: !c.showedUp })} />
         <CallCheck label="Qualifié" checked={c.qualified} color="#8b5cf6" onToggle={() => onPatch(c.id, { qualified: !c.qualified })} />
-        <CallCheck label="Closé" checked={c.closed} color="#10b981" onToggle={() => onPatch(c.id, { closed: !c.closed })} />
         <CallCheck label="Follow-up" checked={c.followUpNeeded} color="#f59e0b" onToggle={() => onPatch(c.id, { followUpNeeded: !c.followUpNeeded })} />
         {c.followUpNeeded && <CallCheck label="FU fait" checked={c.followUpDone} color="#10b981" onToggle={() => onPatch(c.id, { followUpDone: !c.followUpDone })} />}
       </div>
+      <p className="text-[10px] text-nv-text-faint mt-1.5">Le closing se calcule à partir du statut « Signé » du lead — marquez-le signé dans sa fiche.</p>
       <textarea defaultValue={c.notes ?? ''} onBlur={e => e.target.value !== (c.notes ?? '') && onPatch(c.id, { notes: e.target.value })}
         rows={1} placeholder="Notes…" className="w-full mt-2 bg-nv-dark border border-nv-border rounded-lg px-2.5 py-1.5 text-xs text-nv-text placeholder-nv-text-faint focus:outline-none focus:border-primary/50 resize-none" />
     </div>
