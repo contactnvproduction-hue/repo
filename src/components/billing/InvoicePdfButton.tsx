@@ -23,6 +23,30 @@ function parseBank(bankDetails: string): { iban: string | null; bic: string | nu
   return { iban: ibanMatch ? ibanMatch[0].toUpperCase() : null, bic: bicMatch ? bicMatch[0] : null }
 }
 
+// Coordonnées officielles de la société — filet de sécurité si les
+// paramètres agence sont inaccessibles ou incomplets
+const NV = {
+  name: 'SAS NEW VISION PRODUCTION',
+  email: 'contact.nvproduction@gmail.com',
+  siret: '94442853100015',
+  iban: 'FR7616958000013635597638274',
+  bic: 'QNTOFRP1XXX',
+}
+
+// Logo NV (blanc sur transparent) → dataURL, affiché sur cartouche noir
+async function loadLogo(): Promise<string | null> {
+  try {
+    const blob = await fetch('/nv-logo-invoice.png').then(r => r.ok ? r.blob() : null)
+    if (!blob) return null
+    return await new Promise<string>((resolve, reject) => {
+      const fr = new FileReader()
+      fr.onload = () => resolve(fr.result as string)
+      fr.onerror = reject
+      fr.readAsDataURL(blob)
+    })
+  } catch { return null }
+}
+
 // Bouton de téléchargement de facture PDF : ouvre d'abord un champ pour
 // renseigner le détail de la prestation (livrables), puis génère le document
 // au format du modèle comptable NV (persisté pour les prochains exports).
@@ -69,8 +93,17 @@ export function InvoicePdfButton({
     if (!data) return
     setGenerating(true)
     try {
-      const { inv, agency } = data
+      const { inv, agency: rawAgency } = data
+      // Coordonnées société : paramètres complétés par les valeurs officielles NV
+      const agency = {
+        ...rawAgency,
+        name: rawAgency?.name || NV.name,
+        email: rawAgency?.email || NV.email,
+        siret: rawAgency?.siret || NV.siret,
+        bankDetails: rawAgency?.bankDetails || `IBAN : ${NV.iban}\nBIC : ${NV.bic}`,
+      }
       const prestaDetail = detail.trim()
+      const logo = await loadLogo()
 
       if (prestaDetail && prestaDetail !== (inv.lines?.[0]?.description ?? '')) {
         await fetch(`/api/invoices/${invoiceId}`, {
@@ -87,11 +120,20 @@ export function InvoicePdfButton({
       const CW = W - M * 2
       let y = 22
 
-      // ── Titre ──
+      // ── Titre + logo NV (blanc sur cartouche noir, en haut à droite) ──
       pdf.setFont('helvetica', 'bold')
       pdf.setFontSize(19)
       pdf.setTextColor(...BLACK)
       pdf.text('Facture', M, y)
+      if (logo) {
+        const cartW = 38, cartH = 19
+        const cartX = W - M - cartW, cartY = 12
+        pdf.setFillColor(14, 14, 14)
+        pdf.roundedRect(cartX, cartY, cartW, cartH, 2.5, 2.5, 'F')
+        // logo ratio 2.14 → 30×14 mm centré dans le cartouche
+        const lw = 30, lh = 14
+        pdf.addImage(logo, 'PNG', cartX + (cartW - lw) / 2, cartY + (cartH - lh) / 2, lw, lh)
+      }
       y += 12
 
       // ── Métadonnées (label gris / valeur noire) ──
