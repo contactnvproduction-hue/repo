@@ -1,7 +1,7 @@
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { Target, FileSignature, ExternalLink, CheckCircle2, Clock } from 'lucide-react'
-import { AcquisitionBoard } from '@/components/acquisition/AcquisitionBoard'
+import { CallPipeline } from '@/components/sales/CallPipeline'
 import { RevenueByProduct } from '@/components/acquisition/RevenueByProduct'
 import { AcquisitionTabs } from '@/components/acquisition/AcquisitionTabs'
 import { SalesForecast } from '@/components/sales/SalesForecast'
@@ -53,22 +53,33 @@ export default async function SalesPage() {
     orderBy: { createdAt: 'desc' },
   })
 
-  const serialize = (d: Date | null | undefined) => d ? d.toISOString() : null
-
-  const serialized = leads.map(l => ({
-    ...l,
+  // Données du pipeline v2 (liste + fiche lead + re-close)
+  const pipelineLeads = leads.map(l => ({
+    id: l.id, name: l.name, company: l.company, email: l.email, phone: l.phone,
+    statusId: l.statusId, convertedClientId: l.convertedClientId,
     createdAt: l.createdAt.toISOString(),
-    updatedAt: l.updatedAt.toISOString(),
-    followUpDate: serialize(l.followUpDate),
-    calls: l.calls.map(c => ({
-      ...c,
-      date: c.date.toISOString(),
-      createdAt: c.createdAt.toISOString(),
+    status: l.status ? { id: l.status.id, name: l.status.name, color: l.status.color, isClosed: l.status.isClosed, order: l.status.order } : null,
+    calls: l.calls.map((c: any) => ({
+      id: c.id, date: c.date.toISOString(), duration: c.duration,
+      showedUp: c.showedUp, qualified: c.qualified,
+      closed: c.closed ?? false, followUpNeeded: c.followUpNeeded ?? false, followUpDone: c.followUpDone ?? false,
+      notes: c.notes,
     })),
-    status: l.status ? { ...l.status, createdAt: l.status.createdAt.toISOString() } : null,
   }))
-
-  const serializedStatuses = statuses.map(s => ({ ...s, createdAt: s.createdAt.toISOString() }))
+  const pipelineStatuses = statuses.map(s => ({ id: s.id, name: s.name, color: s.color, isClosed: s.isClosed, order: s.order }))
+  const pipelineClients = await prisma.client.findMany({
+    where: { status: { not: 'ARCHIVÉ' } },
+    select: { id: true, name: true, company: true },
+    orderBy: { name: 'asc' },
+  })
+  const nowMonthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+  const monthClosings: any[] = await (async () => {
+    try { return await (prisma as any).closingEvent.findMany({ where: { date: { gte: nowMonthStart } } }) } catch { return [] }
+  })()
+  const closingsThisMonth = {
+    count: monthClosings.length,
+    amount: monthClosings.reduce((s, c) => s + (c.amount ?? 0), 0),
+  }
 
   // ── Répartition CA par produit ──────────────────────────────────────────────
   const dbAny = prisma as any
@@ -227,7 +238,7 @@ export default async function SalesPage() {
       </div>
 
       <AcquisitionTabs
-        pipeline={<><FollowUpStats /><AcquisitionBoard initialLeads={serialized} initialStatuses={serializedStatuses} /></>}
+        pipeline={<><FollowUpStats /><CallPipeline initialLeads={pipelineLeads} statuses={pipelineStatuses} clients={pipelineClients} closingsThisMonth={closingsThisMonth} /></>}
         forecast={<SalesForecast months={forecast.months} suggestions={forecast.suggestions} />}
         finance={<><FinanceOverview /><TreasurySection /></>}
         contracts={contractsSection}

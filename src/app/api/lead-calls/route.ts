@@ -9,6 +9,9 @@ const schema = z.object({
   duration: z.number().int().optional().nullable(),
   showedUp: z.boolean().default(false),
   qualified: z.boolean().default(false),
+  closed: z.boolean().default(false),
+  followUpNeeded: z.boolean().default(false),
+  followUpDone: z.boolean().default(false),
   notes: z.string().optional(),
 })
 

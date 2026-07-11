@@ -782,18 +782,38 @@ model Lead {
 }
 
 model LeadCall {
-  id        String   @id @default(cuid())
-  leadId    String
-  date      DateTime
-  duration  Int?
-  showedUp  Boolean  @default(false)
-  qualified Boolean  @default(false)
-  notes     String?
-  createdAt DateTime @default(now())
+  id             String   @id @default(cuid())
+  leadId         String
+  date           DateTime
+  duration       Int?
+  showedUp       Boolean  @default(false) // le prospect s'est présenté au call
+  qualified      Boolean  @default(false) // prospect qualifié
+  closed         Boolean  @default(false) // le call a débouché sur une signature
+  followUpNeeded Boolean  @default(false) // un follow-up est à faire
+  followUpDone   Boolean  @default(false) // le follow-up a été effectué
+  notes          String?
+  createdAt      DateTime @default(now())
 
   lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
   @@map("lead_calls")
+}
+
+// Closings (signatures) — inclut les nouveaux clients ET les re-closes de
+// clients existants (upsell, nouvel engagement, renouvellement). Alimente les KPIs.
+model ClosingEvent {
+  id          String   @id @default(cuid())
+  leadId      String?
+  clientId    String?
+  clientName  String
+  type        String   @default("NEW") // NEW | UPSELL | RENEWAL
+  missionType String?  // MRR | PONCTUEL
+  amount      Float?   // montant mensuel (MRR) ou total (ponctuel)
+  notes       String?
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@map("closing_events")
 }
 
 // ─── RETAINERS MRR ───────────────────────────────────────────────────────────
