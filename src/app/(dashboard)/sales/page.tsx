@@ -80,6 +80,8 @@ export default async function SalesPage() {
     count: monthClosings.length,
     amount: monthClosings.reduce((s, c) => s + (c.amount ?? 0), 0),
   }
+  const agencySettings = await prisma.agencySetting.findFirst().catch(() => null)
+  const closingScriptUrl = (agencySettings as any)?.closingScriptUrl ?? null
 
   // ── Répartition CA par produit ──────────────────────────────────────────────
   const dbAny = prisma as any
@@ -238,7 +240,7 @@ export default async function SalesPage() {
       </div>
 
       <AcquisitionTabs
-        pipeline={<><FollowUpStats /><CallPipeline initialLeads={pipelineLeads} statuses={pipelineStatuses} clients={pipelineClients} closingsThisMonth={closingsThisMonth} /></>}
+        pipeline={<><FollowUpStats /><CallPipeline initialLeads={pipelineLeads} statuses={pipelineStatuses} clients={pipelineClients} closingsThisMonth={closingsThisMonth} initialScriptUrl={closingScriptUrl} /></>}
         forecast={<SalesForecast months={forecast.months} suggestions={forecast.suggestions} />}
         finance={<><FinanceOverview /><TreasurySection /></>}
         contracts={contractsSection}

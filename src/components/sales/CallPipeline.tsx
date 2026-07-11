@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom'
 import {
   Phone, PhoneCall, Plus, X, Check, Loader2, Trash2, ChevronRight,
   TrendingUp, Target, UserCheck, Award, Sparkles, Clock, RotateCw,
+  FileText, Settings2, ExternalLink,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -86,11 +87,13 @@ export function CallPipeline({
   statuses,
   clients,
   closingsThisMonth,
+  initialScriptUrl,
 }: {
   initialLeads: Lead[]
   statuses: LeadStatus[]
   clients: ClientLite[]
   closingsThisMonth: { count: number; amount: number }
+  initialScriptUrl?: string | null
 }) {
   const router = useRouter()
   const [leads, setLeads] = useState<Lead[]>(initialLeads)
@@ -101,6 +104,30 @@ export function CallPipeline({
   // Modales
   const [showNewLead, setShowNewLead] = useState(false)
   const [showReclose, setShowReclose] = useState(false)
+
+  // Script closing B2B — lien ouvert en 1 clic
+  const [scriptUrl, setScriptUrl] = useState(initialScriptUrl ?? '')
+  const [showScriptConfig, setShowScriptConfig] = useState(false)
+  const [savingScript, setSavingScript] = useState(false)
+
+  const saveScript = async (url: string) => {
+    setSavingScript(true)
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ closingScriptUrl: url.trim() || null }),
+      })
+      if (!res.ok) throw new Error()
+      setScriptUrl(url.trim())
+      setShowScriptConfig(false)
+      toast.success('Script de closing enregistré')
+    } catch { toast.error('Erreur') } finally { setSavingScript(false) }
+  }
+
+  const openScript = () => {
+    if (scriptUrl) window.open(scriptUrl, '_blank', 'noopener')
+    else setShowScriptConfig(true)
+  }
 
   const openLead = leads.find(l => l.id === openLeadId) ?? null
   const sortedStatuses = [...statuses].sort((a, b) => a.order - b.order)
@@ -200,6 +227,23 @@ export function CallPipeline({
           })}
         </div>
         <div className="ml-auto flex gap-2">
+          <div className="flex items-center rounded-lg border border-blue-400/40 overflow-hidden">
+            <button
+              onClick={openScript}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm text-blue-300 font-medium hover:bg-blue-400/10 transition-colors"
+              title={scriptUrl ? 'Ouvrir mon script de closing B2B' : 'Configurer le lien du script'}
+            >
+              <FileText size={14} /> Script B2B
+              {scriptUrl && <ExternalLink size={11} className="opacity-60" />}
+            </button>
+            <button
+              onClick={() => setShowScriptConfig(true)}
+              className="px-2 py-2 text-blue-300/70 hover:text-blue-300 hover:bg-blue-400/10 border-l border-blue-400/30 transition-colors"
+              title="Configurer le lien"
+            >
+              <Settings2 size={13} />
+            </button>
+          </div>
           <button
             onClick={() => setShowReclose(true)}
             className="flex items-center gap-1.5 px-3 py-2 text-sm border border-primary/40 text-primary rounded-lg font-medium hover:bg-primary/10 transition-colors"
@@ -278,6 +322,40 @@ export function CallPipeline({
 
       {showReclose && typeof document !== 'undefined' && createPortal(
         <RecloseModal clients={clients} onClose={() => setShowReclose(false)} onDone={() => router.refresh()} />, document.body)}
+
+      {showScriptConfig && typeof document !== 'undefined' && createPortal(
+        <ScriptConfigModal initial={scriptUrl} saving={savingScript} onSave={saveScript} onClose={() => setShowScriptConfig(false)} />, document.body)}
+    </div>
+  )
+}
+
+// ── Config script closing B2B ─────────────────────────────────────────────────
+function ScriptConfigModal({ initial, saving, onSave, onClose }: { initial: string; saving: boolean; onSave: (u: string) => void; onClose: () => void }) {
+  const [url, setUrl] = useState(initial)
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)' }} onClick={onClose}>
+      <div className="w-full max-w-md bg-nv-dark border border-nv-border rounded-2xl p-5 space-y-3" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-base font-semibold text-white flex items-center gap-2"><FileText size={16} className="text-blue-400" /> Script de closing B2B</h3>
+            <p className="text-xs text-nv-text-muted">Collez le lien (Notion, Google Doc…). Le bouton l&apos;ouvre en un clic avant chaque call.</p>
+          </div>
+          <button onClick={onClose}><X size={16} className="text-nv-text-muted" /></button>
+        </div>
+        <input
+          className="w-full bg-nv-black border border-nv-border rounded-lg px-3 py-2 text-sm text-white placeholder-nv-text-faint focus:outline-none focus:border-primary/60"
+          placeholder="https://notion.so/mon-script-closing"
+          value={url}
+          onChange={e => setUrl(e.target.value)}
+          autoFocus
+        />
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm border border-nv-border text-nv-text-muted rounded-lg">Annuler</button>
+          <button onClick={() => onSave(url)} disabled={saving} className="flex items-center gap-1.5 px-4 py-2 text-sm bg-primary text-nv-black rounded-lg font-medium disabled:opacity-60">
+            {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Enregistrer
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

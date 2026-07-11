@@ -607,6 +607,7 @@ model AgencySetting {
   bankDetails    String?
   youtubeApiKey  String?
   adaSheetUrl    String?  // URL de la Google Sheet réponses ADA (publique)
+  closingScriptUrl String? // lien vers le script de closing B2B (ouvert en 1 clic depuis le pipeline)
   updatedAt      DateTime @updatedAt
 
   @@map("agency_settings")
