@@ -237,7 +237,8 @@ export function InvoicePdfButton({
         const midY = y + ((descLines.length - 1) * 4.2) / 2
         pdf.text(`${line.quantity ?? 1} unité${(line.quantity ?? 1) > 1 ? 's' : ''}`, cols.qty, midY, { align: 'right' })
         pdf.text(eur(line.unitPrice ?? 0), cols.pu, midY, { align: 'right' })
-        pdf.text(`${line.vatRate ?? 20} %`, cols.tva, midY, { align: 'right' })
+        // Facture exonérée → toujours 0 %, quelle que soit la valeur stockée sur la ligne
+        pdf.text(`${vatExempt ? 0 : (line.vatRate ?? 20)} %`, cols.tva, midY, { align: 'right' })
         pdf.text(eur(line.total ?? 0), cols.total, midY, { align: 'right' })
         y += descLines.length * 4.2 + 6
       }
@@ -248,7 +249,7 @@ export function InvoicePdfButton({
         pdf.setFontSize(8)
         pdf.setTextColor(...GREY)
         const exo: string[] = pdf.splitTextToSize(noNbsp(
-          "TVA non applicable - article 259-1 du Code général des impôts (lieu des prestations de services - preneur assujetti établi hors de France, autoliquidation par le preneur).",
+          'Section 259-1 - Export of goods and services',
         ), CW - 4)
         pdf.text(exo, M, y)
         y += exo.length * 3.8 + 3
@@ -262,7 +263,7 @@ export function InvoicePdfButton({
       // ── Totaux (alignés à droite, TTC en gras) ──
       const totals: [string, string, boolean][] = [
         ['Total HT', eur(inv.totalHT ?? 0), false],
-        [vatExempt ? 'TVA non applicable - art. 259-1 du CGI' : 'Montant total de la TVA', eur(inv.totalTVA ?? 0), false],
+        [vatExempt ? 'Section 259-1 - Export of goods and services' : 'Montant total de la TVA', eur(inv.totalTVA ?? 0), false],
         ['Total TTC', eur(inv.totalTTC ?? 0), true],
       ]
       pdf.setFontSize(9)
@@ -279,15 +280,22 @@ export function InvoicePdfButton({
       pdf.setFont('helvetica', 'normal')
       pdf.setFontSize(8)
       pdf.setTextColor(...GREY)
-      const mentions = [
-        'Type de transaction : Services',
-        vatExempt
-          ? 'TVA non applicable - article 259-1 du CGI'
-          : 'Conditions de paiement de la TVA : Sur les encaissements',
-        "Pas d'escompte accordé pour paiement anticipé.",
-        'En cas de retard de paiement, une pénalité de 15 % du montant total de la prestation sera appliquée.',
-        'NV PRODUCTION',
-      ].map(noNbsp)
+      const mentions = (vatExempt
+        ? [
+            'Section 259-1 - Export of goods and services',
+            'Transaction type: Services',
+            "Pas d'escompte accordé pour paiement anticipé.",
+            'En cas de retard de paiement, une pénalité de 15 % du montant total de la prestation sera appliquée.',
+            'NV PRODUCTION',
+          ]
+        : [
+            'Type de transaction : Services',
+            'Conditions de paiement de la TVA : Sur les encaissements',
+            "Pas d'escompte accordé pour paiement anticipé.",
+            'En cas de retard de paiement, une pénalité de 15 % du montant total de la prestation sera appliquée.',
+            'NV PRODUCTION',
+          ]
+      ).map(noNbsp)
       for (const m of mentions) {
         const wrapped: string[] = pdf.splitTextToSize(m, CW)
         pdf.text(wrapped, M, y)

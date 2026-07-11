@@ -73,14 +73,29 @@ export default async function SalesPage() {
     select: { id: true, name: true, company: true },
     orderBy: { name: 'asc' },
   })
-  const nowMonthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
-  const monthClosings: any[] = await (async () => {
-    try { return await (prisma as any).closingEvent.findMany({ where: { date: { gte: nowMonthStart } } }) } catch { return [] }
+  const nowDate = new Date()
+  const nowMonthStart = new Date(nowDate.getFullYear(), nowDate.getMonth(), 1)
+  const sixMonthsStart = new Date(nowDate.getFullYear(), nowDate.getMonth() - 5, 1)
+  const allClosings: any[] = await (async () => {
+    try { return await (prisma as any).closingEvent.findMany({ where: { date: { gte: sixMonthsStart } }, orderBy: { date: 'asc' } }) } catch { return [] }
   })()
+  const monthClosings = allClosings.filter(c => new Date(c.date) >= nowMonthStart)
   const closingsThisMonth = {
     count: monthClosings.length,
     amount: monthClosings.reduce((s, c) => s + (c.amount ?? 0), 0),
   }
+  // Historique 6 mois pour l'infographie
+  const closings6m = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(nowDate.getFullYear(), nowDate.getMonth() - 5 + i, 1)
+    const key = `${d.getFullYear()}-${d.getMonth()}`
+    const inMonth = allClosings.filter(c => { const cd = new Date(c.date); return cd.getFullYear() === d.getFullYear() && cd.getMonth() === d.getMonth() })
+    return {
+      year: d.getFullYear(), month: d.getMonth(),
+      count: inMonth.length,
+      amount: inMonth.reduce((s, c) => s + (c.amount ?? 0), 0),
+      isCurrent: i === 5,
+    }
+  })
   const agencySettings = await prisma.agencySetting.findFirst().catch(() => null)
   const closingScriptUrl = (agencySettings as any)?.closingScriptUrl ?? null
 
@@ -258,7 +273,7 @@ export default async function SalesPage() {
       </div>
 
       <AcquisitionTabs
-        pipeline={<><FollowUpStats /><CallPipeline initialLeads={pipelineLeads} statuses={pipelineStatuses} clients={pipelineClients} closingsThisMonth={closingsThisMonth} initialScriptUrl={closingScriptUrl} /></>}
+        pipeline={<><FollowUpStats /><CallPipeline initialLeads={pipelineLeads} statuses={pipelineStatuses} clients={pipelineClients} closingsThisMonth={closingsThisMonth} closings6m={closings6m} initialScriptUrl={closingScriptUrl} /></>}
         forecast={<SalesForecast months={forecast.months} suggestions={forecast.suggestions} />}
         finance={<><FinanceOverview /><TreasurySection /></>}
         contracts={contractsSection}

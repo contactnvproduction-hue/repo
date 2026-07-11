@@ -7,8 +7,10 @@ import { Badge } from '@/components/ui/badge'
 import {
   TrendingUp, Users, FolderKanban, Receipt, Clock,
   AlertTriangle, CheckCircle2, ArrowRight, Bell, Crosshair, PhoneCall, UserCheck, RepeatIcon, Briefcase, Calendar,
-  AlertCircle, Phone, Zap,
+  AlertCircle, Phone, Zap, Award,
 } from 'lucide-react'
+
+const MONTHS_FR = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc']
 import Link from 'next/link'
 import { DashboardCharts } from '@/components/dashboard/DashboardCharts'
 import { LeadFollowUpModal } from '@/components/dashboard/LeadFollowUpModal'
@@ -28,7 +30,7 @@ async function getDashboardData(userId: string) {
     caMonth, caLastMonth, caYear, activeClients, activeProjects, pendingInvoices,
     urgentTasks, recentProjects, overdueInvoices, prospectsToRelance, monthlyPayments,
     leadCalls, leadsFollowUp, allRetainers, upcomingCeoMeetings, todayCheckin,
-    upcomingBilans, allClientInvoices,
+    upcomingBilans, allClientInvoices, recentClosings,
   ] = await Promise.all([
     prisma.payment.aggregate({ where: { date: { gte: startOfMonth }, confirmed: true }, _sum: { amount: true } }),
     prisma.payment.aggregate({ where: { date: { gte: lastMonthStart, lte: lastMonthEnd }, confirmed: true }, _sum: { amount: true } }),
@@ -95,6 +97,13 @@ async function getDashboardData(userId: string) {
       orderBy: { createdAt: 'desc' },
       select: { id: true, clientId: true, status: true, totalTTC: true },
     }),
+    // Closings des 6 derniers mois (KPI mois par mois)
+    (async () => {
+      try {
+        const start = new Date(now.getFullYear(), now.getMonth() - 5, 1)
+        return await (prisma as any).closingEvent.findMany({ where: { date: { gte: start } }, select: { date: true, amount: true, type: true } })
+      } catch { return [] }
+    })(),
   ])
 
   const caMonthVal = caMonth._sum.amount || 0
@@ -148,6 +157,13 @@ async function getDashboardData(userId: string) {
       id: c.id, name: c.name, company: c.company,
       lastFollowUpAt: c.lastFollowUpAt ? new Date(c.lastFollowUpAt).toISOString() : null,
     })),
+    closingsByMonth: Array.from({ length: 6 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1)
+      const inMonth = (recentClosings as any[]).filter((c: any) => {
+        const cd = new Date(c.date); return cd.getFullYear() === d.getFullYear() && cd.getMonth() === d.getMonth()
+      })
+      return { month: d.getMonth(), count: inMonth.length, amount: inMonth.reduce((s: number, c: any) => s + (c.amount ?? 0), 0), isCurrent: i === 5 }
+    }),
   }
 }
 
@@ -362,6 +378,35 @@ export default async function DashboardPage() {
 
       {/* ── MRR à facturer ── */}
       <MrrSection retainers={data.activeRetainers} />
+
+      {/* ── Closings mois par mois ── */}
+      {data.closingsByMonth.some(m => m.count > 0) && (
+        <div className="rounded-2xl border border-nv-border bg-nv-card p-4">
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm font-semibold text-white flex items-center gap-2"><Award size={15} className="text-primary" /> Closings — 6 derniers mois</p>
+            <Link href="/sales" className="text-xs text-nv-text-muted hover:text-white transition-colors flex items-center gap-1">Pipeline <ArrowRight size={11} /></Link>
+          </div>
+          {(() => {
+            const maxCount = Math.max(1, ...data.closingsByMonth.map(m => m.count))
+            return (
+              <div className="flex items-end justify-between gap-3 h-32">
+                {data.closingsByMonth.map((m, i) => (
+                  <div key={i} className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end">
+                    <span className="text-sm font-bold text-white tabular-nums">{m.count > 0 ? m.count : ''}</span>
+                    {m.amount > 0 && <span className="text-[9px] text-nv-text-faint tabular-nums">{formatCurrency(m.amount)}</span>}
+                    <div className="w-full rounded-t-lg transition-all" style={{
+                      height: `${(m.count / maxCount) * 100}%`,
+                      minHeight: m.count > 0 ? '8px' : '2px',
+                      backgroundColor: m.isCurrent ? '#e8b84b' : 'rgba(232,184,75,0.35)',
+                    }} />
+                    <span className={`text-[11px] ${m.isCurrent ? 'text-primary font-semibold' : 'text-nv-text-faint'}`}>{MONTHS_FR[m.month]}</span>
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
+        </div>
+      )}
 
       {/* ── Bilans & Réunions ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -41,6 +41,13 @@ type ClientLite = { id: string; name: string; company: string | null }
 
 const eur = (n: number) => `${Math.round(n).toLocaleString('fr-FR')} €`
 const frDate = (d: string) => new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })
+// ISO → valeur d'un input datetime-local (heure locale, sans secondes)
+const toLocalInput = (iso: string) => {
+  const d = new Date(iso)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+}
+const MONTHS_FR = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc']
 
 // ── Checkbox call ─────────────────────────────────────────────────────────────
 function CallCheck({
@@ -82,17 +89,21 @@ function Kpi({ icon: Icon, label, value, sub, accent }: { icon: any; label: stri
   )
 }
 
+type MonthClosing = { year: number; month: number; count: number; amount: number; isCurrent: boolean }
+
 export function CallPipeline({
   initialLeads,
   statuses,
   clients,
   closingsThisMonth,
+  closings6m = [],
   initialScriptUrl,
 }: {
   initialLeads: Lead[]
   statuses: LeadStatus[]
   clients: ClientLite[]
   closingsThisMonth: { count: number; amount: number }
+  closings6m?: MonthClosing[]
   initialScriptUrl?: string | null
 }) {
   const router = useRouter()
@@ -201,6 +212,36 @@ export function CallPipeline({
         <Kpi icon={Target} label="Closing" value={`${kpis.closingRate}%`} sub={`${kpis.closedCalls} closés`} accent="#10b981" />
         <Kpi icon={Award} label="Closés ce mois" value={String(closingsThisMonth.count)} sub={closingsThisMonth.amount > 0 ? eur(closingsThisMonth.amount) : '—'} accent="#f59e0b" />
       </div>
+
+      {/* Infographie closings mois par mois */}
+      {closings6m.length > 0 && (
+        <div className="bg-nv-card border border-nv-border rounded-2xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-white flex items-center gap-2"><Award size={15} className="text-primary" /> Closings — 6 derniers mois</h3>
+            <span className="text-xs text-nv-text-muted tabular-nums">
+              {closings6m.reduce((s, m) => s + m.count, 0)} closings · {eur(closings6m.reduce((s, m) => s + m.amount, 0))}
+            </span>
+          </div>
+          {(() => {
+            const maxCount = Math.max(1, ...closings6m.map(m => m.count))
+            return (
+              <div className="flex items-end justify-between gap-2 h-28">
+                {closings6m.map((m, i) => (
+                  <div key={i} className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end">
+                    <span className="text-[11px] font-bold text-white tabular-nums">{m.count > 0 ? m.count : ''}</span>
+                    <div className="w-full rounded-t-md transition-all" style={{
+                      height: `${(m.count / maxCount) * 100}%`,
+                      minHeight: m.count > 0 ? '6px' : '2px',
+                      backgroundColor: m.isCurrent ? '#e8b84b' : 'rgba(232,184,75,0.35)',
+                    }} />
+                    <span className={`text-[10px] ${m.isCurrent ? 'text-primary font-semibold' : 'text-nv-text-faint'}`}>{MONTHS_FR[m.month]}</span>
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
+        </div>
+      )}
 
       {/* Barre d'actions */}
       <div className="flex items-center gap-2 flex-wrap">
@@ -455,14 +496,19 @@ function LeadDetail({
               {lead.calls.map((c, i) => (
                 <div key={c.id} className="bg-nv-card border border-nv-border rounded-xl p-3">
                   <div className="flex items-center justify-between mb-2.5">
-                    <div className="flex items-center gap-2">
-                      <span className="w-6 h-6 rounded-lg bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">#{lead.calls.length - i}</span>
-                      <span className="text-xs font-medium text-white flex items-center gap-1.5">
-                        <Clock size={11} className="text-nv-text-faint" />
-                        {new Date(c.date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                      </span>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="w-6 h-6 rounded-lg bg-primary/10 text-primary text-xs font-bold flex items-center justify-center shrink-0">#{lead.calls.length - i}</span>
+                      <label className="flex items-center gap-1.5 text-xs text-nv-text-muted cursor-pointer" title="Modifier la date du call">
+                        <Clock size={11} className="text-nv-text-faint shrink-0" />
+                        <input
+                          type="datetime-local"
+                          value={toLocalInput(c.date)}
+                          onChange={e => e.target.value && onPatchCall(c.id, { date: new Date(e.target.value).toISOString() })}
+                          className="bg-transparent text-white text-xs border border-transparent hover:border-nv-border focus:border-primary/50 rounded px-1 py-0.5 focus:outline-none [color-scheme:dark]"
+                        />
+                      </label>
                     </div>
-                    <button onClick={() => onDeleteCall(c.id)} className="p-1 text-nv-text-faint hover:text-red-400 transition-colors"><Trash2 size={13} /></button>
+                    <button onClick={() => onDeleteCall(c.id)} className="p-1 text-nv-text-faint hover:text-red-400 transition-colors shrink-0"><Trash2 size={13} /></button>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     <CallCheck label="Présent" checked={c.showedUp} color="#3b82f6" onToggle={() => onPatchCall(c.id, { showedUp: !c.showedUp })} />
