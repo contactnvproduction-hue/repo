@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Target, TrendingUp, FileSignature, PieChart, BarChart3 } from 'lucide-react'
+import { Target, TrendingUp, FileSignature, PieChart, BarChart3, Clapperboard } from 'lucide-react'
 
 // Onglets de l'espace Sales — chaque section est rendue côté serveur
 // et passée en prop, seule la navigation est côté client.
@@ -11,17 +11,20 @@ export function AcquisitionTabs({
   finance,
   contracts,
   products,
+  content,
 }: {
   pipeline: React.ReactNode
   forecast: React.ReactNode
   finance?: React.ReactNode
   contracts: React.ReactNode
   products: React.ReactNode
+  content?: React.ReactNode
 }) {
-  const [tab, setTab] = useState<'pipeline' | 'forecast' | 'finance' | 'contracts' | 'products'>('pipeline')
+  const [tab, setTab] = useState<'pipeline' | 'forecast' | 'finance' | 'contracts' | 'products' | 'content'>('pipeline')
 
   const tabs = [
     { id: 'pipeline', label: 'Pipeline', icon: Target },
+    { id: 'content', label: 'Contenu', icon: Clapperboard },
     { id: 'forecast', label: 'Prévisionnel', icon: TrendingUp },
     { id: 'finance', label: 'Finance', icon: BarChart3 },
     { id: 'contracts', label: 'Contrats', icon: FileSignature },
@@ -49,6 +52,7 @@ export function AcquisitionTabs({
       </div>
 
       <div className={tab === 'pipeline' ? '' : 'hidden'}>{pipeline}</div>
+      <div className={tab === 'content' ? '' : 'hidden'}>{content}</div>
       <div className={tab === 'forecast' ? '' : 'hidden'}>{forecast}</div>
       <div className={tab === 'finance' ? '' : 'hidden'}>{finance}</div>
       <div className={tab === 'contracts' ? '' : 'hidden'}>{contracts}</div>

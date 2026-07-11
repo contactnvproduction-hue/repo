@@ -848,6 +848,49 @@ model ClientFollowUp {
   @@map("client_follow_ups")
 }
 
+// ─── CONTENU ORGANIQUE (tracking multi-comptes) ──────────────────────────────
+
+// Un canal = un compte (personne + plateforme). Ex: Noah/Instagram, Maël/YouTube, NV/YouTube
+model ContentChannel {
+  id           String   @id @default(cuid())
+  owner        String   // libellé libre : "Noah", "Maël", "New Vision"
+  platform     String   // INSTAGRAM | YOUTUBE | TIKTOK
+  handle       String?
+  url          String
+  followers    Int?
+  lastSyncedAt DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  pieces ContentPiece[]
+
+  @@map("content_channels")
+}
+
+// Une publication (reel, short, long, post) avec ses stats
+model ContentPiece {
+  id             String   @id @default(cuid())
+  channelId      String
+  channel        ContentChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  externalId     String?  // id YouTube/plateforme (dédup)
+  title          String
+  url            String?
+  thumbnail      String?
+  format         String   @default("AUTRE") // SHORT | LONG | REEL | POST | AUTRE
+  publishedAt    DateTime
+  views          Int      @default(0)
+  likes          Int      @default(0)
+  comments       Int      @default(0)
+  shares         Int      @default(0)
+  engagementRate Float    @default(0) // (likes+comments+shares)/views * 100
+  manual         Boolean  @default(false)
+  updatedAt      DateTime @updatedAt
+  createdAt      DateTime @default(now())
+
+  @@unique([channelId, externalId])
+  @@map("content_pieces")
+}
+
 // ─── CHARGES CLIENTS ─────────────────────────────────────────────────────────
 
 model ClientCharge {

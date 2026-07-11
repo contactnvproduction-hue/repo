@@ -2,6 +2,7 @@ import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { Target, FileSignature, ExternalLink, CheckCircle2, Clock } from 'lucide-react'
 import { CallPipeline } from '@/components/sales/CallPipeline'
+import { ContentTracker } from '@/components/sales/ContentTracker'
 import { RevenueByProduct } from '@/components/acquisition/RevenueByProduct'
 import { AcquisitionTabs } from '@/components/acquisition/AcquisitionTabs'
 import { SalesForecast } from '@/components/sales/SalesForecast'
@@ -82,6 +83,23 @@ export default async function SalesPage() {
   }
   const agencySettings = await prisma.agencySetting.findFirst().catch(() => null)
   const closingScriptUrl = (agencySettings as any)?.closingScriptUrl ?? null
+
+  // Contenu organique — canaux + pièces des 12 derniers mois
+  const contentSince = new Date(new Date().getFullYear() - 1, 0, 1)
+  const [contentChannels, contentPieces] = await Promise.all([
+    (async () => { try { return await (prisma as any).contentChannel.findMany({ include: { _count: { select: { pieces: true } } }, orderBy: [{ owner: 'asc' }, { platform: 'asc' }] }) } catch { return [] } })(),
+    (async () => { try { return await (prisma as any).contentPiece.findMany({ where: { publishedAt: { gte: contentSince } }, include: { channel: { select: { owner: true, platform: true, handle: true } } }, orderBy: { publishedAt: 'desc' } }) } catch { return [] } })(),
+  ])
+  const contentChannelsSer = contentChannels.map((c: any) => ({
+    id: c.id, owner: c.owner, platform: c.platform, handle: c.handle, url: c.url,
+    followers: c.followers, lastSyncedAt: c.lastSyncedAt?.toISOString() ?? null, _count: c._count,
+  }))
+  const contentPiecesSer = contentPieces.map((p: any) => ({
+    id: p.id, channelId: p.channelId, title: p.title, url: p.url, thumbnail: p.thumbnail,
+    format: p.format, publishedAt: p.publishedAt.toISOString(),
+    views: p.views, likes: p.likes, comments: p.comments, shares: p.shares,
+    engagementRate: p.engagementRate, manual: p.manual, channel: p.channel,
+  }))
 
   // ── Répartition CA par produit ──────────────────────────────────────────────
   const dbAny = prisma as any
@@ -245,6 +263,7 @@ export default async function SalesPage() {
         finance={<><FinanceOverview /><TreasurySection /></>}
         contracts={contractsSection}
         products={<RevenueByProduct productStats={productStats} topClients={topClients} />}
+        content={<ContentTracker initialChannels={contentChannelsSer} initialPieces={contentPiecesSer} />}
       />
     </div>
   )
