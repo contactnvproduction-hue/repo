@@ -18,6 +18,9 @@ const updateClientSchema = z.object({
   relanceDate: z.string().optional().nullable(),
   followUpEnabled: z.boolean().optional(),
   adaNotes: z.record(z.string(), z.unknown()).optional().nullable(),
+  mensualise: z.boolean().optional(),
+  mensualiteAmount: z.number().optional().nullable(),
+  vatExempt: z.boolean().optional(), // client étranger — exonération TVA art. 259-1 CGI
 })
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -84,6 +87,34 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       }),
     },
   })
+
+  // Toggle exonération TVA (art. 259-1 CGI) → recalcule les factures non payées :
+  // le montant dû (TTC) reste identique, seule la ventilation HT/TVA change
+  if (result.data.vatExempt !== undefined) {
+    const exempt = result.data.vatExempt
+    const openInvoices = await prisma.invoice.findMany({
+      where: { clientId: id, status: { in: ['EN_ATTENTE', 'EN_RETARD'] } },
+      include: { lines: true },
+    })
+    for (const inv of openInvoices) {
+      const totalTTC = inv.totalTTC
+      const totalHT = exempt ? totalTTC : Math.round((totalTTC / 1.2) * 100) / 100
+      await prisma.invoice.update({
+        where: { id: inv.id },
+        data: { totalHT, totalTVA: totalTTC - totalHT },
+      })
+      for (const line of inv.lines) {
+        const lineTotal = exempt ? line.total * (line.vatRate === 0 ? 1 : 1.2) : line.total / (line.vatRate === 0 ? 1.2 : 1)
+        // Simplification robuste : une seule ligne = ventilation directe depuis la facture
+        await prisma.invoiceLine.update({
+          where: { id: line.id },
+          data: inv.lines.length === 1
+            ? { vatRate: exempt ? 0 : 20, unitPrice: totalHT / (line.quantity || 1), total: totalHT }
+            : { vatRate: exempt ? 0 : 20, total: Math.round(lineTotal * 100) / 100 },
+        })
+      }
+    }
+  }
 
   return NextResponse.json(client)
 }

@@ -12,7 +12,7 @@ export async function ensureRetainerInvoices(db: any): Promise<number> {
     const currentIdx = monthIndex(now)
 
     const retainers = await db.clientRetainer.findMany({
-      include: { client: { select: { id: true, name: true } } },
+      include: { client: { select: { id: true, name: true, vatExempt: true } } },
     })
 
     // Retainers encore actifs (au moins un mois restant à partir du mois courant)
@@ -59,7 +59,10 @@ export async function ensureRetainerInvoices(db: any): Promise<number> {
 
         const dueDate = new Date(Math.floor(mIdx / 12), mIdx % 12, startDay)
         const totalTTC = r.monthlyAmount
-        const totalHT = Math.round((totalTTC / 1.2) * 100) / 100
+        // Client étranger : exonération de TVA (art. 259-1 CGI) → HT = TTC
+        const vatExempt = r.client?.vatExempt === true
+        const totalHT = vatExempt ? totalTTC : Math.round((totalTTC / 1.2) * 100) / 100
+        const vatRate = vatExempt ? 0 : 20
         const monthNum = mIdx - startIdx + 1
 
         try {
@@ -80,7 +83,7 @@ export async function ensureRetainerInvoices(db: any): Promise<number> {
                   description: r.description || 'Prestation mensuelle',
                   quantity: 1,
                   unitPrice: totalHT,
-                  vatRate: 20,
+                  vatRate,
                   total: totalHT,
                   order: 0,
                 }],

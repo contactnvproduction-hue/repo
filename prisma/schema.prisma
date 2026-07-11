@@ -99,6 +99,7 @@ model Client {
   mensualise          Boolean    @default(false) // paiements mensuels prévus SANS engagement (prévisionnel roulant)
   mensualiteAmount    Float?     // montant mensuel prévu quand mensualise = true
   lastFollowUpAt      DateTime?  // dernière relance confirmée — le prompt « Client relancé ? » revient tous les 3 jours
+  vatExempt           Boolean    @default(false) // client étranger : exonération de TVA (art. 259-1 du CGI, autoliquidation)
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 

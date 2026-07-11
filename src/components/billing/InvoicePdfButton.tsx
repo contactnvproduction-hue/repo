@@ -239,9 +239,11 @@ export function InvoicePdfButton({
       y += 8
 
       // ── Totaux (alignés à droite, TTC en gras) ──
+      // Client étranger / facture sans TVA → exonération art. 259-1 CGI
+      const vatExempt = inv.client?.vatExempt === true || (inv.totalTVA ?? 0) === 0
       const totals: [string, string, boolean][] = [
         ['Total HT', eur(inv.totalHT ?? 0), false],
-        ['Montant total de la TVA', eur(inv.totalTVA ?? 0), false],
+        [vatExempt ? 'TVA (exonérée — art. 259-1 CGI)' : 'Montant total de la TVA', eur(inv.totalTVA ?? 0), false],
         ['Total TTC', eur(inv.totalTTC ?? 0), true],
       ]
       pdf.setFontSize(9)
@@ -260,7 +262,9 @@ export function InvoicePdfButton({
       pdf.setTextColor(...GREY)
       const mentions = [
         'Type de transaction : Services',
-        'Conditions de paiement de la TVA : Sur les encaissements',
+        vatExempt
+          ? "Exonération de TVA en application de l'article 259-1 du CGI — TVA due par le preneur (autoliquidation)."
+          : 'Conditions de paiement de la TVA : Sur les encaissements',
         "Pas d'escompte accordé pour paiement anticipé.",
         "En cas de non-paiement à la date d'échéance, des pénalités calculées à trois fois le taux d'intérêt légal seront appliquées.",
         'Tout retard de paiement entraînera une indemnité forfaitaire pour frais de recouvrement de 40€.',

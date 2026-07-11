@@ -19,6 +19,7 @@ interface Props {
   initialRetainers: Retainer[]
   initialMensualise?: boolean
   initialMensualiteAmount?: number | null
+  initialVatExempt?: boolean
 }
 
 function getEndDate(startDate: string, durationMonths: number): Date {
@@ -34,7 +35,7 @@ function isActive(r: Retainer): boolean {
   return now >= start && now < end
 }
 
-export function ClientRetainerManager({ clientId, initialRetainers, initialMensualise = false, initialMensualiteAmount = null }: Props) {
+export function ClientRetainerManager({ clientId, initialRetainers, initialMensualise = false, initialMensualiteAmount = null, initialVatExempt = false }: Props) {
   const [retainers, setRetainers] = useState<Retainer[]>(initialRetainers)
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -44,6 +45,30 @@ export function ClientRetainerManager({ clientId, initialRetainers, initialMensu
     startDate: new Date().toISOString().split('T')[0],
     durationMonths: '12',
   })
+
+  // Exonération TVA client étranger (art. 259-1 CGI)
+  const [vatExempt, setVatExempt] = useState(initialVatExempt)
+  const [savingVat, setSavingVat] = useState(false)
+
+  const saveVatExempt = async (next: boolean) => {
+    setSavingVat(true)
+    try {
+      const res = await fetch(`/api/clients/${clientId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vatExempt: next }),
+      })
+      if (!res.ok) throw new Error()
+      toast.success(next
+        ? 'Exonération TVA activée (art. 259-1 CGI) — factures en attente recalculées'
+        : 'Exonération TVA désactivée — TVA 20% réappliquée sur les factures en attente')
+    } catch {
+      toast.error('Erreur de sauvegarde')
+      setVatExempt(!next)
+    } finally {
+      setSavingVat(false)
+    }
+  }
 
   // Mensualisation sans engagement : prévoit les paiements dans le prévisionnel Sales
   const [mensualise, setMensualise] = useState(initialMensualise)
@@ -150,6 +175,29 @@ export function ClientRetainerManager({ clientId, initialRetainers, initialMensu
         </div>
         <p className="text-[11px] text-nv-text-faint mt-1.5">
           Sans engagement : prévoit les prochains paiements du client dans le prévisionnel Sales, tous les mois, tant que la case est cochée. Les retainers signés (engagement + durée) priment sur les mois qu&apos;ils couvrent.
+        </p>
+      </div>
+
+      {/* Exonération TVA — client étranger (art. 259-1 CGI) */}
+      <div className={`rounded-xl border p-3 transition-colors ${vatExempt ? 'border-blue-400/30 bg-blue-400/5' : 'border-nv-border bg-nv-bg'}`}>
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={vatExempt}
+            disabled={savingVat}
+            onChange={e => {
+              setVatExempt(e.target.checked)
+              saveVatExempt(e.target.checked)
+            }}
+            className="w-4 h-4 accent-[#60a5fa]"
+          />
+          <span className="text-sm font-medium text-white">Client étranger — exonération de TVA</span>
+          {vatExempt && (
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-400/15 border border-blue-400/30 text-blue-300">art. 259-1 CGI</span>
+          )}
+        </label>
+        <p className="text-[11px] text-nv-text-faint mt-1.5">
+          Factures émises sans TVA (autoliquidation par le preneur, article 259-1 du CGI). Les factures en attente sont recalculées immédiatement (montant dû inchangé), les futures mensualités sortent exonérées, et la mention légale figure sur le PDF.
         </p>
       </div>
 
