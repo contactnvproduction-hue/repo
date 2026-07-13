@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { Target, FileSignature, ExternalLink, CheckCircle2, Clock } from 'lucide-react'
 import { CallPipeline } from '@/components/sales/CallPipeline'
 import { ContentTracker } from '@/components/sales/ContentTracker'
+import { AverageTicket } from '@/components/sales/AverageTicket'
 import { RevenueByProduct } from '@/components/acquisition/RevenueByProduct'
 import { AcquisitionTabs } from '@/components/acquisition/AcquisitionTabs'
 import { SalesForecast } from '@/components/sales/SalesForecast'
@@ -274,7 +275,7 @@ export default async function SalesPage() {
 
       <AcquisitionTabs
         pipeline={<><FollowUpStats /><CallPipeline initialLeads={pipelineLeads} statuses={pipelineStatuses} clients={pipelineClients} closingsThisMonth={closingsThisMonth} closings6m={closings6m} initialScriptUrl={closingScriptUrl} /></>}
-        forecast={<SalesForecast months={forecast.months} suggestions={forecast.suggestions} />}
+        forecast={<div className="space-y-5"><AverageTicket /><SalesForecast months={forecast.months} suggestions={forecast.suggestions} /></div>}
         finance={<><FinanceOverview /><TreasurySection /></>}
         contracts={contractsSection}
         products={<RevenueByProduct productStats={productStats} topClients={topClients} />}
