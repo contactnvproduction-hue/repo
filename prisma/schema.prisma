@@ -510,17 +510,33 @@ enum ExpenseCategory {
 }
 
 model Expense {
-  id          String          @id @default(cuid())
-  category    ExpenseCategory @default(AUTRE)
-  amount      Float
-  date        DateTime        @default(now())
-  description String
-  receipt     String?
-  isRecurring Boolean         @default(false)
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  id            String          @id @default(cuid())
+  category      ExpenseCategory @default(AUTRE)
+  categoryLabel String?         // pôle personnalisé (customisable dans les paramètres)
+  amount        Float
+  date          DateTime        @default(now())
+  description   String
+  receipt       String?
+  isRecurring   Boolean         @default(false)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
 
   @@map("expenses")
+}
+
+// Investissements planifiés mois par mois (pilotage croissance)
+model InvestmentPlan {
+  id        String   @id @default(cuid())
+  month     String   // "YYYY-MM"
+  label     String
+  pole      String?  // pôle / catégorie
+  amount    Float
+  done      Boolean  @default(false) // investissement réalisé
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("investment_plans")
 }
 
 // ─── DOCUMENTS ────────────────────────────────────────────────────────────────
@@ -608,6 +624,8 @@ model AgencySetting {
   youtubeApiKey  String?
   adaSheetUrl    String?  // URL de la Google Sheet réponses ADA (publique)
   closingScriptUrl String? // lien vers le script de closing B2B (ouvert en 1 clic depuis le pipeline)
+  expensePoles   Json?    // pôles de charges personnalisés [{ name, color }]
+  corporateTaxRate Float  @default(25) // taux d'IS (%) pour l'estimation du résultat net
   updatedAt      DateTime @updatedAt
 
   @@map("agency_settings")

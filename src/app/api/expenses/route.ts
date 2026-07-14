@@ -5,6 +5,7 @@ import { z } from 'zod'
 
 const createExpenseSchema = z.object({
   category: z.enum(['LOYER', 'LOGICIELS', 'MATÉRIEL', 'SALAIRES', 'FREELANCES', 'DÉPLACEMENTS', 'MARKETING', 'FORMATION', 'ASSURANCE', 'AUTRE']).default('AUTRE'),
+  categoryLabel: z.string().optional(),
   amount: z.number().positive(),
   date: z.string(),
   description: z.string().min(1),
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest) {
   if (!result.success) return NextResponse.json({ error: result.error.flatten() }, { status: 400 })
 
   const expense = await prisma.expense.create({
-    data: { ...result.data, date: new Date(result.data.date) },
+    data: { ...result.data, date: new Date(result.data.date) } as any,
   })
   return NextResponse.json(expense, { status: 201 })
 }

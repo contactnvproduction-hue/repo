@@ -9,7 +9,7 @@ import { AcquisitionTabs } from '@/components/acquisition/AcquisitionTabs'
 import { SalesForecast } from '@/components/sales/SalesForecast'
 import { computeSalesForecast } from '@/lib/mrr-forecast'
 import { ensureRetainerInvoices } from '@/lib/retainer-invoices'
-import { FinanceOverview } from '@/components/finance/FinanceOverview'
+import { FinanceSection } from '@/components/finance/FinanceSection'
 import { TreasurySection } from '@/components/finance/TreasurySection'
 import { FollowUpStats } from '@/components/sales/FollowUpStats'
 import Link from 'next/link'
@@ -275,8 +275,15 @@ export default async function SalesPage() {
 
       <AcquisitionTabs
         pipeline={<><FollowUpStats /><CallPipeline initialLeads={pipelineLeads} statuses={pipelineStatuses} clients={pipelineClients} closingsThisMonth={closingsThisMonth} closings6m={closings6m} initialScriptUrl={closingScriptUrl} /></>}
-        forecast={<div className="space-y-5"><AverageTicket /><SalesForecast months={forecast.months} suggestions={forecast.suggestions} /></div>}
-        finance={<><FinanceOverview /><TreasurySection /></>}
+        finance={
+          <FinanceSection previsionnel={
+            <div className="space-y-5">
+              <AverageTicket />
+              <SalesForecast months={forecast.months} suggestions={forecast.suggestions} />
+              <TreasurySection />
+            </div>
+          } />
+        }
         contracts={contractsSection}
         products={<RevenueByProduct productStats={productStats} topClients={topClients} />}
         content={<ContentTracker initialChannels={contentChannelsSer} initialPieces={contentPiecesSer} />}
