@@ -625,7 +625,8 @@ model AgencySetting {
   adaSheetUrl    String?  // URL de la Google Sheet réponses ADA (publique)
   closingScriptUrl String? // lien vers le script de closing B2B (ouvert en 1 clic depuis le pipeline)
   expensePoles   Json?    // pôles de charges personnalisés [{ name, color }]
-  corporateTaxRate Float  @default(25) // taux d'IS (%) pour l'estimation du résultat net
+  corporateTaxRate Float  @default(25) // legacy — remplacé par le barème progressif auto
+  isReducedRate  Boolean  @default(true) // éligible au taux réduit d'IS (15% jusqu'à 42 500 €)
   updatedAt      DateTime @updatedAt
 
   @@map("agency_settings")

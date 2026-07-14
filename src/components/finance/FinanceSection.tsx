@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db'
 import { resolvePoles } from '@/lib/expense-poles'
+import { computeIS } from '@/lib/tax'
 import { FinanceHub } from './FinanceHub'
 
 // Calcule toutes les données finance de la SAS et alimente le hub à sous-onglets.
@@ -34,18 +35,20 @@ export async function FinanceSection({ previsionnel }: { previsionnel: React.Rea
   const caLastYear = lastYearAgg._sum.amount || 0
   const topClients = Object.entries(caByClient).map(([id, v]) => ({ id, ...v })).sort((a, b) => b.total - a.total).slice(0, 8)
 
-  // Charges agence mensuelles + par pôle (mois en cours)
+  // Charges agence mensuelles + par pôle (mois en cours ET année)
   const monthlyExpenses = Array(12).fill(0)
   const currentMonthKey = `${year}-${String(now.getMonth() + 1).padStart(2, '0')}`
-  const poleTotals: Record<string, number> = {}
+  const poleTotals: Record<string, number> = {}      // mois en cours
+  const poleTotalsYear: Record<string, number> = {}  // année (pour le compte de résultat)
   const currentMonthExpenses: any[] = []
   for (const e of expenses) {
     const d = new Date(e.date)
     monthlyExpenses[d.getMonth()] += e.amount
+    const pole = (e as any).categoryLabel || 'Non catégorisé'
+    poleTotalsYear[pole] = (poleTotalsYear[pole] ?? 0) + e.amount
     const eKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
     if (eKey === currentMonthKey) {
       currentMonthExpenses.push({ id: e.id, amount: e.amount, description: e.description, date: e.date.toISOString(), pole: (e as any).categoryLabel || null, category: e.category, isRecurring: e.isRecurring })
-      const pole = (e as any).categoryLabel || 'Non catégorisé'
       poleTotals[pole] = (poleTotals[pole] ?? 0) + e.amount
     }
   }
@@ -61,11 +64,12 @@ export async function FinanceSection({ previsionnel }: { previsionnel: React.Rea
   }
   const salariesYear = monthlySalaries.reduce((s, v) => s + v, 0)
 
-  // Résultat + IS
-  const taxRate = (settings as any)?.corporateTaxRate ?? 25
+  // Résultat + IS (barème progressif 15% / 25% calculé automatiquement)
+  const eligibleReduced = (settings as any)?.isReducedRate !== false // éligible taux réduit par défaut
   const chargesTotalYear = expensesYear + salariesYear
   const resultBeforeTax = caYear - chargesTotalYear
-  const taxAmount = Math.max(0, resultBeforeTax) * (taxRate / 100)
+  const is = computeIS(resultBeforeTax, eligibleReduced)
+  const taxAmount = is.total
   const resultNet = resultBeforeTax - taxAmount
   const margin = caYear > 0 ? Math.round((resultNet / caYear) * 100) : 0
 
@@ -83,7 +87,10 @@ export async function FinanceSection({ previsionnel }: { previsionnel: React.Rea
       previsionnel={previsionnel}
       synthese={{
         year, caYear, caLastYear, expensesYear, salariesYear, chargesTotalYear,
-        resultBeforeTax, taxRate, taxAmount, resultNet, margin, monthly,
+        resultBeforeTax, taxAmount, resultNet, margin, monthly,
+        is: { reducedBase: is.reducedBase, reducedTax: is.reducedTax, normalBase: is.normalBase, normalTax: is.normalTax, effectiveRate: is.effectiveRate },
+        eligibleReduced,
+        poleTotalsYear,
       }}
       ca={{ year, caYear, caLastYear, monthlyCa: monthlyCa.map(Math.round), topClients }}
       charges={{

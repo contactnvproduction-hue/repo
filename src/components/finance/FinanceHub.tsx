@@ -19,8 +19,11 @@ const MONTHS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep
 
 type Synthese = {
   year: number; caYear: number; caLastYear: number; expensesYear: number; salariesYear: number
-  chargesTotalYear: number; resultBeforeTax: number; taxRate: number; taxAmount: number
+  chargesTotalYear: number; resultBeforeTax: number; taxAmount: number
   resultNet: number; margin: number; monthly: { month: number; ca: number; charges: number; profit: number }[]
+  is: { reducedBase: number; reducedTax: number; normalBase: number; normalTax: number; effectiveRate: number }
+  eligibleReduced: boolean
+  poleTotalsYear: Record<string, number>
 }
 type CaData = { year: number; caYear: number; caLastYear: number; monthlyCa: number[]; topClients: { id: string; name: string; total: number }[] }
 type ChargesData = { poles: ExpensePole[]; currentMonthKey: string; currentMonthExpenses: any[]; poleTotals: Record<string, number>; salariesCurrentMonth: number; salariesYear: number; expensesYear: number }
@@ -64,13 +67,12 @@ export function FinanceHub({
 // ── Synthèse ──
 function Synthese({ data }: { data: Synthese }) {
   const router = useRouter()
-  const [rate, setRate] = useState(String(data.taxRate))
   const [saving, setSaving] = useState(false)
-  const saveRate = async () => {
+  const toggleReduced = async (val: boolean) => {
     setSaving(true)
     try {
-      const res = await fetch('/api/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ corporateTaxRate: parseFloat(rate) || 0 }) })
-      if (!res.ok) throw new Error(); toast.success('Taux d\'IS mis à jour'); router.refresh()
+      const res = await fetch('/api/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ isReducedRate: val }) })
+      if (!res.ok) throw new Error(); toast.success('Recalcul de l\'IS'); router.refresh()
     } catch { toast.error('Erreur') } finally { setSaving(false) }
   }
   const chart = data.monthly.map(m => ({ name: MONTHS[m.month], CA: m.ca, Charges: m.charges, Profit: m.profit }))
@@ -80,9 +82,23 @@ function Synthese({ data }: { data: Synthese }) {
     { label: 'CA encaissé', value: eur(data.caYear), sub: trend !== null ? `${trend >= 0 ? '▲' : '▼'} ${Math.abs(trend)}% vs N-1` : `année ${data.year}`, color: '#e8b84b' },
     { label: 'Charges totales', value: eur(data.chargesTotalYear), sub: `${eur(data.expensesYear)} + ${eur(data.salariesYear)} salaires`, color: '#ef4444' },
     { label: 'Résultat avant IS', value: eur(data.resultBeforeTax), sub: 'CA − charges − salaires', color: data.resultBeforeTax >= 0 ? '#3b82f6' : '#ef4444' },
-    { label: `IS estimé (${data.taxRate}%)`, value: eur(data.taxAmount), sub: 'impôt sur les sociétés', color: '#f59e0b' },
+    { label: `IS (${data.is.effectiveRate}% eff.)`, value: eur(data.taxAmount), sub: 'barème progressif auto', color: '#f59e0b' },
     { label: 'Résultat net', value: eur(data.resultNet), sub: `marge ${data.margin}%`, color: data.resultNet >= 0 ? '#10b981' : '#ef4444' },
   ]
+
+  // Charges par pôle (année) triées pour le compte de résultat
+  const polesYear = Object.entries(data.poleTotalsYear).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1])
+
+  // Ligne du compte de résultat
+  const Line2 = ({ label, value, bold, indent, positive, muted, border }: { label: string; value: number; bold?: boolean; indent?: boolean; positive?: boolean; muted?: boolean; border?: boolean }) => (
+    <div className={`flex items-center justify-between py-2 ${border ? 'border-t border-nv-border mt-1 pt-2.5' : 'border-b border-nv-border/40'} ${indent ? 'pl-4' : ''}`}>
+      <span className={`${bold ? 'text-sm font-bold text-white' : muted ? 'text-xs text-nv-text-muted' : 'text-sm text-nv-text'}`}>{label}</span>
+      <span className={`tabular-nums ${bold ? 'text-sm font-bold' : 'text-sm'} ${positive === true ? 'text-emerald-400' : positive === false ? 'text-red-400' : bold ? 'text-white' : 'text-nv-text-muted'}`}>
+        {value < 0 ? '−' : ''}{eur(Math.abs(value))}
+      </span>
+    </div>
+  )
+
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
@@ -95,34 +111,49 @@ function Synthese({ data }: { data: Synthese }) {
         ))}
       </div>
 
-      {/* IS editable + rappel du calcul */}
-      <div className="bg-nv-card border border-nv-border rounded-2xl p-4 flex items-center gap-3 flex-wrap">
-        <Landmark size={16} className="text-primary shrink-0" />
-        <span className="text-sm text-nv-text-muted">Taux d&apos;imposition (IS) appliqué au résultat :</span>
-        <div className="flex items-center gap-1.5">
-          <input value={rate} onChange={e => setRate(e.target.value)} type="number" className="w-20 bg-nv-black border border-nv-border rounded-lg px-2 py-1.5 text-sm text-white text-right focus:outline-none focus:border-primary/60" />
-          <span className="text-sm text-nv-text-muted">%</span>
-          <button onClick={saveRate} disabled={saving || rate === String(data.taxRate)} className="ml-1 flex items-center gap-1 px-3 py-1.5 text-xs bg-primary text-nv-black rounded-lg font-medium disabled:opacity-40">
-            {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Enregistrer
-          </button>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* Compte de résultat (bilan) */}
+        <div className="bg-nv-card border border-nv-border rounded-2xl p-5">
+          <h3 className="text-sm font-semibold text-white flex items-center gap-2 mb-3"><Landmark size={15} className="text-primary" /> Compte de résultat — {data.year}</h3>
+          <div>
+            <Line2 label="Chiffre d'affaires encaissé" value={data.caYear} bold positive />
+            <p className="text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold mt-3 mb-1">Charges</p>
+            {polesYear.map(([pole, amount]) => <Line2 key={pole} label={pole} value={-amount} indent />)}
+            {data.salariesYear > 0 && <Line2 label="Masse salariale (équipe)" value={-data.salariesYear} indent />}
+            <Line2 label="Total charges" value={-data.chargesTotalYear} bold border />
+            <Line2 label="Résultat avant impôt" value={data.resultBeforeTax} bold positive={data.resultBeforeTax >= 0} border />
+            {/* Détail IS progressif */}
+            {data.taxAmount > 0 && (
+              <>
+                <p className="text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold mt-3 mb-1">Impôt sur les sociétés</p>
+                {data.is.reducedTax > 0 && <Line2 label={`15% jusqu'à 42 500 € (sur ${eur(data.is.reducedBase)})`} value={-data.is.reducedTax} indent muted />}
+                {data.is.normalTax > 0 && <Line2 label={`25% au-delà (sur ${eur(data.is.normalBase)})`} value={-data.is.normalTax} indent muted />}
+                <Line2 label={`IS total (${data.is.effectiveRate}% effectif)`} value={-data.taxAmount} border />
+              </>
+            )}
+            <Line2 label="Résultat net" value={data.resultNet} bold positive={data.resultNet >= 0} border />
+          </div>
+          <label className="flex items-center gap-2 mt-4 pt-3 border-t border-nv-border cursor-pointer text-xs text-nv-text-muted">
+            <input type="checkbox" checked={data.eligibleReduced} disabled={saving} onChange={e => toggleReduced(e.target.checked)} className="w-4 h-4 accent-[#e8b84b]" />
+            Éligible au taux réduit d&apos;IS à 15% (CA &lt; 10 M€, capital libéré, détenu ≥ 75% par des personnes physiques)
+          </label>
         </div>
-        <span className="text-[11px] text-nv-text-faint ml-auto">IS France 2024 : 15% jusqu&apos;à 42 500 € de bénéfice puis 25%. Ajustez selon votre situation.</span>
-      </div>
 
-      {/* Graphique CA / charges / profit */}
-      <div className="bg-nv-card border border-nv-border rounded-2xl p-5">
-        <h3 className="text-sm font-semibold text-white flex items-center gap-2 mb-4"><BarChart3 size={15} className="text-primary" /> CA · Charges · Profit — {data.year}</h3>
-        <div className="h-64">
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={chart} margin={{ top: 4, right: 8, left: 8, bottom: 0 }}>
-              <XAxis dataKey="name" tick={{ fill: '#a0a0a0', fontSize: 11 }} axisLine={{ stroke: '#2a2a2a' }} tickLine={false} />
-              <YAxis tick={{ fill: '#a0a0a0', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v: number) => `${Math.round(v / 1000)}k`} />
-              <Tooltip formatter={(v: any, n: any) => [eur(Number(v)), n]} contentStyle={{ background: '#161616', border: '1px solid #2a2a2a', borderRadius: 8, color: '#f0ece6', fontSize: 12 }} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
-              <Bar dataKey="CA" fill="#e8b84b" radius={[4, 4, 0, 0]} maxBarSize={22} />
-              <Bar dataKey="Charges" fill="#3f3f46" radius={[4, 4, 0, 0]} maxBarSize={22} />
-              <Line dataKey="Profit" stroke="#10b981" strokeWidth={2} dot={{ r: 2, fill: '#10b981' }} />
-            </ComposedChart>
-          </ResponsiveContainer>
+        {/* Graphique CA / charges / profit */}
+        <div className="bg-nv-card border border-nv-border rounded-2xl p-5">
+          <h3 className="text-sm font-semibold text-white flex items-center gap-2 mb-4"><BarChart3 size={15} className="text-primary" /> CA · Charges · Profit — {data.year}</h3>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={chart} margin={{ top: 4, right: 8, left: 8, bottom: 0 }}>
+                <XAxis dataKey="name" tick={{ fill: '#a0a0a0', fontSize: 11 }} axisLine={{ stroke: '#2a2a2a' }} tickLine={false} />
+                <YAxis tick={{ fill: '#a0a0a0', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v: number) => `${Math.round(v / 1000)}k`} />
+                <Tooltip formatter={(v: any, n: any) => [eur(Number(v)), n]} contentStyle={{ background: '#161616', border: '1px solid #2a2a2a', borderRadius: 8, color: '#f0ece6', fontSize: 12 }} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
+                <Bar dataKey="CA" fill="#e8b84b" radius={[4, 4, 0, 0]} maxBarSize={22} />
+                <Bar dataKey="Charges" fill="#3f3f46" radius={[4, 4, 0, 0]} maxBarSize={22} />
+                <Line dataKey="Profit" stroke="#10b981" strokeWidth={2} dot={{ r: 2, fill: '#10b981' }} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       </div>
     </div>
