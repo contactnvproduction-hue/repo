@@ -12,14 +12,14 @@ export async function FinanceSection({ previsionnel }: { previsionnel: React.Rea
   const endLastYear = new Date(year - 1, 11, 31, 23, 59, 59)
   const db = prisma as any
 
-  const [payments, lastYearAgg, expenses, salaries, settings, investments, contractedRetainers] = await Promise.all([
+  const [payments, lastYearAgg, expenses, salaries, settings, investments, recurringExpenses] = await Promise.all([
     prisma.payment.findMany({ where: { confirmed: true, date: { gte: startOfYear } }, select: { amount: true, date: true, invoice: { select: { clientId: true, client: { select: { name: true } } } } } }),
     prisma.payment.aggregate({ where: { confirmed: true, date: { gte: startLastYear, lte: endLastYear } }, _sum: { amount: true } }),
     prisma.expense.findMany({ where: { date: { gte: startOfYear } }, orderBy: { date: 'desc' } }),
     (async () => { try { return await db.memberPayment.findMany() } catch { return [] } })(),
     prisma.agencySetting.findFirst(),
     (async () => { try { return await db.investmentPlan.findMany({ orderBy: [{ month: 'asc' }, { createdAt: 'asc' }] }) } catch { return [] } })(),
-    prisma.clientRetainer.findMany({ select: { monthlyAmount: true, startDate: true, durationMonths: true } }),
+    prisma.expense.findMany({ where: { isRecurring: true }, orderBy: { amount: 'desc' } }),
   ])
 
   // CA mensuel encaissé
@@ -99,6 +99,7 @@ export async function FinanceSection({ previsionnel }: { previsionnel: React.Rea
         poleTotals,
         salariesCurrentMonth,
         salariesYear, expensesYear,
+        recurring: (recurringExpenses as any[]).map(e => ({ id: e.id, amount: e.amount, description: e.description, pole: e.categoryLabel || null })),
       }}
       investments={(investments as any[]).map(i => ({ id: i.id, month: i.month, label: i.label, pole: i.pole, amount: i.amount, done: i.done, notes: i.notes }))}
       resultNetYear={resultNet}

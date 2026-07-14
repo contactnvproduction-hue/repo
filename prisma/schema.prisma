@@ -524,6 +524,17 @@ model Expense {
   @@map("expenses")
 }
 
+// Snapshot de trésorerie : solde de trésorerie renseigné à une date donnée
+model TreasurySnapshot {
+  id        String   @id @default(cuid())
+  date      DateTime @default(now())
+  balance   Float    // solde de trésorerie constaté
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@map("treasury_snapshots")
+}
+
 // Investissements planifiés mois par mois (pilotage croissance)
 model InvestmentPlan {
   id        String   @id @default(cuid())

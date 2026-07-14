@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  Plus, X, Check, Loader2, Trash2, Layers, Users2, Settings2, RefreshCw,
+  Plus, X, Check, Loader2, Trash2, Layers, Users2, Settings2, RefreshCw, Repeat, Pencil,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import type { ExpensePole } from '@/lib/expense-poles'
@@ -11,9 +11,11 @@ import type { ExpensePole } from '@/lib/expense-poles'
 const eur = (n: number) => `${Math.round(n).toLocaleString('fr-FR')} €`
 
 type Expense = { id: string; amount: number; description: string; date: string; pole: string | null; category: string; isRecurring: boolean }
+type Recurring = { id: string; amount: number; description: string; pole: string | null }
 type Data = {
   poles: ExpensePole[]; currentMonthKey: string; currentMonthExpenses: Expense[]
   poleTotals: Record<string, number>; salariesCurrentMonth: number; salariesYear: number; expensesYear: number
+  recurring: Recurring[]
 }
 
 export function ChargesManager({ data }: { data: Data }) {
@@ -90,6 +92,9 @@ export function ChargesManager({ data }: { data: Data }) {
         )}
       </div>
 
+      {/* Abonnements & dépenses récurrentes — annualisés */}
+      <RecurringSection recurring={data.recurring} poles={poles} />
+
       {/* Liste des charges du mois */}
       <div className="bg-nv-card border border-nv-border rounded-2xl p-4">
         <h3 className="text-sm font-semibold text-white mb-3">Détail des charges — {monthLabel} ({data.currentMonthExpenses.length})</h3>
@@ -113,6 +118,87 @@ export function ChargesManager({ data }: { data: Data }) {
 
       {showAdd && <AddChargeModal poles={poles} onClose={() => setShowAdd(false)} onDone={() => router.refresh()} />}
       {showPoles && <PolesModal poles={poles} onClose={() => setShowPoles(false)} onSaved={(p) => { setPoles(p); router.refresh() }} />}
+    </div>
+  )
+}
+
+// ── Abonnements & récurrents (annualisés, éditables) ──
+function RecurringSection({ recurring, poles }: { recurring: Recurring[]; poles: ExpensePole[] }) {
+  const router = useRouter()
+  const [items, setItems] = useState<Recurring[]>(recurring)
+  const [editing, setEditing] = useState<string | null>(null)
+  const [draft, setDraft] = useState<{ description: string; amount: string; pole: string }>({ description: '', amount: '', pole: '' })
+
+  const monthlyTotal = items.reduce((s, r) => s + r.amount, 0)
+  const annualTotal = monthlyTotal * 12
+
+  const startEdit = (r: Recurring) => { setEditing(r.id); setDraft({ description: r.description, amount: String(r.amount), pole: r.pole ?? poles[0]?.name ?? '' }) }
+  const saveEdit = async (id: string) => {
+    const patch = { id, description: draft.description.trim(), amount: parseFloat(draft.amount) || 0, categoryLabel: draft.pole }
+    setItems(list => list.map(r => r.id === id ? { ...r, description: patch.description, amount: patch.amount, pole: draft.pole } : r))
+    setEditing(null)
+    const res = await fetch('/api/expenses', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) })
+    if (res.ok) { toast.success('Abonnement mis à jour'); router.refresh() } else toast.error('Erreur')
+  }
+  const stopRecurring = async (r: Recurring) => {
+    setItems(list => list.filter(x => x.id !== r.id))
+    await fetch('/api/expenses', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: r.id, isRecurring: false }) })
+    toast.success('Retiré des récurrents'); router.refresh()
+  }
+  const remove = async (r: Recurring) => {
+    if (!confirm('Supprimer définitivement cette dépense ?')) return
+    setItems(list => list.filter(x => x.id !== r.id))
+    await fetch('/api/expenses', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: r.id }) })
+    router.refresh()
+  }
+  const inp = 'bg-nv-black border border-nv-border rounded-lg px-2 py-1 text-sm text-white focus:outline-none focus:border-primary/60'
+
+  return (
+    <div className="bg-nv-card border border-nv-border rounded-2xl p-5">
+      <div className="flex items-center justify-between mb-1">
+        <h3 className="text-sm font-semibold text-white flex items-center gap-2"><Repeat size={15} className="text-primary" /> Abonnements & dépenses récurrentes</h3>
+        <div className="text-right">
+          <p className="text-sm font-bold text-white tabular-nums">{eur(annualTotal)}<span className="text-xs text-nv-text-muted font-normal">/an</span></p>
+          <p className="text-[10px] text-nv-text-faint">{eur(monthlyTotal)}/mois</p>
+        </div>
+      </div>
+      <p className="text-[11px] text-nv-text-faint mb-3">Chaque montant est mensuel — l&apos;annuel = mensuel × 12. Cliquez pour modifier.</p>
+      {items.length === 0 ? (
+        <p className="text-xs text-nv-text-faint text-center py-4">Aucun abonnement récurrent. Cochez « récurrent » en ajoutant une charge (SaaS, loyer…).</p>
+      ) : (
+        <div className="divide-y divide-nv-border/50">
+          {items.map(r => (
+            <div key={r.id} className="py-2.5">
+              {editing === r.id ? (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <input className={`${inp} flex-1 min-w-[140px]`} value={draft.description} onChange={e => setDraft({ ...draft, description: e.target.value })} />
+                  <select className={inp} value={draft.pole} onChange={e => setDraft({ ...draft, pole: e.target.value })}>
+                    {poles.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
+                  </select>
+                  <input className={`${inp} w-24 text-right`} type="number" value={draft.amount} onChange={e => setDraft({ ...draft, amount: e.target.value })} />
+                  <span className="text-xs text-nv-text-muted">€/mois</span>
+                  <button onClick={() => saveEdit(r.id)} className="p-1.5 rounded-lg bg-primary text-nv-black"><Check size={13} /></button>
+                  <button onClick={() => setEditing(null)} className="p-1.5 rounded-lg border border-nv-border text-nv-text-muted"><X size={13} /></button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-white truncate">{r.description}</p>
+                    <p className="text-[11px] text-nv-text-faint">{r.pole || 'Non catégorisé'}</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-sm font-semibold text-white tabular-nums">{eur(r.amount * 12)}<span className="text-[10px] text-nv-text-muted font-normal">/an</span></p>
+                    <p className="text-[10px] text-nv-text-faint tabular-nums">{eur(r.amount)}/mois</p>
+                  </div>
+                  <button onClick={() => startEdit(r)} title="Modifier" className="p-1 text-nv-text-faint hover:text-primary transition-colors shrink-0"><Pencil size={13} /></button>
+                  <button onClick={() => stopRecurring(r)} title="Arrêter l'abonnement" className="p-1 text-nv-text-faint hover:text-amber-400 transition-colors shrink-0"><Repeat size={13} /></button>
+                  <button onClick={() => remove(r)} title="Supprimer" className="p-1 text-nv-text-faint hover:text-red-400 transition-colors shrink-0"><Trash2 size={13} /></button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

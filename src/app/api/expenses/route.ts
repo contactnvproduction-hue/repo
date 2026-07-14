@@ -41,6 +41,21 @@ export async function POST(req: NextRequest) {
   return NextResponse.json(expense, { status: 201 })
 }
 
+export async function PATCH(req: NextRequest) {
+  const session = await auth()
+  if (!session?.user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+
+  const { id, ...b } = await req.json()
+  if (!id) return NextResponse.json({ error: 'id requis' }, { status: 400 })
+  const data: Record<string, unknown> = {}
+  if (b.amount != null) data.amount = Number(b.amount)
+  if (typeof b.description === 'string') data.description = b.description
+  if (typeof b.categoryLabel === 'string') data.categoryLabel = b.categoryLabel
+  if (typeof b.isRecurring === 'boolean') data.isRecurring = b.isRecurring
+  const expense = await prisma.expense.update({ where: { id }, data: data as any })
+  return NextResponse.json(expense)
+}
+
 export async function DELETE(req: NextRequest) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
