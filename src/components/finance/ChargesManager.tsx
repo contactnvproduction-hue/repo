@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Plus, X, Check, Loader2, Trash2, Layers, Users2, Settings2, RefreshCw, Repeat, Pencil,
@@ -9,12 +9,15 @@ import toast from 'react-hot-toast'
 import type { ExpensePole } from '@/lib/expense-poles'
 
 const eur = (n: number) => `${Math.round(n).toLocaleString('fr-FR')} €`
+const MONTHS_SHORT = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc']
+const monthLabelOf = (key: string) => { const [y, m] = key.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }) }
+const keyOf = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 
 type Expense = { id: string; amount: number; description: string; date: string; pole: string | null; category: string; isRecurring: boolean }
 type Recurring = { id: string; amount: number; description: string; pole: string | null }
 type Data = {
-  poles: ExpensePole[]; currentMonthKey: string; currentMonthExpenses: Expense[]
-  poleTotals: Record<string, number>; salariesCurrentMonth: number; salariesYear: number; expensesYear: number
+  poles: ExpensePole[]; currentMonthKey: string; allExpenses: Expense[]
+  salariesByMonth: Record<string, number>; salariesYear: number; expensesYear: number
   recurring: Recurring[]
 }
 
@@ -23,37 +26,54 @@ export function ChargesManager({ data }: { data: Data }) {
   const [poles, setPoles] = useState<ExpensePole[]>(data.poles)
   const [showAdd, setShowAdd] = useState(false)
   const [showPoles, setShowPoles] = useState(false)
+  const [selMonth, setSelMonth] = useState(data.currentMonthKey)
 
-  const monthLabel = (() => {
-    const [y, m] = data.currentMonthKey.split('-').map(Number)
-    return new Date(y, m - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
-  })()
+  // Mois à afficher : les 6 derniers (mois courant inclus), même vides
+  const monthKeys = useMemo(() => {
+    const now = new Date()
+    return Array.from({ length: 6 }, (_, i) => keyOf(new Date(now.getFullYear(), now.getMonth() - 5 + i, 1)))
+  }, [])
 
-  const chargesTotal = data.currentMonthExpenses.reduce((s, e) => s + e.amount, 0)
-  const totalWithSalaries = chargesTotal + data.salariesCurrentMonth
+  // Charges par mois
+  const byMonth = useMemo(() => {
+    const map: Record<string, Expense[]> = {}
+    for (const e of data.allExpenses) { const k = keyOf(new Date(e.date)); (map[k] ??= []).push(e) }
+    return map
+  }, [data.allExpenses])
 
-  // Répartition par pôle (mois en cours) + salaires
-  const breakdown = [
-    ...Object.entries(data.poleTotals).map(([pole, amount]) => ({
-      pole, amount, color: poles.find(p => p.name === pole)?.color ?? '#94a3b8',
-    })),
-    ...(data.salariesCurrentMonth > 0 ? [{ pole: 'Salaires équipe', amount: data.salariesCurrentMonth, color: '#22d3ee' }] : []),
-  ].sort((a, b) => b.amount - a.amount)
+  const monthData = monthKeys.map(k => {
+    const exp = byMonth[k] ?? []
+    const expTotal = exp.reduce((s, e) => s + e.amount, 0)
+    const sal = data.salariesByMonth[k] ?? 0
+    return { key: k, month: Number(k.split('-')[1]) - 1, expenses: exp, expTotal, salaries: sal, total: expTotal + sal, isCurrent: k === data.currentMonthKey }
+  })
+  const selected = monthData.find(m => m.key === selMonth) ?? monthData[monthData.length - 1]
+  const maxTotal = Math.max(1, ...monthData.map(m => m.total))
+
+  // Répartition par pôle du mois sélectionné
+  const breakdown = useMemo(() => {
+    const t: Record<string, number> = {}
+    for (const e of selected.expenses) { const p = e.pole || 'Non catégorisé'; t[p] = (t[p] ?? 0) + e.amount }
+    const arr = Object.entries(t).map(([pole, amount]) => ({ pole, amount, color: poles.find(p => p.name === pole)?.color ?? '#94a3b8' }))
+    if (selected.salaries > 0) arr.push({ pole: 'Salaires équipe', amount: selected.salaries, color: '#22d3ee' })
+    return arr.sort((a, b) => b.amount - a.amount)
+  }, [selected, poles])
   const maxPole = Math.max(1, ...breakdown.map(b => b.amount))
 
   const deleteExpense = async (id: string) => {
+    if (!confirm('Supprimer cette charge ?')) return
     await fetch('/api/expenses', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
     toast.success('Charge supprimée'); router.refresh()
   }
 
   return (
     <div className="space-y-5">
-      {/* Header + totaux */}
+      {/* Totaux année */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="bg-nv-card border border-nv-border rounded-2xl p-4">
-          <p className="text-[11px] uppercase tracking-wider text-nv-text-faint font-semibold">Charges {monthLabel}</p>
-          <p className="text-2xl font-bold text-white tabular-nums">{eur(totalWithSalaries)}</p>
-          <p className="text-[11px] text-nv-text-muted mt-0.5">{eur(chargesTotal)} + {eur(data.salariesCurrentMonth)} salaires</p>
+          <p className="text-[11px] uppercase tracking-wider text-nv-text-faint font-semibold">Charges {monthLabelOf(selected.key)}</p>
+          <p className="text-2xl font-bold text-white tabular-nums">{eur(selected.total)}</p>
+          <p className="text-[11px] text-nv-text-muted mt-0.5">{eur(selected.expTotal)} + {eur(selected.salaries)} salaires</p>
         </div>
         <div className="bg-nv-card border border-nv-border rounded-2xl p-4">
           <p className="text-[11px] uppercase tracking-wider text-nv-text-faint font-semibold">Charges année (hors salaires)</p>
@@ -66,24 +86,41 @@ export function ChargesManager({ data }: { data: Data }) {
         </div>
       </div>
 
-      {/* Répartition par pôle */}
-      <div className="bg-nv-card border border-nv-border rounded-2xl p-5">
+      {/* Frise mensuelle : total par mois, cliquable */}
+      <div className="bg-nv-card border border-nv-border rounded-2xl p-4">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-white flex items-center gap-2"><Layers size={15} className="text-primary" /> Charges par pôle — {monthLabel}</h3>
+          <h3 className="text-sm font-semibold text-white">Historique des charges — total par mois</h3>
           <div className="flex gap-2">
             <button onClick={() => setShowPoles(true)} className="text-xs px-3 py-1.5 rounded-lg border border-nv-border text-nv-text-muted hover:text-nv-text transition-colors flex items-center gap-1"><Settings2 size={12} /> Pôles</button>
             <button onClick={() => setShowAdd(true)} className="text-xs px-3 py-1.5 rounded-lg bg-primary text-nv-black font-medium flex items-center gap-1"><Plus size={12} /> Ajouter une charge</button>
           </div>
         </div>
+        <div className="grid grid-cols-6 gap-2">
+          {monthData.map(m => (
+            <button key={m.key} onClick={() => setSelMonth(m.key)}
+              className={`rounded-xl p-2.5 border text-left transition-all ${m.key === selMonth ? 'border-primary bg-primary/10' : 'border-nv-border bg-nv-dark hover:border-nv-border-light'}`}>
+              <p className={`text-[11px] font-semibold ${m.key === selMonth ? 'text-primary' : 'text-nv-text-muted'}`}>{MONTHS_SHORT[m.month]}{m.isCurrent ? ' •' : ''}</p>
+              <div className="h-10 flex items-end mt-1.5">
+                <div className="w-full rounded-t bg-red-400/50" style={{ height: `${Math.max(4, (m.total / maxTotal) * 100)}%` }} />
+              </div>
+              <p className="text-xs font-bold text-white tabular-nums mt-1">{m.total > 0 ? eur(m.total) : '—'}</p>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Répartition par pôle du mois sélectionné */}
+      <div className="bg-nv-card border border-nv-border rounded-2xl p-5">
+        <h3 className="text-sm font-semibold text-white flex items-center gap-2 mb-3"><Layers size={15} className="text-primary" /> Charges par pôle — {monthLabelOf(selected.key)}</h3>
         {breakdown.length === 0 ? (
-          <p className="text-xs text-nv-text-faint text-center py-6">Aucune charge ce mois-ci. Ajoutez vos dépenses par pôle.</p>
+          <p className="text-xs text-nv-text-faint text-center py-6">Aucune charge ce mois-ci.</p>
         ) : (
           <div className="space-y-2.5">
             {breakdown.map(b => (
               <div key={b.pole}>
                 <div className="flex justify-between text-sm mb-1">
                   <span className="text-nv-text flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: b.color }} />{b.pole}</span>
-                  <span className="text-nv-text-muted tabular-nums">{eur(b.amount)} · {Math.round((b.amount / totalWithSalaries) * 100)}%</span>
+                  <span className="text-nv-text-muted tabular-nums">{eur(b.amount)} · {Math.round((b.amount / selected.total) * 100)}%</span>
                 </div>
                 <div className="h-2 rounded-full bg-nv-dark overflow-hidden"><div className="h-full rounded-full" style={{ width: `${Math.max(3, (b.amount / maxPole) * 100)}%`, backgroundColor: b.color }} /></div>
               </div>
@@ -95,14 +132,14 @@ export function ChargesManager({ data }: { data: Data }) {
       {/* Abonnements & dépenses récurrentes — annualisés */}
       <RecurringSection recurring={data.recurring} poles={poles} />
 
-      {/* Liste des charges du mois */}
+      {/* Détail des charges du mois sélectionné (suppression possible) */}
       <div className="bg-nv-card border border-nv-border rounded-2xl p-4">
-        <h3 className="text-sm font-semibold text-white mb-3">Détail des charges — {monthLabel} ({data.currentMonthExpenses.length})</h3>
-        {data.currentMonthExpenses.length === 0 ? (
+        <h3 className="text-sm font-semibold text-white mb-3">Détail — {monthLabelOf(selected.key)} ({selected.expenses.length})</h3>
+        {selected.expenses.length === 0 ? (
           <p className="text-xs text-nv-text-faint text-center py-4">Aucune charge enregistrée ce mois-ci.</p>
         ) : (
           <div className="divide-y divide-nv-border/50">
-            {data.currentMonthExpenses.map(e => (
+            {selected.expenses.map(e => (
               <div key={e.id} className="flex items-center gap-3 py-2.5">
                 <div className="min-w-0 flex-1">
                   <p className="text-sm text-white truncate">{e.description}</p>

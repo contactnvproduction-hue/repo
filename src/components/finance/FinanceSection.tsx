@@ -64,6 +64,14 @@ export async function FinanceSection({ previsionnel }: { previsionnel: React.Rea
   }
   const salariesYear = monthlySalaries.reduce((s, v) => s + v, 0)
 
+  // Toutes les charges de l'année + salaires par mois (historique navigable)
+  const allExpenses = expenses.map(e => ({
+    id: e.id, amount: e.amount, description: e.description, date: e.date.toISOString(),
+    pole: (e as any).categoryLabel || null, category: e.category, isRecurring: e.isRecurring,
+  }))
+  const salariesByMonth: Record<string, number> = {}
+  for (const s of salaries as any[]) salariesByMonth[s.month] = (salariesByMonth[s.month] ?? 0) + s.amount
+
   // Résultat + IS (barème progressif 15% / 25% calculé automatiquement)
   const eligibleReduced = (settings as any)?.isReducedRate !== false // éligible taux réduit par défaut
   const chargesTotalYear = expensesYear + salariesYear
@@ -95,9 +103,8 @@ export async function FinanceSection({ previsionnel }: { previsionnel: React.Rea
       ca={{ year, caYear, caLastYear, monthlyCa: monthlyCa.map(Math.round), topClients }}
       charges={{
         poles, currentMonthKey,
-        currentMonthExpenses,
-        poleTotals,
-        salariesCurrentMonth,
+        allExpenses,
+        salariesByMonth,
         salariesYear, expensesYear,
         recurring: (recurringExpenses as any[]).map(e => ({ id: e.id, amount: e.amount, description: e.description, pole: e.categoryLabel || null })),
       }}

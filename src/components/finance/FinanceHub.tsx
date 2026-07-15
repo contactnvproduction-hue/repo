@@ -26,7 +26,7 @@ type Synthese = {
   poleTotalsYear: Record<string, number>
 }
 type CaData = { year: number; caYear: number; caLastYear: number; monthlyCa: number[]; topClients: { id: string; name: string; total: number }[] }
-type ChargesData = { poles: ExpensePole[]; currentMonthKey: string; currentMonthExpenses: any[]; poleTotals: Record<string, number>; salariesCurrentMonth: number; salariesYear: number; expensesYear: number; recurring: { id: string; amount: number; description: string; pole: string | null }[] }
+type ChargesData = { poles: ExpensePole[]; currentMonthKey: string; allExpenses: any[]; salariesByMonth: Record<string, number>; salariesYear: number; expensesYear: number; recurring: { id: string; amount: number; description: string; pole: string | null }[] }
 type Investment = { id: string; month: string; label: string; pole: string | null; amount: number; done: boolean; notes: string | null }
 
 const TABS = [
