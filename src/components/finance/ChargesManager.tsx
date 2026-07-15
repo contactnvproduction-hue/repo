@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  Plus, X, Check, Loader2, Trash2, Layers, Users2, Settings2, RefreshCw, Repeat, Pencil,
+  Plus, X, Check, Loader2, Trash2, Layers, Users2, Settings2, RefreshCw, Pencil,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import type { ExpensePole } from '@/lib/expense-poles'
@@ -64,6 +64,10 @@ export function ChargesManager({ data }: { data: Data }) {
     if (!confirm('Supprimer cette charge ?')) return
     await fetch('/api/expenses', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
     toast.success('Charge supprimée'); router.refresh()
+  }
+  const saveExpense = async (id: string, patch: { description: string; amount: string; categoryLabel: string; date: string }) => {
+    const res = await fetch('/api/expenses', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, ...patch }) })
+    if (res.ok) { toast.success('Charge modifiée'); router.refresh() } else toast.error('Erreur')
   }
 
   return (
@@ -129,10 +133,7 @@ export function ChargesManager({ data }: { data: Data }) {
         )}
       </div>
 
-      {/* Abonnements & dépenses récurrentes — annualisés */}
-      <RecurringSection recurring={data.recurring} poles={poles} />
-
-      {/* Détail des charges du mois sélectionné (suppression possible) */}
+      {/* Détail des charges du mois sélectionné (édition + suppression) */}
       <div className="bg-nv-card border border-nv-border rounded-2xl p-4">
         <h3 className="text-sm font-semibold text-white mb-3">Détail — {monthLabelOf(selected.key)} ({selected.expenses.length})</h3>
         {selected.expenses.length === 0 ? (
@@ -140,14 +141,7 @@ export function ChargesManager({ data }: { data: Data }) {
         ) : (
           <div className="divide-y divide-nv-border/50">
             {selected.expenses.map(e => (
-              <div key={e.id} className="flex items-center gap-3 py-2.5">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm text-white truncate">{e.description}</p>
-                  <p className="text-[11px] text-nv-text-faint">{e.pole || 'Non catégorisé'}{e.isRecurring ? ' · récurrent' : ''} · {new Date(e.date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}</p>
-                </div>
-                <span className="text-sm font-semibold text-white tabular-nums shrink-0">{eur(e.amount)}</span>
-                <button onClick={() => deleteExpense(e.id)} className="p-1 text-nv-text-faint hover:text-red-400 transition-colors shrink-0"><Trash2 size={13} /></button>
-              </div>
+              <ExpenseRow key={e.id} e={e} poles={poles} onSave={saveExpense} onDelete={deleteExpense} />
             ))}
           </div>
         )}
@@ -159,83 +153,40 @@ export function ChargesManager({ data }: { data: Data }) {
   )
 }
 
-// ── Abonnements & récurrents (annualisés, éditables) ──
-function RecurringSection({ recurring, poles }: { recurring: Recurring[]; poles: ExpensePole[] }) {
-  const router = useRouter()
-  const [items, setItems] = useState<Recurring[]>(recurring)
-  const [editing, setEditing] = useState<string | null>(null)
-  const [draft, setDraft] = useState<{ description: string; amount: string; pole: string }>({ description: '', amount: '', pole: '' })
-
-  const monthlyTotal = items.reduce((s, r) => s + r.amount, 0)
-  const annualTotal = monthlyTotal * 12
-
-  const startEdit = (r: Recurring) => { setEditing(r.id); setDraft({ description: r.description, amount: String(r.amount), pole: r.pole ?? poles[0]?.name ?? '' }) }
-  const saveEdit = async (id: string) => {
-    const patch = { id, description: draft.description.trim(), amount: parseFloat(draft.amount) || 0, categoryLabel: draft.pole }
-    setItems(list => list.map(r => r.id === id ? { ...r, description: patch.description, amount: patch.amount, pole: draft.pole } : r))
-    setEditing(null)
-    const res = await fetch('/api/expenses', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) })
-    if (res.ok) { toast.success('Abonnement mis à jour'); router.refresh() } else toast.error('Erreur')
-  }
-  const stopRecurring = async (r: Recurring) => {
-    setItems(list => list.filter(x => x.id !== r.id))
-    await fetch('/api/expenses', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: r.id, isRecurring: false }) })
-    toast.success('Retiré des récurrents'); router.refresh()
-  }
-  const remove = async (r: Recurring) => {
-    if (!confirm('Supprimer définitivement cette dépense ?')) return
-    setItems(list => list.filter(x => x.id !== r.id))
-    await fetch('/api/expenses', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: r.id }) })
-    router.refresh()
-  }
+// ── Ligne de charge éditable (description, pôle, montant, date) ──
+function ExpenseRow({ e, poles, onSave, onDelete }: {
+  e: Expense; poles: ExpensePole[]
+  onSave: (id: string, patch: { description: string; amount: string; categoryLabel: string; date: string }) => void
+  onDelete: (id: string) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [d, setD] = useState({ description: e.description, amount: String(e.amount), pole: e.pole ?? poles[0]?.name ?? '', date: new Date(e.date).toISOString().slice(0, 10) })
   const inp = 'bg-nv-black border border-nv-border rounded-lg px-2 py-1 text-sm text-white focus:outline-none focus:border-primary/60'
 
-  return (
-    <div className="bg-nv-card border border-nv-border rounded-2xl p-5">
-      <div className="flex items-center justify-between mb-1">
-        <h3 className="text-sm font-semibold text-white flex items-center gap-2"><Repeat size={15} className="text-primary" /> Abonnements & dépenses récurrentes</h3>
-        <div className="text-right">
-          <p className="text-sm font-bold text-white tabular-nums">{eur(annualTotal)}<span className="text-xs text-nv-text-muted font-normal">/an</span></p>
-          <p className="text-[10px] text-nv-text-faint">{eur(monthlyTotal)}/mois</p>
-        </div>
+  if (editing) {
+    return (
+      <div className="py-2.5 flex items-center gap-2 flex-wrap">
+        <input className={`${inp} flex-1 min-w-[130px]`} value={d.description} onChange={ev => setD({ ...d, description: ev.target.value })} />
+        <select className={inp} value={d.pole} onChange={ev => setD({ ...d, pole: ev.target.value })}>
+          {poles.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
+        </select>
+        <input className={`${inp} w-32`} type="date" value={d.date} onChange={ev => setD({ ...d, date: ev.target.value })} />
+        <input className={`${inp} w-24 text-right`} type="number" value={d.amount} onChange={ev => setD({ ...d, amount: ev.target.value })} />
+        <span className="text-xs text-nv-text-muted">€</span>
+        <button onClick={() => { onSave(e.id, { description: d.description.trim(), amount: d.amount, categoryLabel: d.pole, date: d.date }); setEditing(false) }} className="p-1.5 rounded-lg bg-primary text-nv-black"><Check size={13} /></button>
+        <button onClick={() => setEditing(false)} className="p-1.5 rounded-lg border border-nv-border text-nv-text-muted"><X size={13} /></button>
       </div>
-      <p className="text-[11px] text-nv-text-faint mb-3">Chaque montant est mensuel — l&apos;annuel = mensuel × 12. Cliquez pour modifier.</p>
-      {items.length === 0 ? (
-        <p className="text-xs text-nv-text-faint text-center py-4">Aucun abonnement récurrent. Cochez « récurrent » en ajoutant une charge (SaaS, loyer…).</p>
-      ) : (
-        <div className="divide-y divide-nv-border/50">
-          {items.map(r => (
-            <div key={r.id} className="py-2.5">
-              {editing === r.id ? (
-                <div className="flex items-center gap-2 flex-wrap">
-                  <input className={`${inp} flex-1 min-w-[140px]`} value={draft.description} onChange={e => setDraft({ ...draft, description: e.target.value })} />
-                  <select className={inp} value={draft.pole} onChange={e => setDraft({ ...draft, pole: e.target.value })}>
-                    {poles.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
-                  </select>
-                  <input className={`${inp} w-24 text-right`} type="number" value={draft.amount} onChange={e => setDraft({ ...draft, amount: e.target.value })} />
-                  <span className="text-xs text-nv-text-muted">€/mois</span>
-                  <button onClick={() => saveEdit(r.id)} className="p-1.5 rounded-lg bg-primary text-nv-black"><Check size={13} /></button>
-                  <button onClick={() => setEditing(null)} className="p-1.5 rounded-lg border border-nv-border text-nv-text-muted"><X size={13} /></button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm text-white truncate">{r.description}</p>
-                    <p className="text-[11px] text-nv-text-faint">{r.pole || 'Non catégorisé'}</p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-sm font-semibold text-white tabular-nums">{eur(r.amount * 12)}<span className="text-[10px] text-nv-text-muted font-normal">/an</span></p>
-                    <p className="text-[10px] text-nv-text-faint tabular-nums">{eur(r.amount)}/mois</p>
-                  </div>
-                  <button onClick={() => startEdit(r)} title="Modifier" className="p-1 text-nv-text-faint hover:text-primary transition-colors shrink-0"><Pencil size={13} /></button>
-                  <button onClick={() => stopRecurring(r)} title="Arrêter l'abonnement" className="p-1 text-nv-text-faint hover:text-amber-400 transition-colors shrink-0"><Repeat size={13} /></button>
-                  <button onClick={() => remove(r)} title="Supprimer" className="p-1 text-nv-text-faint hover:text-red-400 transition-colors shrink-0"><Trash2 size={13} /></button>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+    )
+  }
+  return (
+    <div className="flex items-center gap-3 py-2.5 group">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm text-white truncate">{e.description}</p>
+        <p className="text-[11px] text-nv-text-faint">{e.pole || 'Non catégorisé'}{e.isRecurring ? ' · récurrent' : ''} · {new Date(e.date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}</p>
+      </div>
+      <span className="text-sm font-semibold text-white tabular-nums shrink-0">{eur(e.amount)}</span>
+      <button onClick={() => setEditing(true)} title="Modifier" className="p-1 text-nv-text-faint hover:text-primary transition-colors shrink-0"><Pencil size={13} /></button>
+      <button onClick={() => onDelete(e.id)} title="Supprimer" className="p-1 text-nv-text-faint hover:text-red-400 transition-colors shrink-0"><Trash2 size={13} /></button>
     </div>
   )
 }

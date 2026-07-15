@@ -52,6 +52,7 @@ export async function PATCH(req: NextRequest) {
   if (typeof b.description === 'string') data.description = b.description
   if (typeof b.categoryLabel === 'string') data.categoryLabel = b.categoryLabel
   if (typeof b.isRecurring === 'boolean') data.isRecurring = b.isRecurring
+  if (typeof b.date === 'string') data.date = new Date(b.date)
   const expense = await prisma.expense.update({ where: { id }, data: data as any })
   return NextResponse.json(expense)
 }
