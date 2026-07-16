@@ -5,13 +5,14 @@ import { createPortal } from 'react-dom'
 import {
   Plus, X, Check, Loader2, Trash2, Eye, Heart, Flame,
   TrendingUp, Video, Camera, Music2, ExternalLink, Trophy, Layers,
-  Sparkles, ImageUp, Wand2,
+  Sparkles, ImageUp, Wand2, RefreshCw, Plug, CheckCircle2,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 type Channel = {
   id: string; owner: string; platform: string; handle: string | null; url: string
   followers: number | null; lastSyncedAt: string | null; _count?: { pieces: number }
+  connected?: boolean
 }
 type Piece = {
   id: string; channelId: string; title: string; url: string | null; thumbnail: string | null
@@ -46,6 +47,10 @@ export function ContentTracker({ initialChannels, initialPieces }: { initialChan
   const [showAddPiece, setShowAddPiece] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const [importChannelId, setImportChannelId] = useState<string>('')
+  const [connectChannel, setConnectChannel] = useState<Channel | null>(null)
+  const [showKeys, setShowKeys] = useState(false)
+  const [syncing, setSyncing] = useState<string | null>(null)
+  const [syncingAll, setSyncingAll] = useState(false)
 
   const owners = useMemo(() => Array.from(new Set(channels.map(c => c.owner))), [channels])
 
@@ -117,6 +122,35 @@ export function ContentTracker({ initialChannels, initialPieces }: { initialChan
     if (pr.ok) setPieces(await pr.json())
   }
 
+  const syncChannel = async (ch: Channel) => {
+    setSyncing(ch.id)
+    try {
+      const res = await fetch('/api/content/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ channelId: ch.id }) })
+      const json = await res.json()
+      if (json.manualRequired) { toast(json.message, { icon: 'ℹ️', duration: 6000 }); return }
+      if (!res.ok) throw new Error(json.error)
+      toast.success(`${ch.owner} · ${json.synced} contenu(s) synchronisé(s)`)
+      await reload()
+    } catch (e: any) { toast.error(e.message ?? 'Erreur') } finally { setSyncing(null) }
+  }
+
+  const syncAll = async () => {
+    const auto = channels.filter(c => c.platform === 'YOUTUBE' || (c.platform === 'INSTAGRAM' && c.connected))
+    if (auto.length === 0) { toast('Aucun canal connecté à synchroniser', { icon: 'ℹ️' }); return }
+    setSyncingAll(true)
+    let ok = 0
+    for (const ch of auto) {
+      try {
+        const res = await fetch('/api/content/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ channelId: ch.id }) })
+        const json = await res.json()
+        if (res.ok && !json.manualRequired) ok++
+      } catch {}
+    }
+    await reload()
+    setSyncingAll(false)
+    toast.success(`${ok}/${auto.length} canal(aux) synchronisé(s)`)
+  }
+
   return (
     <div className="space-y-5">
       {/* Canaux */}
@@ -124,8 +158,13 @@ export function ContentTracker({ initialChannels, initialPieces }: { initialChan
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-white flex items-center gap-2"><Layers size={15} className="text-primary" /> Canaux suivis</h3>
           <div className="flex gap-2">
+            {channels.some(c => c.platform === 'YOUTUBE' || c.connected) && (
+              <button onClick={syncAll} disabled={syncingAll} title="Synchroniser tous les canaux connectés (Instagram Graph API / YouTube)" className="text-xs px-3 py-1.5 rounded-lg bg-primary text-nv-black font-medium flex items-center gap-1 disabled:opacity-60">
+                {syncingAll ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} Synchroniser
+              </button>
+            )}
             {channels.length > 0 && (
-              <button onClick={() => setShowImport(true)} title="Importer le bilan mensuel via une capture d'écran (analyse par IA)" className="text-xs px-3 py-1.5 rounded-lg bg-primary text-nv-black font-medium flex items-center gap-1">
+              <button onClick={() => setShowImport(true)} title="Importer un bilan via capture d'écran (fallback, analyse par IA)" className="text-xs px-3 py-1.5 rounded-lg border border-nv-border text-nv-text-muted hover:text-nv-text transition-colors flex items-center gap-1">
                 <Sparkles size={12} /> Importer un bilan
               </button>
             )}
@@ -135,6 +174,7 @@ export function ContentTracker({ initialChannels, initialPieces }: { initialChan
             <button onClick={() => setShowAddChannel(true)} className="text-xs px-3 py-1.5 rounded-lg border border-nv-border text-nv-text-muted hover:text-nv-text transition-colors flex items-center gap-1">
               <Plus size={12} /> Ajouter un canal
             </button>
+            <button onClick={() => setShowKeys(true)} title="Clés API (YouTube, app Meta pour Instagram)" className="text-xs px-2 py-1.5 rounded-lg border border-nv-border text-nv-text-faint hover:text-nv-text transition-colors flex items-center"><Plug size={13} /></button>
           </div>
         </div>
         {channels.length === 0 ? (
@@ -149,14 +189,27 @@ export function ContentTracker({ initialChannels, initialPieces }: { initialChan
                     <Icon size={15} style={{ color: PLATFORM_COLOR[ch.platform] ?? '#888' }} />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-white truncate">{ch.owner}</p>
+                    <p className="text-sm font-medium text-white truncate flex items-center gap-1">
+                      {ch.owner}
+                      {(ch.platform === 'INSTAGRAM' && ch.connected) && <CheckCircle2 size={12} className="text-emerald-400 shrink-0" />}
+                    </p>
                     <p className="text-[10px] text-nv-text-faint truncate">
                       {ch.handle ? `@${ch.handle.replace(/^@/, '')}` : ch.platform} · {ch._count?.pieces ?? 0} contenus
                       {ch.followers != null && ` · ${fmt(ch.followers)} abo`}
                     </p>
                   </div>
-                  <button onClick={() => { setImportChannelId(ch.id); setShowImport(true) }} title="Importer un bilan pour ce canal" className="p-1.5 text-nv-text-muted hover:text-primary transition-colors shrink-0"><Sparkles size={13} /></button>
-                  <button onClick={() => deleteChannel(ch.id)} className="p-1.5 text-nv-text-faint hover:text-red-400 transition-colors shrink-0"><Trash2 size={13} /></button>
+                  {ch.platform === 'INSTAGRAM' && !ch.connected ? (
+                    <button onClick={() => setConnectChannel(ch)} title="Connecter le compte (API Graph)" className="px-2 py-1 rounded-lg bg-primary/15 text-primary text-[11px] font-medium flex items-center gap-1 shrink-0 hover:bg-primary/25 transition-colors"><Plug size={12} /> Connecter</button>
+                  ) : (
+                    <button onClick={() => syncChannel(ch)} disabled={syncing === ch.id} title="Synchroniser maintenant" className="p-1.5 text-nv-text-muted hover:text-primary transition-colors shrink-0">
+                      {syncing === ch.id ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+                    </button>
+                  )}
+                  {ch.platform === 'INSTAGRAM' && ch.connected && (
+                    <button onClick={() => setConnectChannel(ch)} title="Modifier la connexion" className="p-1.5 text-nv-text-faint hover:text-nv-text transition-colors shrink-0"><Plug size={13} /></button>
+                  )}
+                  <button onClick={() => { setImportChannelId(ch.id); setShowImport(true) }} title="Importer un bilan (capture)" className="p-1.5 text-nv-text-faint hover:text-primary transition-colors shrink-0"><Sparkles size={13} /></button>
+                  <button onClick={() => deleteChannel(ch.id)} title="Supprimer le canal" className="p-1.5 text-nv-text-faint hover:text-red-400 transition-colors shrink-0"><Trash2 size={13} /></button>
                 </div>
               )
             })}
@@ -292,6 +345,88 @@ export function ContentTracker({ initialChannels, initialPieces }: { initialChan
       {showAddChannel && typeof document !== 'undefined' && createPortal(<AddChannelModal onClose={() => setShowAddChannel(false)} onDone={reload} />, document.body)}
       {showAddPiece && typeof document !== 'undefined' && createPortal(<AddPieceModal channels={channels} onClose={() => setShowAddPiece(false)} onDone={reload} />, document.body)}
       {showImport && channels.length > 0 && typeof document !== 'undefined' && createPortal(<ScreenshotImportModal channels={channels} initialChannelId={importChannelId} onClose={() => { setShowImport(false); setImportChannelId('') }} onDone={reload} />, document.body)}
+      {connectChannel && typeof document !== 'undefined' && createPortal(<ConnectInstagramModal channel={connectChannel} onClose={() => setConnectChannel(null)} onDone={async () => { setConnectChannel(null); await reload() }} />, document.body)}
+      {showKeys && typeof document !== 'undefined' && createPortal(<ApiKeysModal onClose={() => setShowKeys(false)} />, document.body)}
+    </div>
+  )
+}
+
+// Connexion d'un compte Instagram à l'API Graph (token longue durée + ID du compte)
+function ConnectInstagramModal({ channel, onClose, onDone }: { channel: Channel; onClose: () => void; onDone: () => void }) {
+  const [platformUserId, setPlatformUserId] = useState('')
+  const [accessToken, setAccessToken] = useState('')
+  const [saving, setSaving] = useState(false)
+  const inp = 'w-full bg-nv-black border border-nv-border rounded-lg px-3 py-2 text-sm text-white placeholder-nv-text-faint focus:outline-none focus:border-primary/60'
+  const save = async () => {
+    if (!platformUserId.trim() || !accessToken.trim()) { toast.error('ID du compte et token requis'); return }
+    setSaving(true)
+    try {
+      const res = await fetch('/api/content/channels', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: channel.id, platformUserId: platformUserId.trim(), accessToken: accessToken.trim() }) })
+      if (!res.ok) throw new Error()
+      toast.success('Compte connecté — clique sur synchroniser'); onDone()
+    } catch { toast.error('Erreur') } finally { setSaving(false) }
+  }
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)' }} onClick={onClose}>
+      <div className="w-full max-w-md bg-nv-dark border border-nv-border rounded-2xl p-5 space-y-3 max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between"><h3 className="text-base font-semibold text-white flex items-center gap-2"><Plug size={16} className="text-primary" /> Connecter {channel.owner} (Instagram)</h3><button onClick={onClose}><X size={16} className="text-nv-text-muted" /></button></div>
+        <p className="text-xs text-nv-text-muted">Colle l&apos;ID du compte Instagram Business et le token longue durée de l&apos;API Graph. Une fois connecté, la synchro est automatique (vues, likes, commentaires, abonnés par reel/post).</p>
+        <div>
+          <label className="text-[11px] text-nv-text-muted block mb-1">ID du compte Instagram Business</label>
+          <input className={inp} placeholder="17841400000000000" value={platformUserId} onChange={e => setPlatformUserId(e.target.value)} autoFocus />
+        </div>
+        <div>
+          <label className="text-[11px] text-nv-text-muted block mb-1">Token d&apos;accès longue durée</label>
+          <input className={inp} type="password" placeholder="EAAG..." value={accessToken} onChange={e => setAccessToken(e.target.value)} />
+        </div>
+        <p className="text-[10px] text-nv-text-faint">Ces deux valeurs s&apos;obtiennent dans le Graph API Explorer de Meta. Pour que le token ne périme jamais, renseigne aussi l&apos;app Meta (bouton <Plug size={9} className="inline" /> « Clés API »). On fait le setup ensemble juste après.</p>
+        <button onClick={save} disabled={saving} className="w-full flex items-center justify-center gap-1.5 py-2 bg-primary text-nv-black rounded-lg font-medium disabled:opacity-60">
+          {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Connecter
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// Clés API globales : YouTube Data API + app Meta (rafraîchissement auto des tokens Instagram)
+function ApiKeysModal({ onClose }: { onClose: () => void }) {
+  const [youtubeApiKey, setYoutubeApiKey] = useState('')
+  const [metaAppId, setMetaAppId] = useState('')
+  const [metaAppSecret, setMetaAppSecret] = useState('')
+  const [saving, setSaving] = useState(false)
+  const inp = 'w-full bg-nv-black border border-nv-border rounded-lg px-3 py-2 text-sm text-white placeholder-nv-text-faint focus:outline-none focus:border-primary/60'
+  const save = async () => {
+    const payload: Record<string, string> = {}
+    if (youtubeApiKey.trim()) payload.youtubeApiKey = youtubeApiKey.trim()
+    if (metaAppId.trim()) payload.metaAppId = metaAppId.trim()
+    if (metaAppSecret.trim()) payload.metaAppSecret = metaAppSecret.trim()
+    if (Object.keys(payload).length === 0) { toast.error('Rien à enregistrer'); return }
+    setSaving(true)
+    try {
+      const res = await fetch('/api/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      if (!res.ok) throw new Error()
+      toast.success('Clés enregistrées'); onClose()
+    } catch { toast.error('Erreur') } finally { setSaving(false) }
+  }
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)' }} onClick={onClose}>
+      <div className="w-full max-w-md bg-nv-dark border border-nv-border rounded-2xl p-5 space-y-3 max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between"><h3 className="text-base font-semibold text-white flex items-center gap-2"><Plug size={16} className="text-primary" /> Clés API</h3><button onClick={onClose}><X size={16} className="text-nv-text-muted" /></button></div>
+        <div className="space-y-1.5">
+          <label className="text-[11px] text-nv-text-muted block flex items-center gap-1.5"><Video size={12} className="text-red-400" /> Clé YouTube Data API</label>
+          <input className={inp} type="password" placeholder="AIza... (laisse vide pour ne pas changer)" value={youtubeApiKey} onChange={e => setYoutubeApiKey(e.target.value)} />
+          <p className="text-[10px] text-nv-text-faint">console.cloud.google.com → API « YouTube Data API v3 » activée → Identifiants → Clé API. Gratuit.</p>
+        </div>
+        <div className="space-y-1.5 pt-2 border-t border-nv-border">
+          <label className="text-[11px] text-nv-text-muted block flex items-center gap-1.5"><Camera size={12} className="text-fuchsia-400" /> App Meta (rafraîchissement auto des tokens Instagram)</label>
+          <input className={inp} placeholder="App ID Meta" value={metaAppId} onChange={e => setMetaAppId(e.target.value)} />
+          <input className={inp} type="password" placeholder="App Secret Meta" value={metaAppSecret} onChange={e => setMetaAppSecret(e.target.value)} />
+          <p className="text-[10px] text-nv-text-faint">developers.facebook.com → ton app → Paramètres → Général. Optionnel mais recommandé : permet de repousser l&apos;expiration du token à chaque synchro (il ne périme jamais).</p>
+        </div>
+        <button onClick={save} disabled={saving} className="w-full flex items-center justify-center gap-1.5 py-2 bg-primary text-nv-black rounded-lg font-medium disabled:opacity-60">
+          {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Enregistrer
+        </button>
+      </div>
     </div>
   )
 }
@@ -325,7 +460,7 @@ function AddChannelModal({ onClose, onDone }: { onClose: () => void; onDone: () 
           ))}
         </div>
         <input className={inp} placeholder={platform === 'YOUTUBE' ? 'https://youtube.com/@chaine' : 'https://instagram.com/compte'} value={url} onChange={e => setUrl(e.target.value)} />
-        <p className="text-[11px] text-nv-text-faint flex items-start gap-1.5"><Sparkles size={12} className="text-primary shrink-0 mt-0.5" /> Une fois le canal ajouté, cliquez sur « Importer un bilan » : déposez une capture de vos stats mensuelles ({platform === 'YOUTUBE' ? 'YouTube Studio' : 'Instagram Insights'}), l&apos;IA remplit tout automatiquement.</p>
+        <p className="text-[11px] text-nv-text-faint flex items-start gap-1.5"><Plug size={12} className="text-primary shrink-0 mt-0.5" /> {platform === 'INSTAGRAM' ? 'Ensuite : « Connecter » sur le canal pour la synchro auto (API Graph). ' : platform === 'YOUTUBE' ? 'Ensuite : renseigne la clé YouTube (bouton clés) puis « Synchroniser » — tout est auto. ' : ''}L&apos;import par capture d&apos;écran reste dispo en secours.</p>
         <button onClick={save} disabled={saving} className="w-full flex items-center justify-center gap-1.5 py-2 bg-primary text-nv-black rounded-lg font-medium disabled:opacity-60">
           {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Ajouter
         </button>

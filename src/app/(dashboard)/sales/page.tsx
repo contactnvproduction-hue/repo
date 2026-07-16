@@ -110,6 +110,7 @@ export default async function SalesPage() {
   const contentChannelsSer = contentChannels.map((c: any) => ({
     id: c.id, owner: c.owner, platform: c.platform, handle: c.handle, url: c.url,
     followers: c.followers, lastSyncedAt: c.lastSyncedAt?.toISOString() ?? null, _count: c._count,
+    connected: !!(c.accessToken && c.platformUserId),
   }))
   const contentPiecesSer = contentPieces.map((p: any) => ({
     id: p.id, channelId: p.channelId, title: p.title, url: p.url, thumbnail: p.thumbnail,

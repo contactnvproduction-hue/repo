@@ -12,7 +12,13 @@ export async function GET() {
       include: { _count: { select: { pieces: true } } },
       orderBy: [{ owner: 'asc' }, { platform: 'asc' }],
     })
-    return NextResponse.json(channels)
+    // Ne jamais renvoyer le token au client — juste un booléen de connexion
+    const safe = channels.map((c: any) => ({
+      id: c.id, owner: c.owner, platform: c.platform, handle: c.handle, url: c.url,
+      followers: c.followers, lastSyncedAt: c.lastSyncedAt?.toISOString?.() ?? c.lastSyncedAt ?? null,
+      _count: c._count, connected: !!(c.accessToken && c.platformUserId),
+    }))
+    return NextResponse.json(safe)
   } catch { return NextResponse.json([]) }
 }
 

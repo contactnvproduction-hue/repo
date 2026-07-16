@@ -635,6 +635,8 @@ model AgencySetting {
   youtubeApiKey  String?
   apifyToken     String?  // token Apify pour scraper Instagram (data reels/posts complète)
   anthropicApiKey String? // clé API Claude pour l'analyse des bilans par screenshot (vision)
+  metaAppId      String?  // Meta app id — rafraîchissement auto des tokens Instagram Graph
+  metaAppSecret  String?  // Meta app secret (idem)
   adaSheetUrl    String?  // URL de la Google Sheet réponses ADA (publique)
   closingScriptUrl String? // lien vers le script de closing B2B (ouvert en 1 clic depuis le pipeline)
   expensePoles   Json?    // pôles de charges personnalisés [{ name, color }]
@@ -892,6 +894,7 @@ model ContentChannel {
   followers      Int?
   accessToken    String?  // Instagram Graph API : token longue durée (compte Business/Creator)
   platformUserId String?  // Instagram Graph API : identifiant du compte IG Business
+  tokenExpiresAt DateTime? // expiration du token longue durée (rafraîchi auto à chaque sync)
   lastSyncedAt   DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt

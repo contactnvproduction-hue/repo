@@ -14,11 +14,34 @@ function parseDuration(iso: string): number {
 const engagement = (l: number, c: number, s: number, v: number) =>
   v > 0 ? Math.round(((l + c + s) / v) * 1000) / 10 : 0
 
+const GRAPH = 'https://graph.facebook.com/v21.0'
+
+// Rafraîchit le token longue durée (échange fb_exchange_token) pour repousser
+// l'expiration à +60 jours. Appelé à chaque sync : tant que Noah synchronise au
+// moins une fois tous les 2 mois, le token ne périme jamais. Nécessite l'app Meta
+// (id + secret) configurée dans les paramètres ; sinon on ne touche pas au token.
+async function refreshInstagramToken(db: any, channel: any, settings: any): Promise<string> {
+  const appId = settings?.metaAppId
+  const appSecret = settings?.metaAppSecret
+  if (!appId || !appSecret || !channel.accessToken) return channel.accessToken
+  try {
+    const url = `${GRAPH}/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${channel.accessToken}`
+    const res = await fetch(url)
+    const data = await res.json()
+    if (data.access_token) {
+      const expiresAt = data.expires_in ? new Date(Date.now() + Number(data.expires_in) * 1000) : null
+      await db.contentChannel.update({ where: { id: channel.id }, data: { accessToken: data.access_token, tokenExpiresAt: expiresAt } })
+      return data.access_token
+    }
+  } catch {}
+  return channel.accessToken
+}
+
 // ── Sync Instagram via Graph API (compte Business/Creator possédé) ────────────
-async function syncInstagram(db: any, channel: any) {
-  const token = channel.accessToken
+async function syncInstagram(db: any, channel: any, settings: any) {
   const igId = channel.platformUserId
-  const GRAPH = 'https://graph.facebook.com/v19.0'
+  // Rafraîchit le token en amont (repousse l'expiration à +60j)
+  const token = await refreshInstagramToken(db, channel, settings)
 
   // Followers du compte
   try {
@@ -44,16 +67,24 @@ async function syncInstagram(db: any, channel: any) {
     const isVideo = media.media_type === 'VIDEO' || isReel
     const format = isReel ? 'REEL' : media.media_type === 'IMAGE' || media.media_type === 'CAROUSEL_ALBUM' ? 'POST' : 'AUTRE'
 
-    // Vues / reach via insights (réels et vidéos → plays ; sinon reach)
+    // Vues via insights. Depuis 2024 la métrique est "views" (ex-"plays"),
+    // avec fallback "reach" pour les anciens comptes/formats.
     let views = 0
     try {
-      const metric = isVideo ? 'plays,reach' : 'reach'
-      const iRes = await fetch(`${GRAPH}/${media.id}/insights?metric=${metric}&access_token=${token}`)
+      const iRes = await fetch(`${GRAPH}/${media.id}/insights?metric=views&access_token=${token}`)
       const iData = await iRes.json()
       if (!iData.error) {
-        const plays = iData.data?.find((x: any) => x.name === 'plays')?.values?.[0]?.value
-        const reach = iData.data?.find((x: any) => x.name === 'reach')?.values?.[0]?.value
-        views = plays ?? reach ?? 0
+        views = iData.data?.find((x: any) => x.name === 'views')?.values?.[0]?.value ?? 0
+      }
+      if (!views) {
+        const metric = isVideo ? 'plays,reach' : 'reach'
+        const r2 = await fetch(`${GRAPH}/${media.id}/insights?metric=${metric}&access_token=${token}`)
+        const d2 = await r2.json()
+        if (!d2.error) {
+          const plays = d2.data?.find((x: any) => x.name === 'plays')?.values?.[0]?.value
+          const reach = d2.data?.find((x: any) => x.name === 'reach')?.values?.[0]?.value
+          views = plays ?? reach ?? 0
+        }
       }
     } catch {}
 
@@ -166,16 +197,16 @@ export async function POST(req: NextRequest) {
 
     // ── Instagram : Graph API (compte possédé) → sinon Apify (scraper tiers) ────
     if (channel.platform === 'INSTAGRAM') {
-      if (channel.accessToken && channel.platformUserId) {
-        return await syncInstagram(db, channel)
-      }
       const igSettings = await db.agencySetting.findFirst()
+      if (channel.accessToken && channel.platformUserId) {
+        return await syncInstagram(db, channel, igSettings)
+      }
       if (igSettings?.apifyToken) {
         return await syncInstagramApify(db, channel, igSettings.apifyToken)
       }
       return NextResponse.json({
         manualRequired: true,
-        message: "Instagram : ajoutez un token Apify (Paramètres) pour récupérer automatiquement la data des reels/posts, ou connectez le compte Business (token Graph API + ID), sinon saisissez les contenus manuellement.",
+        message: "Instagram : connectez le compte (bouton « Connecter » : ID du compte + token Graph API) pour la synchronisation automatique, ou importez un bilan par capture d'écran.",
       })
     }
 
