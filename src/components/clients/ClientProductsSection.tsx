@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Package, Plus, X, Check, Loader2 } from 'lucide-react'
+import { Package, Plus, X, Check, Loader2, Trash2, Settings2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
@@ -35,8 +35,32 @@ export function ClientProductsSection({
   const [saving, setSaving] = useState(false)
   const [creatingProduct, setCreatingProduct] = useState(false)
   const [newProductName, setNewProductName] = useState('')
+  const [manageMode, setManageMode] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const taggedIds = new Set(items.map(i => i.productId))
+
+  // Supprime une offre globalement (de tous les clients + du graphique CA par produit)
+  const deleteProduct = async (p: Product) => {
+    if (!confirm(`Supprimer l'offre « ${p.name} » ?\n\nElle sera retirée de TOUS les clients et disparaîtra du graphique CA par produit. Le CA global du client reste inchangé.`)) return
+    setDeletingId(p.id)
+    const prevProducts = products
+    const prevItems = items
+    // Optimiste
+    setProducts(list => list.filter(x => x.id !== p.id))
+    setItems(list => list.filter(i => i.productId !== p.id))
+    try {
+      const res = await fetch(`/api/products?id=${p.id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error()
+      toast.success('Offre supprimée')
+    } catch {
+      setProducts(prevProducts)
+      setItems(prevItems)
+      toast.error('Erreur — suppression annulée')
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   const toggleTag = async (p: Product) => {
     const existing = items.find(i => i.productId === p.id)
@@ -111,6 +135,26 @@ export function ClientProductsSection({
         <div className="flex flex-wrap gap-2">
           {products.filter(p => p.active).map(p => {
             const tagged = taggedIds.has(p.id)
+            if (manageMode) {
+              return (
+                <div
+                  key={p.id}
+                  className="px-3 py-1.5 rounded-full text-sm border border-red-500/30 bg-red-500/5 text-nv-text-muted flex items-center gap-1.5"
+                >
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: p.color }} />
+                  {p.name}
+                  <button
+                    type="button"
+                    onClick={() => deleteProduct(p)}
+                    disabled={deletingId === p.id}
+                    title="Supprimer cette offre"
+                    className="ml-0.5 text-red-400/70 hover:text-red-400 transition-colors disabled:opacity-50"
+                  >
+                    {deletingId === p.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              )
+            }
             return (
               <button
                 key={p.id}
@@ -129,14 +173,32 @@ export function ClientProductsSection({
               </button>
             )
           })}
-          <button
-            type="button"
-            onClick={() => setCreatingProduct(c => !c)}
-            className="px-3 py-1.5 rounded-full text-sm border border-dashed border-nv-border text-nv-text-faint hover:text-primary hover:border-primary/40 transition-colors flex items-center gap-1"
-          >
-            <Plus className="w-3.5 h-3.5" /> Nouveau produit
-          </button>
+          {!manageMode && (
+            <button
+              type="button"
+              onClick={() => setCreatingProduct(c => !c)}
+              className="px-3 py-1.5 rounded-full text-sm border border-dashed border-nv-border text-nv-text-faint hover:text-primary hover:border-primary/40 transition-colors flex items-center gap-1"
+            >
+              <Plus className="w-3.5 h-3.5" /> Nouveau produit
+            </button>
+          )}
+          {products.filter(p => p.active).length > 0 && (
+            <button
+              type="button"
+              onClick={() => { setManageMode(m => !m); setCreatingProduct(false) }}
+              className={`px-3 py-1.5 rounded-full text-sm border transition-colors flex items-center gap-1 ${
+                manageMode
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-dashed border-nv-border text-nv-text-faint hover:text-nv-text hover:border-nv-border-light'
+              }`}
+            >
+              {manageMode ? <><Check className="w-3.5 h-3.5" /> Terminé</> : <><Settings2 className="w-3.5 h-3.5" /> Gérer</>}
+            </button>
+          )}
         </div>
+        {manageMode && (
+          <p className="text-xs text-red-400/80">Mode gestion : supprime une offre pour l&apos;enlever de tous les clients et du graphique CA par produit.</p>
+        )}
 
         {creatingProduct && (
           <div className="flex items-center gap-2">
