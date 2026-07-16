@@ -633,6 +633,7 @@ model AgencySetting {
   quoteCounter   Int      @default(1)
   bankDetails    String?
   youtubeApiKey  String?
+  apifyToken     String?  // token Apify pour scraper Instagram (data reels/posts complète)
   adaSheetUrl    String?  // URL de la Google Sheet réponses ADA (publique)
   closingScriptUrl String? // lien vers le script de closing B2B (ouvert en 1 clic depuis le pipeline)
   expensePoles   Json?    // pôles de charges personnalisés [{ name, color }]

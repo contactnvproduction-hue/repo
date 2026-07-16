@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Plus, X, Check, Loader2, RefreshCw, Trash2, Eye, Heart, Flame,
-  TrendingUp, Video, Camera, Music2, ExternalLink, Trophy, Layers,
+  TrendingUp, Video, Camera, Music2, ExternalLink, Trophy, Layers, KeyRound,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -45,6 +45,7 @@ export function ContentTracker({ initialChannels, initialPieces }: { initialChan
   const [syncingAll, setSyncingAll] = useState(false)
   const [showAddChannel, setShowAddChannel] = useState(false)
   const [showAddPiece, setShowAddPiece] = useState(false)
+  const [showApify, setShowApify] = useState(false)
 
   const owners = useMemo(() => Array.from(new Set(channels.map(c => c.owner))), [channels])
 
@@ -161,6 +162,9 @@ export function ContentTracker({ initialChannels, initialPieces }: { initialChan
                 {syncingAll ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} Tout synchroniser
               </button>
             )}
+            <button onClick={() => setShowApify(true)} title="Configurer le token Apify pour synchroniser Instagram" className="text-xs px-3 py-1.5 rounded-lg border border-nv-border text-nv-text-muted hover:text-nv-text transition-colors flex items-center gap-1">
+              <KeyRound size={12} /> Token Insta
+            </button>
             <button onClick={() => setShowAddPiece(true)} className="text-xs px-3 py-1.5 rounded-lg border border-nv-border text-nv-text-muted hover:text-nv-text transition-colors flex items-center gap-1">
               <Plus size={12} /> Contenu manuel
             </button>
@@ -325,6 +329,40 @@ export function ContentTracker({ initialChannels, initialPieces }: { initialChan
 
       {showAddChannel && typeof document !== 'undefined' && createPortal(<AddChannelModal onClose={() => setShowAddChannel(false)} onDone={reload} />, document.body)}
       {showAddPiece && typeof document !== 'undefined' && createPortal(<AddPieceModal channels={channels} onClose={() => setShowAddPiece(false)} onDone={reload} />, document.body)}
+      {showApify && typeof document !== 'undefined' && createPortal(<ApifyTokenModal onClose={() => setShowApify(false)} />, document.body)}
+    </div>
+  )
+}
+
+// Configure le token Apify utilisé pour scraper Instagram (data reels/posts complète)
+function ApifyTokenModal({ onClose }: { onClose: () => void }) {
+  const [token, setToken] = useState('')
+  const [saving, setSaving] = useState(false)
+  const inp = 'w-full bg-nv-black border border-nv-border rounded-lg px-3 py-2 text-sm text-white placeholder-nv-text-faint focus:outline-none focus:border-primary/60'
+  const save = async () => {
+    if (!token.trim()) { toast.error('Token requis'); return }
+    setSaving(true)
+    try {
+      const res = await fetch('/api/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ apifyToken: token.trim() }) })
+      if (!res.ok) throw new Error()
+      toast.success('Token Apify enregistré — synchronisez vos comptes Instagram'); onClose()
+    } catch { toast.error('Erreur') } finally { setSaving(false) }
+  }
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)' }} onClick={onClose}>
+      <div className="w-full max-w-sm bg-nv-dark border border-nv-border rounded-2xl p-5 space-y-3" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between"><h3 className="text-base font-semibold text-white flex items-center gap-2"><KeyRound size={16} className="text-primary" /> Token Apify (Instagram)</h3><button onClick={onClose}><X size={16} className="text-nv-text-muted" /></button></div>
+        <p className="text-xs text-nv-text-muted">Permet de récupérer automatiquement la data complète des reels/posts (vues, likes, commentaires) de n&apos;importe quel compte public, sans compte Business Meta.</p>
+        <ol className="text-[11px] text-nv-text-faint space-y-1 list-decimal pl-4">
+          <li>Créez un compte sur <span className="text-nv-text-muted">apify.com</span> (offre gratuite mensuelle incluse).</li>
+          <li>Settings → Integrations → <span className="text-nv-text-muted">API tokens</span> → copiez le <em>Personal API token</em>.</li>
+          <li>Collez-le ci-dessous. La sync utilisera l&apos;acteur <span className="text-nv-text-muted">apify/instagram-scraper</span> sur le @handle de chaque canal.</li>
+        </ol>
+        <input className={inp} type="password" placeholder="apify_api_..." value={token} onChange={e => setToken(e.target.value)} autoFocus />
+        <button onClick={save} disabled={saving} className="w-full flex items-center justify-center gap-1.5 py-2 bg-primary text-nv-black rounded-lg font-medium disabled:opacity-60">
+          {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Enregistrer
+        </button>
+      </div>
     </div>
   )
 }
@@ -363,10 +401,10 @@ function AddChannelModal({ onClose, onDone }: { onClose: () => void; onDone: () 
         {platform === 'TIKTOK' && <p className="text-[11px] text-nv-text-faint">TikTok : ajoutez les contenus manuellement (pas d&apos;API publique fiable).</p>}
         {platform === 'INSTAGRAM' && (
           <div className="space-y-2 pt-1 border-t border-nv-border">
-            <p className="text-[11px] text-nv-text-muted">Sync automatique (compte Business/Creator qui vous appartient) — sinon laissez vide et saisissez manuellement.</p>
-            <input className={inp} placeholder="ID du compte Instagram Business" value={platformUserId} onChange={e => setPlatformUserId(e.target.value)} />
-            <input className={inp} placeholder="Token Graph API (longue durée)" value={accessToken} onChange={e => setAccessToken(e.target.value)} />
-            <p className="text-[10px] text-nv-text-faint">Obtenez-les via developers.facebook.com → votre app → Instagram Graph API (compte lié à une Page Facebook). Permissions : instagram_basic, instagram_manage_insights.</p>
+            <p className="text-[11px] text-nv-text-muted">Deux options de sync automatique : soit un compte Business/Creator que vous possédez (Graph API ci-dessous), soit le token Apify (bouton « Token Insta ») qui scrape n&apos;importe quel compte public via son @handle. Laissez vide pour la saisie manuelle.</p>
+            <input className={inp} placeholder="ID du compte Instagram Business (optionnel)" value={platformUserId} onChange={e => setPlatformUserId(e.target.value)} />
+            <input className={inp} placeholder="Token Graph API longue durée (optionnel)" value={accessToken} onChange={e => setAccessToken(e.target.value)} />
+            <p className="text-[10px] text-nv-text-faint">Graph API : developers.facebook.com → app → Instagram Graph API (permissions instagram_basic, instagram_manage_insights). Sinon, le token Apify suffit et récupère la data des reels.</p>
           </div>
         )}
         <button onClick={save} disabled={saving} className="w-full flex items-center justify-center gap-1.5 py-2 bg-primary text-nv-black rounded-lg font-medium disabled:opacity-60">

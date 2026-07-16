@@ -78,8 +78,83 @@ async function syncInstagram(db: any, channel: any) {
   return NextResponse.json({ synced })
 }
 
+// ── Sync Instagram via Apify (scraper tiers, compte public non possédé) ───────
+// Récupère la data complète des reels/posts (vues, likes, commentaires) sans
+// avoir à connecter un compte Business/Graph API. Nécessite un token Apify.
+async function syncInstagramApify(db: any, channel: any, apifyToken: string) {
+  const handle = (channel.handle || '').replace(/^@/, '').trim()
+  if (!handle) {
+    return NextResponse.json({ error: "Instagram : renseignez le @handle du compte pour la synchronisation Apify." }, { status: 400 })
+  }
+  const profileUrl = `https://www.instagram.com/${handle}/`
+
+  // run-sync-get-dataset-items : lance l'acteur et renvoie directement les items
+  const endpoint = `https://api.apify.com/v2/acts/apify~instagram-scraper/run-sync-get-dataset-items?token=${encodeURIComponent(apifyToken)}`
+  let items: any[] = []
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        directUrls: [profileUrl],
+        resultsType: 'posts',
+        resultsLimit: 50,
+        addParentData: false,
+      }),
+    })
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '')
+      return NextResponse.json({ error: `Instagram (Apify) : ${res.status} ${txt.slice(0, 140)}` }, { status: 400 })
+    }
+    items = await res.json()
+  } catch (e) {
+    return NextResponse.json({ error: 'Instagram (Apify) : échec de la requête au scraper.' }, { status: 400 })
+  }
+
+  if (!Array.isArray(items) || items.length === 0) {
+    return NextResponse.json({ error: "Instagram (Apify) : aucun contenu récupéré (compte privé, @handle erroné ou quota Apify ?)." }, { status: 400 })
+  }
+
+  // Followers si présents dans les données scrapées
+  const followers = items.find((i: any) => i.ownerFollowersCount != null)?.ownerFollowersCount
+    ?? items[0]?.followersCount ?? null
+  if (followers != null) {
+    try { await db.contentChannel.update({ where: { id: channel.id }, data: { followers: Number(followers) } }) } catch {}
+  }
+
+  let synced = 0
+  for (const it of items) {
+    if (!it || (it.type !== 'Video' && it.type !== 'Image' && it.type !== 'Sidecar' && !it.shortCode && !it.id)) continue
+    const externalId = String(it.id || it.shortCode)
+    const isReel = it.productType === 'clips' || it.type === 'Video'
+    const format = isReel ? 'REEL' : (it.type === 'Image' || it.type === 'Sidecar') ? 'POST' : 'AUTRE'
+    const likes = Number(it.likesCount ?? 0)
+    const comments = Number(it.commentsCount ?? 0)
+    const views = Number(it.videoPlayCount ?? it.videoViewCount ?? 0)
+    const title = String(it.caption || 'Publication Instagram').split('\n')[0].slice(0, 120)
+
+    await db.contentPiece.upsert({
+      where: { channelId_externalId: { channelId: channel.id, externalId } },
+      update: { views, likes, comments, engagementRate: engagement(likes, comments, 0, views) },
+      create: {
+        channelId: channel.id, externalId, title,
+        url: it.url || (it.shortCode ? `https://www.instagram.com/p/${it.shortCode}/` : null),
+        thumbnail: it.displayUrl || null,
+        format,
+        publishedAt: it.timestamp ? new Date(it.timestamp) : new Date(),
+        views, likes, comments, shares: 0,
+        engagementRate: engagement(likes, comments, 0, views),
+      },
+    })
+    synced++
+  }
+
+  await db.contentChannel.update({ where: { id: channel.id }, data: { lastSyncedAt: new Date() } })
+  return NextResponse.json({ synced, source: 'apify' })
+}
+
 // Sync d'un canal : YouTube = données réelles par vidéo (Data API).
-// Instagram/TikTok = pas d'API publique fiable par-post → saisie manuelle.
+// Instagram = Graph API (compte possédé) ou Apify (scraper tiers).
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
@@ -89,15 +164,19 @@ export async function POST(req: NextRequest) {
     const channel = await db.contentChannel.findUnique({ where: { id: channelId } })
     if (!channel) return NextResponse.json({ error: 'Canal introuvable' }, { status: 404 })
 
-    // ── Instagram : Graph API (compte Business/Creator qu'on possède) ──────────
+    // ── Instagram : Graph API (compte possédé) → sinon Apify (scraper tiers) ────
     if (channel.platform === 'INSTAGRAM') {
-      if (!channel.accessToken || !channel.platformUserId) {
-        return NextResponse.json({
-          manualRequired: true,
-          message: "Instagram : connectez le compte (token Graph API + ID du compte Business dans l'édition du canal) pour la synchronisation automatique, sinon saisissez les contenus manuellement.",
-        })
+      if (channel.accessToken && channel.platformUserId) {
+        return await syncInstagram(db, channel)
       }
-      return await syncInstagram(db, channel)
+      const igSettings = await db.agencySetting.findFirst()
+      if (igSettings?.apifyToken) {
+        return await syncInstagramApify(db, channel, igSettings.apifyToken)
+      }
+      return NextResponse.json({
+        manualRequired: true,
+        message: "Instagram : ajoutez un token Apify (Paramètres) pour récupérer automatiquement la data des reels/posts, ou connectez le compte Business (token Graph API + ID), sinon saisissez les contenus manuellement.",
+      })
     }
 
     if (channel.platform !== 'YOUTUBE') {

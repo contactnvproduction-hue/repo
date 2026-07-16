@@ -80,8 +80,8 @@ function Synthese({ data }: { data: Synthese }) {
 
   const kpis = [
     { label: 'CA encaissé', value: eur(data.caYear), sub: trend !== null ? `${trend >= 0 ? '▲' : '▼'} ${Math.abs(trend)}% vs N-1` : `année ${data.year}`, color: '#e8b84b' },
-    { label: 'Charges totales', value: eur(data.chargesTotalYear), sub: `${eur(data.expensesYear)} + ${eur(data.salariesYear)} salaires`, color: '#ef4444' },
-    { label: 'Résultat avant IS', value: eur(data.resultBeforeTax), sub: 'CA − charges − salaires', color: data.resultBeforeTax >= 0 ? '#3b82f6' : '#ef4444' },
+    { label: 'Charges totales', value: eur(data.chargesTotalYear), sub: data.salariesYear > 0 ? `dont ${eur(data.salariesYear)} de salaires` : 'tous pôles confondus', color: '#ef4444' },
+    { label: 'Résultat avant IS', value: eur(data.resultBeforeTax), sub: 'CA − charges', color: data.resultBeforeTax >= 0 ? '#3b82f6' : '#ef4444' },
     { label: `IS (${data.is.effectiveRate}% eff.)`, value: eur(data.taxAmount), sub: 'barème progressif auto', color: '#f59e0b' },
     { label: 'Résultat net', value: eur(data.resultNet), sub: `marge ${data.margin}%`, color: data.resultNet >= 0 ? '#10b981' : '#ef4444' },
   ]
@@ -119,7 +119,6 @@ function Synthese({ data }: { data: Synthese }) {
             <Line2 label="Chiffre d'affaires encaissé" value={data.caYear} bold positive />
             <p className="text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold mt-3 mb-1">Charges</p>
             {polesYear.map(([pole, amount]) => <Line2 key={pole} label={pole} value={-amount} indent />)}
-            {data.salariesYear > 0 && <Line2 label="Masse salariale (équipe)" value={-data.salariesYear} indent />}
             <Line2 label="Total charges" value={-data.chargesTotalYear} bold border />
             <Line2 label="Résultat avant impôt" value={data.resultBeforeTax} bold positive={data.resultBeforeTax >= 0} border />
             {/* Détail IS progressif */}

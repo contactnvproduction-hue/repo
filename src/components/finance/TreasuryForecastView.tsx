@@ -14,10 +14,10 @@ type Month = { key: string; month: number; inflow: number; outflow: number; bala
 type Snap = { id: string; date: string; balance: number; note: string | null }
 
 export function TreasuryForecastView({
-  startBalance, latestDate, months, recurringMonthly, salaryEstimate, snapshots,
+  startBalance, latestDate, months, recurringMonthly, salaryEstimate, recoverableVatYear, recoverableVatMonthly, snapshots,
 }: {
   startBalance: number; latestDate: string | null; months: Month[]
-  recurringMonthly: number; salaryEstimate: number; snapshots: Snap[]
+  recurringMonthly: number; salaryEstimate: number; recoverableVatYear: number; recoverableVatMonthly: number; snapshots: Snap[]
 }) {
   const router = useRouter()
   const [showSnap, setShowSnap] = useState(false)
@@ -77,12 +77,26 @@ export function TreasuryForecastView({
         </div>
       )}
 
+      {/* TVA récupérable estimée */}
+      {recoverableVatYear > 0 && (
+        <div className="bg-nv-dark border border-nv-border rounded-xl p-4 flex items-center justify-between flex-wrap gap-2">
+          <div>
+            <p className="text-[11px] uppercase tracking-wider text-nv-text-faint font-semibold">TVA récupérable estimée — {new Date().getFullYear()}</p>
+            <p className="text-[10px] text-nv-text-faint mt-0.5">Estimée sur les charges (matériel, SaaS, location… 20% ; déplacements ~8% ; salaires/freelances 0%)</p>
+          </div>
+          <div className="text-right">
+            <p className="text-2xl font-bold text-emerald-400 tabular-nums">{eur(recoverableVatYear)}</p>
+            <p className="text-[10px] text-nv-text-faint mt-0.5">~{eur(recoverableVatMonthly)}/mois intégrés aux entrées</p>
+          </div>
+        </div>
+      )}
+
       {/* Hypothèses + timing investissements */}
       <div className="flex items-start gap-2 text-[11px] text-nv-text-faint border-t border-nv-border pt-3">
         <PiggyBank size={13} className="text-primary shrink-0 mt-0.5" />
         <p>
           Sorties récurrentes prises en compte : <span className="text-nv-text-muted">{eur(recurringMonthly)}/mois d&apos;abonnements</span> + <span className="text-nv-text-muted">~{eur(salaryEstimate)}/mois de salaires estimés</span> + vos investissements planifiés.
-          Entrées : MRR des retainers + factures ponctuelles à échoir. Placez vos investissements sur les mois où le solde projeté reste confortable.
+          Entrées : MRR des retainers + factures ponctuelles à échoir{recoverableVatYear > 0 ? ' + TVA récupérable estimée' : ''}. Placez vos investissements sur les mois où le solde projeté reste confortable.
         </p>
       </div>
 

@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/db'
-import { resolvePoles } from '@/lib/expense-poles'
+import { resolvePoles, isSalaryPole } from '@/lib/expense-poles'
 import { computeIS } from '@/lib/tax'
 import { FinanceHub } from './FinanceHub'
 
@@ -12,11 +12,10 @@ export async function FinanceSection({ previsionnel }: { previsionnel: React.Rea
   const endLastYear = new Date(year - 1, 11, 31, 23, 59, 59)
   const db = prisma as any
 
-  const [payments, lastYearAgg, expenses, salaries, settings, investments, recurringExpenses] = await Promise.all([
+  const [payments, lastYearAgg, expenses, settings, investments, recurringExpenses] = await Promise.all([
     prisma.payment.findMany({ where: { confirmed: true, date: { gte: startOfYear } }, select: { amount: true, date: true, invoice: { select: { clientId: true, client: { select: { name: true } } } } } }),
     prisma.payment.aggregate({ where: { confirmed: true, date: { gte: startLastYear, lte: endLastYear } }, _sum: { amount: true } }),
     prisma.expense.findMany({ where: { date: { gte: startOfYear } }, orderBy: { date: 'desc' } }),
-    (async () => { try { return await db.memberPayment.findMany() } catch { return [] } })(),
     prisma.agencySetting.findFirst(),
     (async () => { try { return await db.investmentPlan.findMany({ orderBy: [{ month: 'asc' }, { createdAt: 'asc' }] }) } catch { return [] } })(),
     prisma.expense.findMany({ where: { isRecurring: true }, orderBy: { amount: 'desc' } }),
@@ -35,57 +34,50 @@ export async function FinanceSection({ previsionnel }: { previsionnel: React.Rea
   const caLastYear = lastYearAgg._sum.amount || 0
   const topClients = Object.entries(caByClient).map(([id, v]) => ({ id, ...v })).sort((a, b) => b.total - a.total).slice(0, 8)
 
-  // Charges agence mensuelles + par pôle (mois en cours ET année)
+  // Charges mensuelles + par pôle. Les salaires sont désormais un pôle de charges
+  // (« Salaires ») — plus de saisie séparée dans Équipe. La masse salariale se
+  // calcule à partir des charges taguées « Salaires ».
   const monthlyExpenses = Array(12).fill(0)
   const currentMonthKey = `${year}-${String(now.getMonth() + 1).padStart(2, '0')}`
-  const poleTotals: Record<string, number> = {}      // mois en cours
   const poleTotalsYear: Record<string, number> = {}  // année (pour le compte de résultat)
-  const currentMonthExpenses: any[] = []
+  const monthlySalaries = Array(12).fill(0)
+  const salariesByMonth: Record<string, number> = {}
   for (const e of expenses) {
     const d = new Date(e.date)
     monthlyExpenses[d.getMonth()] += e.amount
     const pole = (e as any).categoryLabel || 'Non catégorisé'
     poleTotalsYear[pole] = (poleTotalsYear[pole] ?? 0) + e.amount
-    const eKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-    if (eKey === currentMonthKey) {
-      currentMonthExpenses.push({ id: e.id, amount: e.amount, description: e.description, date: e.date.toISOString(), pole: (e as any).categoryLabel || null, category: e.category, isRecurring: e.isRecurring })
-      poleTotals[pole] = (poleTotals[pole] ?? 0) + e.amount
+    // Masse salariale = charges du pôle « Salaires »
+    if (isSalaryPole(pole)) {
+      monthlySalaries[d.getMonth()] += e.amount
+      const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      salariesByMonth[k] = (salariesByMonth[k] ?? 0) + e.amount
     }
   }
   const expensesYear = monthlyExpenses.reduce((s, v) => s + v, 0)
-
-  // Masse salariale mensuelle (memberPayment month "YYYY-MM")
-  const monthlySalaries = Array(12).fill(0)
-  let salariesCurrentMonth = 0
-  for (const s of salaries as any[]) {
-    const [y, mo] = String(s.month).split('-').map(Number)
-    if (y === year && mo >= 1 && mo <= 12) monthlySalaries[mo - 1] += s.amount
-    if (s.month === currentMonthKey) salariesCurrentMonth += s.amount
-  }
   const salariesYear = monthlySalaries.reduce((s, v) => s + v, 0)
 
-  // Toutes les charges de l'année + salaires par mois (historique navigable)
+  // Toutes les charges de l'année (historique navigable)
   const allExpenses = expenses.map(e => ({
     id: e.id, amount: e.amount, description: e.description, date: e.date.toISOString(),
     pole: (e as any).categoryLabel || null, category: e.category, isRecurring: e.isRecurring,
   }))
-  const salariesByMonth: Record<string, number> = {}
-  for (const s of salaries as any[]) salariesByMonth[s.month] = (salariesByMonth[s.month] ?? 0) + s.amount
 
-  // Résultat + IS (barème progressif 15% / 25% calculé automatiquement)
-  const eligibleReduced = (settings as any)?.isReducedRate !== false // éligible taux réduit par défaut
-  const chargesTotalYear = expensesYear + salariesYear
+  // Résultat + IS (barème progressif 15% / 25% calculé automatiquement).
+  // Les salaires sont déjà inclus dans expensesYear (pôle Salaires).
+  const eligibleReduced = (settings as any)?.isReducedRate !== false
+  const chargesTotalYear = expensesYear
   const resultBeforeTax = caYear - chargesTotalYear
   const is = computeIS(resultBeforeTax, eligibleReduced)
   const taxAmount = is.total
   const resultNet = resultBeforeTax - taxAmount
   const margin = caYear > 0 ? Math.round((resultNet / caYear) * 100) : 0
 
-  // Série mensuelle CA / charges (agence+salaires) / profit
+  // Série mensuelle CA / charges (salaires inclus) / profit
   const monthly = Array.from({ length: 12 }, (_, m) => ({
     month: m, ca: Math.round(monthlyCa[m]),
-    charges: Math.round(monthlyExpenses[m] + monthlySalaries[m]),
-    profit: Math.round(monthlyCa[m] - monthlyExpenses[m] - monthlySalaries[m]),
+    charges: Math.round(monthlyExpenses[m]),
+    profit: Math.round(monthlyCa[m] - monthlyExpenses[m]),
   }))
 
   const poles = resolvePoles((settings as any)?.expensePoles)

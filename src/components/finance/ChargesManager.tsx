@@ -44,8 +44,9 @@ export function ChargesManager({ data }: { data: Data }) {
   const monthData = monthKeys.map(k => {
     const exp = byMonth[k] ?? []
     const expTotal = exp.reduce((s, e) => s + e.amount, 0)
+    // Les salaires sont désormais un pôle de charges → déjà dans expTotal
     const sal = data.salariesByMonth[k] ?? 0
-    return { key: k, month: Number(k.split('-')[1]) - 1, expenses: exp, expTotal, salaries: sal, total: expTotal + sal, isCurrent: k === data.currentMonthKey }
+    return { key: k, month: Number(k.split('-')[1]) - 1, expenses: exp, expTotal, salaries: sal, total: expTotal, isCurrent: k === data.currentMonthKey }
   })
   const selected = monthData.find(m => m.key === selMonth) ?? monthData[monthData.length - 1]
   const maxTotal = Math.max(1, ...monthData.map(m => m.total))
@@ -55,7 +56,6 @@ export function ChargesManager({ data }: { data: Data }) {
     const t: Record<string, number> = {}
     for (const e of selected.expenses) { const p = e.pole || 'Non catégorisé'; t[p] = (t[p] ?? 0) + e.amount }
     const arr = Object.entries(t).map(([pole, amount]) => ({ pole, amount, color: poles.find(p => p.name === pole)?.color ?? '#94a3b8' }))
-    if (selected.salaries > 0) arr.push({ pole: 'Salaires équipe', amount: selected.salaries, color: '#22d3ee' })
     return arr.sort((a, b) => b.amount - a.amount)
   }, [selected, poles])
   const maxPole = Math.max(1, ...breakdown.map(b => b.amount))
@@ -77,16 +77,17 @@ export function ChargesManager({ data }: { data: Data }) {
         <div className="bg-nv-card border border-nv-border rounded-2xl p-4">
           <p className="text-[11px] uppercase tracking-wider text-nv-text-faint font-semibold">Charges {monthLabelOf(selected.key)}</p>
           <p className="text-2xl font-bold text-white tabular-nums">{eur(selected.total)}</p>
-          <p className="text-[11px] text-nv-text-muted mt-0.5">{eur(selected.expTotal)} + {eur(selected.salaries)} salaires</p>
+          <p className="text-[11px] text-nv-text-muted mt-0.5">{selected.salaries > 0 ? `dont ${eur(selected.salaries)} de salaires` : 'tous pôles confondus'}</p>
         </div>
         <div className="bg-nv-card border border-nv-border rounded-2xl p-4">
-          <p className="text-[11px] uppercase tracking-wider text-nv-text-faint font-semibold">Charges année (hors salaires)</p>
+          <p className="text-[11px] uppercase tracking-wider text-nv-text-faint font-semibold">Charges année (tous pôles)</p>
           <p className="text-2xl font-bold text-white tabular-nums">{eur(data.expensesYear)}</p>
+          <p className="text-[10px] text-nv-text-faint mt-0.5">Salaires inclus</p>
         </div>
         <div className="bg-nv-card border border-nv-border rounded-2xl p-4">
           <p className="text-[11px] uppercase tracking-wider text-nv-text-faint font-semibold flex items-center gap-1"><Users2 size={12} /> Masse salariale année</p>
           <p className="text-2xl font-bold text-white tabular-nums">{eur(data.salariesYear)}</p>
-          <p className="text-[10px] text-nv-text-faint mt-0.5">Saisie dans Équipe → Rémunérations</p>
+          <p className="text-[10px] text-nv-text-faint mt-0.5">Calculée depuis le pôle « Salaires »</p>
         </div>
       </div>
 

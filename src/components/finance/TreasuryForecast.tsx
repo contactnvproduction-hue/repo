@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db'
 import { TreasuryForecastView } from './TreasuryForecastView'
+import { isSalaryPole, estimateRecoverableVat } from '@/lib/expense-poles'
 
 const monthIndex = (d: Date) => d.getFullYear() * 12 + d.getMonth()
 
@@ -13,12 +14,13 @@ export async function TreasuryForecast() {
   const curIdx = monthIndex(now)
   const decIdx = year * 12 + 11
 
-  const [snapshots, retainers, pendingInvoices, recurring, salaries, investments] = await Promise.all([
+  const startOfYear = new Date(year, 0, 1)
+  const [snapshots, retainers, pendingInvoices, recurring, yearExpenses, investments] = await Promise.all([
     (async () => { try { return await db.treasurySnapshot.findMany({ orderBy: { date: 'desc' }, take: 12 }) } catch { return [] } })(),
     prisma.clientRetainer.findMany({ select: { monthlyAmount: true, startDate: true, durationMonths: true } }),
     prisma.invoice.findMany({ where: { status: { in: ['EN_ATTENTE', 'EN_RETARD', 'PARTIELLEMENT_PAYÉE'] } }, select: { totalTTC: true, dueDate: true, notes: true, payments: { select: { amount: true, confirmed: true } } } }),
     prisma.expense.findMany({ where: { isRecurring: true }, select: { amount: true } }),
-    (async () => { try { return await db.memberPayment.findMany({ select: { month: true, amount: true } }) } catch { return [] } })(),
+    prisma.expense.findMany({ where: { date: { gte: startOfYear } }, select: { amount: true, date: true, categoryLabel: true } as any }),
     (async () => { try { return await db.investmentPlan.findMany({ select: { month: true, amount: true } }) } catch { return [] } })(),
   ])
 
@@ -28,11 +30,23 @@ export async function TreasuryForecast() {
   // Récurrents mensuels
   const recurringMonthly = (recurring as any[]).reduce((s, e) => s + e.amount, 0)
 
-  // Estimation masse salariale mensuelle = dernier mois renseigné
+  // Masse salariale = charges du pôle « Salaires ». Estimation mensuelle = dernier
+  // mois renseigné. + TVA récupérable estimée sur l'ensemble des charges de l'année.
   const salByMonth: Record<string, number> = {}
-  for (const s of salaries as any[]) salByMonth[s.month] = (salByMonth[s.month] ?? 0) + s.amount
+  let recoverableVatYear = 0
+  for (const e of yearExpenses as any[]) {
+    const pole = e.categoryLabel || null
+    if (isSalaryPole(pole)) {
+      const k = `${new Date(e.date).getFullYear()}-${String(new Date(e.date).getMonth() + 1).padStart(2, '0')}`
+      salByMonth[k] = (salByMonth[k] ?? 0) + e.amount
+    }
+    recoverableVatYear += estimateRecoverableVat(e.amount, pole)
+  }
   const filled = Object.keys(salByMonth).sort()
   const salaryEstimate = filled.length ? salByMonth[filled[filled.length - 1]] : 0
+  // TVA récupérable lissée par mois (crédit de TVA récupéré ~ trimestriellement,
+  // ici moyenné pour l'estimation de trésorerie)
+  const recoverableVatMonthly = recoverableVatYear / 12
 
   // Investissements planifiés par mois
   const invByMonth: Record<string, number> = {}
@@ -58,7 +72,7 @@ export async function TreasuryForecast() {
         return s + Math.max(0, inv.totalTTC - paid)
       }, 0)
 
-    const inflow = mrr + invoicesIn
+    const inflow = mrr + invoicesIn + recoverableVatMonthly
     const outflow = recurringMonthly + salaryEstimate + (invByMonth[key] ?? 0)
     balance = balance + inflow - outflow
     months.push({ key, month: m, inflow: Math.round(inflow), outflow: Math.round(outflow), balance: Math.round(balance), isCurrent: idx === curIdx })
@@ -71,6 +85,8 @@ export async function TreasuryForecast() {
       months={months}
       recurringMonthly={Math.round(recurringMonthly)}
       salaryEstimate={Math.round(salaryEstimate)}
+      recoverableVatYear={Math.round(recoverableVatYear)}
+      recoverableVatMonthly={Math.round(recoverableVatMonthly)}
       snapshots={(snapshots as any[]).map(s => ({ id: s.id, date: new Date(s.date).toISOString(), balance: s.balance, note: s.note }))}
     />
   )
