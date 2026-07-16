@@ -535,10 +535,14 @@ function ScreenshotImportModal({ channels, initialChannelId, onClose, onDone }: 
               </div>
             )}
 
-            <p className="text-[11px] text-nv-text-faint flex items-start gap-1.5">
-              <Wand2 size={12} className="text-primary shrink-0 mt-0.5" />
-              Astuce : dans {isYT ? 'YouTube Studio → Contenu (colonnes Vues/Commentaires/J\'aime)' : 'Instagram → Insights → Contenu partagé, ou le tableau de bord pro'}, capture la liste de tes contenus du mois. L&apos;IA lit tous les chiffres d&apos;un coup.
-            </p>
+            <div className="text-[11px] text-nv-text-faint bg-nv-black/40 border border-nv-border rounded-lg p-2.5 space-y-1">
+              <p className="flex items-center gap-1.5 text-nv-text-muted font-medium"><Wand2 size={12} className="text-primary shrink-0" /> Meilleure source de capture</p>
+              {isYT ? (
+                <p>YouTube Studio (sur ordi) → <span className="text-nv-text-muted">Contenu</span> : le tableau affiche déjà Vues / Commentaires / J&apos;aime par vidéo. Capture la liste du mois, scrolle et refais une capture si besoin (jus&apos;à 6).</p>
+              ) : (
+                <p><span className="text-nv-text-muted">Meta Business Suite</span> (business.facebook.com, sur ordi) → <span className="text-nv-text-muted">Contenu</span> : un tableau avec vues, j&apos;aime et commentaires par publication (comme YouTube Studio). Filtre sur le mois et capture le tableau. C&apos;est LA source qui donne tout d&apos;un coup — bien plus simple que l&apos;app Insights où chaque écran ne montre qu&apos;une seule métrique à la fois.</p>
+              )}
+            </div>
 
             <button onClick={analyze} disabled={analyzing || images.length === 0} className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-primary text-nv-black rounded-lg font-medium disabled:opacity-60">
               {analyzing ? <><Loader2 size={16} className="animate-spin" /> Analyse en cours…</> : <><Sparkles size={16} /> Analyser avec l&apos;IA</>}

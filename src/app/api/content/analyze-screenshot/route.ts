@@ -57,6 +57,7 @@ Règles impératives :
 - format : ${formats}.
 - Convertis les nombres abrégés en entiers : "1,2 k" ou "1.2K" → 1200 ; "12,3 k" → 12300 ; "1,5 M" → 1500000 ; "834" → 834.
 - Si une métrique n'est pas visible pour un contenu, mets 0 (ne devine pas).
+- Si plusieurs captures sont fournies : elles se complètent (scroll d'un même tableau, ou même contenu trié par métriques différentes). Un contenu qui apparaît dans plusieurs captures = UNE seule ligne, en gardant à chaque fois la valeur la plus complète (non nulle) de chaque métrique. Reconnais le même contenu par sa vignette/légende identique.
 - publishedDay : le jour du mois (1-31) si une date est visible, sinon null.
 - followers : le nombre total d'abonnés du compte s'il est affiché quelque part, sinon null.
 - title : reprends le texte/la légende visible ; si aucun, mets "Contenu ${isYT ? 'YouTube' : 'Instagram'}".`
