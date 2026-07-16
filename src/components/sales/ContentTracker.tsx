@@ -3,8 +3,9 @@
 import { useState, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  Plus, X, Check, Loader2, RefreshCw, Trash2, Eye, Heart, Flame,
-  TrendingUp, Video, Camera, Music2, ExternalLink, Trophy, Layers, KeyRound,
+  Plus, X, Check, Loader2, Trash2, Eye, Heart, Flame,
+  TrendingUp, Video, Camera, Music2, ExternalLink, Trophy, Layers,
+  Sparkles, ImageUp, Wand2,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -41,11 +42,10 @@ export function ContentTracker({ initialChannels, initialPieces }: { initialChan
   const [period, setPeriod] = useState<string>('30')
   const [ownerFilter, setOwnerFilter] = useState<string>('')
   const [rankBy, setRankBy] = useState<'views' | 'engagement'>('views')
-  const [syncing, setSyncing] = useState<string | null>(null)
-  const [syncingAll, setSyncingAll] = useState(false)
   const [showAddChannel, setShowAddChannel] = useState(false)
   const [showAddPiece, setShowAddPiece] = useState(false)
-  const [showApify, setShowApify] = useState(false)
+  const [showImport, setShowImport] = useState(false)
+  const [importChannelId, setImportChannelId] = useState<string>('')
 
   const owners = useMemo(() => Array.from(new Set(channels.map(c => c.owner))), [channels])
 
@@ -101,22 +101,6 @@ export function ContentTracker({ initialChannels, initialPieces }: { initialChan
     [...filtered].sort((a, b) => rankBy === 'views' ? b.views - a.views : b.engagementRate - a.engagementRate).slice(0, 8),
     [filtered, rankBy])
 
-  const syncChannel = async (ch: Channel) => {
-    setSyncing(ch.id)
-    try {
-      const res = await fetch('/api/content/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ channelId: ch.id }) })
-      const json = await res.json()
-      if (json.manualRequired) { toast(json.message, { icon: 'ℹ️', duration: 5000 }); return }
-      if (!res.ok) throw new Error(json.error)
-      toast.success(`${ch.owner} · ${json.synced} contenus synchronisés`)
-      // Recharge les pièces
-      const pr = await fetch('/api/content/pieces?from=' + new Date(new Date().getFullYear() - 1, 0, 1).toISOString())
-      if (pr.ok) setPieces(await pr.json())
-      const cr = await fetch('/api/content/channels')
-      if (cr.ok) setChannels(await cr.json())
-    } catch (e: any) { toast.error(e.message ?? 'Erreur') } finally { setSyncing(null) }
-  }
-
   const deleteChannel = async (id: string) => {
     if (!confirm('Supprimer ce canal et tout son contenu ?')) return
     await fetch(`/api/content/channels?id=${id}`, { method: 'DELETE' })
@@ -133,23 +117,6 @@ export function ContentTracker({ initialChannels, initialPieces }: { initialChan
     if (pr.ok) setPieces(await pr.json())
   }
 
-  const syncAll = async () => {
-    const auto = channels.filter(c => c.platform === 'YOUTUBE' || (c.platform === 'INSTAGRAM'))
-    if (auto.length === 0) { toast('Aucun canal à synchroniser automatiquement', { icon: 'ℹ️' }); return }
-    setSyncingAll(true)
-    let ok = 0
-    for (const ch of auto) {
-      try {
-        const res = await fetch('/api/content/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ channelId: ch.id }) })
-        const json = await res.json()
-        if (res.ok && !json.manualRequired) ok++
-      } catch {}
-    }
-    await reload()
-    setSyncingAll(false)
-    toast.success(`${ok} canal(aux) synchronisé(s)`)
-  }
-
   return (
     <div className="space-y-5">
       {/* Canaux */}
@@ -158,17 +125,14 @@ export function ContentTracker({ initialChannels, initialPieces }: { initialChan
           <h3 className="text-sm font-semibold text-white flex items-center gap-2"><Layers size={15} className="text-primary" /> Canaux suivis</h3>
           <div className="flex gap-2">
             {channels.length > 0 && (
-              <button onClick={syncAll} disabled={syncingAll} className="text-xs px-3 py-1.5 rounded-lg border border-primary/40 text-primary hover:bg-primary/10 transition-colors flex items-center gap-1 disabled:opacity-60">
-                {syncingAll ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} Tout synchroniser
+              <button onClick={() => setShowImport(true)} title="Importer le bilan mensuel via une capture d'écran (analyse par IA)" className="text-xs px-3 py-1.5 rounded-lg bg-primary text-nv-black font-medium flex items-center gap-1">
+                <Sparkles size={12} /> Importer un bilan
               </button>
             )}
-            <button onClick={() => setShowApify(true)} title="Configurer le token Apify pour synchroniser Instagram" className="text-xs px-3 py-1.5 rounded-lg border border-nv-border text-nv-text-muted hover:text-nv-text transition-colors flex items-center gap-1">
-              <KeyRound size={12} /> Token Insta
-            </button>
             <button onClick={() => setShowAddPiece(true)} className="text-xs px-3 py-1.5 rounded-lg border border-nv-border text-nv-text-muted hover:text-nv-text transition-colors flex items-center gap-1">
               <Plus size={12} /> Contenu manuel
             </button>
-            <button onClick={() => setShowAddChannel(true)} className="text-xs px-3 py-1.5 rounded-lg bg-primary text-nv-black font-medium flex items-center gap-1">
+            <button onClick={() => setShowAddChannel(true)} className="text-xs px-3 py-1.5 rounded-lg border border-nv-border text-nv-text-muted hover:text-nv-text transition-colors flex items-center gap-1">
               <Plus size={12} /> Ajouter un canal
             </button>
           </div>
@@ -191,9 +155,7 @@ export function ContentTracker({ initialChannels, initialPieces }: { initialChan
                       {ch.followers != null && ` · ${fmt(ch.followers)} abo`}
                     </p>
                   </div>
-                  <button onClick={() => syncChannel(ch)} disabled={syncing === ch.id} title="Synchroniser" className="p-1.5 text-nv-text-muted hover:text-primary transition-colors shrink-0">
-                    {syncing === ch.id ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
-                  </button>
+                  <button onClick={() => { setImportChannelId(ch.id); setShowImport(true) }} title="Importer un bilan pour ce canal" className="p-1.5 text-nv-text-muted hover:text-primary transition-colors shrink-0"><Sparkles size={13} /></button>
                   <button onClick={() => deleteChannel(ch.id)} className="p-1.5 text-nv-text-faint hover:text-red-400 transition-colors shrink-0"><Trash2 size={13} /></button>
                 </div>
               )
@@ -329,57 +291,23 @@ export function ContentTracker({ initialChannels, initialPieces }: { initialChan
 
       {showAddChannel && typeof document !== 'undefined' && createPortal(<AddChannelModal onClose={() => setShowAddChannel(false)} onDone={reload} />, document.body)}
       {showAddPiece && typeof document !== 'undefined' && createPortal(<AddPieceModal channels={channels} onClose={() => setShowAddPiece(false)} onDone={reload} />, document.body)}
-      {showApify && typeof document !== 'undefined' && createPortal(<ApifyTokenModal onClose={() => setShowApify(false)} />, document.body)}
+      {showImport && channels.length > 0 && typeof document !== 'undefined' && createPortal(<ScreenshotImportModal channels={channels} initialChannelId={importChannelId} onClose={() => { setShowImport(false); setImportChannelId('') }} onDone={reload} />, document.body)}
     </div>
   )
 }
 
 // Configure le token Apify utilisé pour scraper Instagram (data reels/posts complète)
-function ApifyTokenModal({ onClose }: { onClose: () => void }) {
-  const [token, setToken] = useState('')
-  const [saving, setSaving] = useState(false)
-  const inp = 'w-full bg-nv-black border border-nv-border rounded-lg px-3 py-2 text-sm text-white placeholder-nv-text-faint focus:outline-none focus:border-primary/60'
-  const save = async () => {
-    if (!token.trim()) { toast.error('Token requis'); return }
-    setSaving(true)
-    try {
-      const res = await fetch('/api/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ apifyToken: token.trim() }) })
-      if (!res.ok) throw new Error()
-      toast.success('Token Apify enregistré — synchronisez vos comptes Instagram'); onClose()
-    } catch { toast.error('Erreur') } finally { setSaving(false) }
-  }
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)' }} onClick={onClose}>
-      <div className="w-full max-w-sm bg-nv-dark border border-nv-border rounded-2xl p-5 space-y-3" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between"><h3 className="text-base font-semibold text-white flex items-center gap-2"><KeyRound size={16} className="text-primary" /> Token Apify (Instagram)</h3><button onClick={onClose}><X size={16} className="text-nv-text-muted" /></button></div>
-        <p className="text-xs text-nv-text-muted">Permet de récupérer automatiquement la data complète des reels/posts (vues, likes, commentaires) de n&apos;importe quel compte public, sans compte Business Meta.</p>
-        <ol className="text-[11px] text-nv-text-faint space-y-1 list-decimal pl-4">
-          <li>Créez un compte sur <span className="text-nv-text-muted">apify.com</span> (offre gratuite mensuelle incluse).</li>
-          <li>Settings → Integrations → <span className="text-nv-text-muted">API tokens</span> → copiez le <em>Personal API token</em>.</li>
-          <li>Collez-le ci-dessous. La sync utilisera l&apos;acteur <span className="text-nv-text-muted">apify/instagram-scraper</span> sur le @handle de chaque canal.</li>
-        </ol>
-        <input className={inp} type="password" placeholder="apify_api_..." value={token} onChange={e => setToken(e.target.value)} autoFocus />
-        <button onClick={save} disabled={saving} className="w-full flex items-center justify-center gap-1.5 py-2 bg-primary text-nv-black rounded-lg font-medium disabled:opacity-60">
-          {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Enregistrer
-        </button>
-      </div>
-    </div>
-  )
-}
-
 function AddChannelModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const [owner, setOwner] = useState('')
   const [platform, setPlatform] = useState('INSTAGRAM')
   const [url, setUrl] = useState('')
-  const [accessToken, setAccessToken] = useState('')
-  const [platformUserId, setPlatformUserId] = useState('')
   const [saving, setSaving] = useState(false)
   const inp = 'w-full bg-nv-black border border-nv-border rounded-lg px-3 py-2 text-sm text-white placeholder-nv-text-faint focus:outline-none focus:border-primary/60'
   const save = async () => {
     if (!owner.trim() || !url.trim()) { toast.error('Compte et lien requis'); return }
     setSaving(true)
     try {
-      const res = await fetch('/api/content/channels', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ owner, platform, url, accessToken, platformUserId }) })
+      const res = await fetch('/api/content/channels', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ owner, platform, url }) })
       if (!res.ok) throw new Error()
       toast.success('Canal ajouté'); onDone(); onClose()
     } catch { toast.error('Erreur') } finally { setSaving(false) }
@@ -397,19 +325,226 @@ function AddChannelModal({ onClose, onDone }: { onClose: () => void; onDone: () 
           ))}
         </div>
         <input className={inp} placeholder={platform === 'YOUTUBE' ? 'https://youtube.com/@chaine' : 'https://instagram.com/compte'} value={url} onChange={e => setUrl(e.target.value)} />
-        {platform === 'YOUTUBE' && <p className="text-[11px] text-nv-text-faint">YouTube se synchronise automatiquement (vues, likes par vidéo) via la clé API des Paramètres.</p>}
-        {platform === 'TIKTOK' && <p className="text-[11px] text-nv-text-faint">TikTok : ajoutez les contenus manuellement (pas d&apos;API publique fiable).</p>}
-        {platform === 'INSTAGRAM' && (
-          <div className="space-y-2 pt-1 border-t border-nv-border">
-            <p className="text-[11px] text-nv-text-muted">Deux options de sync automatique : soit un compte Business/Creator que vous possédez (Graph API ci-dessous), soit le token Apify (bouton « Token Insta ») qui scrape n&apos;importe quel compte public via son @handle. Laissez vide pour la saisie manuelle.</p>
-            <input className={inp} placeholder="ID du compte Instagram Business (optionnel)" value={platformUserId} onChange={e => setPlatformUserId(e.target.value)} />
-            <input className={inp} placeholder="Token Graph API longue durée (optionnel)" value={accessToken} onChange={e => setAccessToken(e.target.value)} />
-            <p className="text-[10px] text-nv-text-faint">Graph API : developers.facebook.com → app → Instagram Graph API (permissions instagram_basic, instagram_manage_insights). Sinon, le token Apify suffit et récupère la data des reels.</p>
-          </div>
-        )}
+        <p className="text-[11px] text-nv-text-faint flex items-start gap-1.5"><Sparkles size={12} className="text-primary shrink-0 mt-0.5" /> Une fois le canal ajouté, cliquez sur « Importer un bilan » : déposez une capture de vos stats mensuelles ({platform === 'YOUTUBE' ? 'YouTube Studio' : 'Instagram Insights'}), l&apos;IA remplit tout automatiquement.</p>
         <button onClick={save} disabled={saving} className="w-full flex items-center justify-center gap-1.5 py-2 bg-primary text-nv-black rounded-lg font-medium disabled:opacity-60">
           {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Ajouter
         </button>
+      </div>
+    </div>
+  )
+}
+
+// Downscale une image (canvas) → data URL JPEG léger pour l'analyse vision
+function fileToScaledDataUrl(file: File, maxDim = 1500, quality = 0.85): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new window.Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height))
+      const w = Math.max(1, Math.round(img.width * scale))
+      const h = Math.max(1, Math.round(img.height * scale))
+      const c = document.createElement('canvas')
+      c.width = w; c.height = h
+      const ctx = c.getContext('2d')
+      if (!ctx) { URL.revokeObjectURL(url); reject(new Error('canvas')); return }
+      ctx.drawImage(img, 0, 0, w, h)
+      URL.revokeObjectURL(url)
+      resolve(c.toDataURL('image/jpeg', quality))
+    }
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('image')) }
+    img.src = url
+  })
+}
+
+type ExtractedRow = { title: string; format: string; views: number; likes: number; comments: number; shares: number; publishedDay: number | null }
+const IG_FORMATS = ['REEL', 'POST']
+const YT_FORMATS = ['SHORT', 'LONG']
+
+// Import d'un bilan mensuel par capture d'écran, analysé par Claude (vision)
+function ScreenshotImportModal({ channels, initialChannelId, onClose, onDone }: {
+  channels: Channel[]; initialChannelId?: string; onClose: () => void; onDone: () => void
+}) {
+  const [channelId, setChannelId] = useState(initialChannelId || channels[0]?.id || '')
+  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7))
+  const [images, setImages] = useState<string[]>([])
+  const [analyzing, setAnalyzing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [rows, setRows] = useState<ExtractedRow[] | null>(null)
+  const [detectedFollowers, setDetectedFollowers] = useState<number | null>(null)
+  const [needKey, setNeedKey] = useState(false)
+  const [apiKey, setApiKey] = useState('')
+  const [savingKey, setSavingKey] = useState(false)
+
+  const channel = channels.find(c => c.id === channelId)
+  const isYT = channel?.platform === 'YOUTUBE'
+  const formats = isYT ? YT_FORMATS : IG_FORMATS
+  const inp = 'w-full bg-nv-black border border-nv-border rounded-lg px-3 py-2 text-sm text-white placeholder-nv-text-faint focus:outline-none focus:border-primary/60'
+
+  const onFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return
+    const arr = Array.from(files).slice(0, 6 - images.length)
+    try {
+      const dataUrls = await Promise.all(arr.map(f => fileToScaledDataUrl(f)))
+      setImages(prev => [...prev, ...dataUrls].slice(0, 6))
+    } catch { toast.error('Impossible de lire une image') }
+  }
+
+  const saveKey = async () => {
+    if (!apiKey.trim()) { toast.error('Clé requise'); return }
+    setSavingKey(true)
+    try {
+      const res = await fetch('/api/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ anthropicApiKey: apiKey.trim() }) })
+      if (!res.ok) throw new Error()
+      toast.success('Clé IA enregistrée'); setNeedKey(false); analyze()
+    } catch { toast.error('Erreur') } finally { setSavingKey(false) }
+  }
+
+  const analyze = async () => {
+    if (!channelId) { toast.error('Choisissez un canal'); return }
+    if (images.length === 0) { toast.error('Ajoutez au moins une capture'); return }
+    setAnalyzing(true)
+    try {
+      const res = await fetch('/api/content/analyze-screenshot', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ images, platform: channel?.platform }),
+      })
+      const json = await res.json()
+      if (json.needKey) { setNeedKey(true); return }
+      if (!res.ok) throw new Error(json.error || 'Erreur')
+      const extracted: ExtractedRow[] = (json.pieces || []).map((p: any) => ({
+        title: p.title, format: formats.includes(p.format) ? p.format : formats[0],
+        views: p.views, likes: p.likes, comments: p.comments, shares: p.shares || 0,
+        publishedDay: p.publishedDay ?? null,
+      }))
+      setRows(extracted)
+      setDetectedFollowers(json.followers ?? null)
+      if (extracted.length === 0) toast('Aucun contenu détecté — réessayez avec une capture plus nette', { icon: 'ℹ️' })
+      else toast.success(`${extracted.length} contenu(s) détecté(s)`)
+    } catch (e: any) { toast.error(e.message ?? 'Erreur') } finally { setAnalyzing(false) }
+  }
+
+  const setRow = (i: number, patch: Partial<ExtractedRow>) => setRows(rs => rs!.map((r, idx) => idx === i ? { ...r, ...patch } : r))
+  const delRow = (i: number) => setRows(rs => rs!.filter((_, idx) => idx !== i))
+
+  const save = async () => {
+    if (!rows || rows.length === 0) { toast.error('Rien à enregistrer'); return }
+    const [y, mo] = month.split('-').map(Number)
+    setSaving(true)
+    try {
+      const items = rows.map(r => ({
+        title: r.title, format: r.format, views: r.views, likes: r.likes, comments: r.comments, shares: r.shares,
+        publishedAt: new Date(y, mo - 1, r.publishedDay && r.publishedDay >= 1 && r.publishedDay <= 28 ? r.publishedDay : 15).toISOString(),
+      }))
+      const res = await fetch('/api/content/pieces', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ channelId, items }) })
+      if (!res.ok) throw new Error()
+      if (detectedFollowers != null) {
+        await fetch('/api/content/channels', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: channelId, followers: detectedFollowers }) }).catch(() => {})
+      }
+      toast.success(`${items.length} contenu(s) enregistré(s)`); onDone(); onClose()
+    } catch { toast.error('Erreur à l\'enregistrement') } finally { setSaving(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)' }} onClick={onClose}>
+      <div className="w-full max-w-2xl bg-nv-dark border border-nv-border rounded-2xl p-5 space-y-3 max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-semibold text-white flex items-center gap-2"><Sparkles size={16} className="text-primary" /> Importer un bilan mensuel</h3>
+          <button onClick={onClose}><X size={16} className="text-nv-text-muted" /></button>
+        </div>
+
+        {needKey ? (
+          <div className="space-y-3">
+            <p className="text-xs text-nv-text-muted">Une clé API Claude est nécessaire pour analyser les captures. C&apos;est la seule config, une fois pour toutes.</p>
+            <ol className="text-[11px] text-nv-text-faint space-y-1 list-decimal pl-4">
+              <li>Va sur <span className="text-nv-text-muted">console.anthropic.com</span> → API Keys → <em>Create Key</em>.</li>
+              <li>Copie la clé (commence par <span className="text-nv-text-muted">sk-ant-…</span>) et colle-la ci-dessous.</li>
+            </ol>
+            <input className={inp} type="password" placeholder="sk-ant-..." value={apiKey} onChange={e => setApiKey(e.target.value)} autoFocus />
+            <div className="flex gap-2">
+              <button onClick={() => setNeedKey(false)} className="flex-1 py-2 rounded-lg border border-nv-border text-nv-text-muted text-sm">Retour</button>
+              <button onClick={saveKey} disabled={savingKey} className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-primary text-nv-black rounded-lg font-medium disabled:opacity-60">
+                {savingKey ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Enregistrer & analyser
+              </button>
+            </div>
+          </div>
+        ) : rows ? (
+          // ── Étape 2 : revue des contenus détectés ──
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-nv-text-muted">{rows.length} contenu(s) — vérifie/corrige puis enregistre.</p>
+              {detectedFollowers != null && <span className="text-[11px] text-emerald-400">{fmt(detectedFollowers)} abonnés détectés</span>}
+            </div>
+            <div className="border border-nv-border rounded-xl overflow-hidden">
+              <div className="grid grid-cols-[1fr_70px_60px_60px_60px_28px] gap-1 px-2 py-1.5 bg-nv-card text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold">
+                <span>Titre</span><span>Format</span><span>Vues</span><span>Likes</span><span>Comm.</span><span></span>
+              </div>
+              <div className="max-h-[40vh] overflow-y-auto divide-y divide-nv-border/50">
+                {rows.map((r, i) => (
+                  <div key={i} className="grid grid-cols-[1fr_70px_60px_60px_60px_28px] gap-1 px-2 py-1.5 items-center">
+                    <input className="bg-transparent text-xs text-white truncate focus:outline-none" value={r.title} onChange={e => setRow(i, { title: e.target.value })} />
+                    <select className="bg-nv-black border border-nv-border rounded px-1 py-1 text-[11px] text-white" value={r.format} onChange={e => setRow(i, { format: e.target.value })}>
+                      {formats.map(f => <option key={f} value={f}>{FORMAT_LABEL[f] ?? f}</option>)}
+                    </select>
+                    <input type="number" className="bg-nv-black border border-nv-border rounded px-1 py-1 text-[11px] text-white text-right tabular-nums" value={r.views} onChange={e => setRow(i, { views: Number(e.target.value) })} />
+                    <input type="number" className="bg-nv-black border border-nv-border rounded px-1 py-1 text-[11px] text-white text-right tabular-nums" value={r.likes} onChange={e => setRow(i, { likes: Number(e.target.value) })} />
+                    <input type="number" className="bg-nv-black border border-nv-border rounded px-1 py-1 text-[11px] text-white text-right tabular-nums" value={r.comments} onChange={e => setRow(i, { comments: Number(e.target.value) })} />
+                    <button onClick={() => delRow(i)} className="text-nv-text-faint hover:text-red-400 flex justify-center"><Trash2 size={13} /></button>
+                  </div>
+                ))}
+                {rows.length === 0 && <p className="text-xs text-nv-text-faint text-center py-4">Aucune ligne. Reviens en arrière et réessaie.</p>}
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => { setRows(null); setDetectedFollowers(null) }} className="flex-1 py-2 rounded-lg border border-nv-border text-nv-text-muted text-sm">Nouvelle capture</button>
+              <button onClick={save} disabled={saving || rows.length === 0} className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-primary text-nv-black rounded-lg font-medium disabled:opacity-60">
+                {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Enregistrer {rows.length} contenu(s)
+              </button>
+            </div>
+          </div>
+        ) : (
+          // ── Étape 1 : canal + mois + captures ──
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[11px] text-nv-text-muted block mb-1">Canal</label>
+                <select className={inp} value={channelId} onChange={e => { setChannelId(e.target.value) }}>
+                  {channels.map(c => <option key={c.id} value={c.id}>{c.owner} · {c.platform === 'YOUTUBE' ? 'YouTube' : c.platform === 'INSTAGRAM' ? 'Instagram' : 'TikTok'}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-[11px] text-nv-text-muted block mb-1">Mois du bilan</label>
+                <input type="month" className={inp} value={month} onChange={e => setMonth(e.target.value)} />
+              </div>
+            </div>
+
+            <label className="block border-2 border-dashed border-nv-border rounded-xl p-5 text-center cursor-pointer hover:border-primary/50 transition-colors">
+              <input type="file" accept="image/png,image/jpeg,image/webp" multiple className="hidden" onChange={e => onFiles(e.target.files)} />
+              <ImageUp size={24} className="text-nv-text-muted mx-auto mb-1.5" />
+              <p className="text-sm text-nv-text">Dépose tes captures d&apos;écran ({isYT ? 'YouTube Studio' : 'Instagram Insights'})</p>
+              <p className="text-[11px] text-nv-text-faint mt-0.5">jusqu&apos;à 6 images · vues, likes, commentaires par contenu</p>
+            </label>
+
+            {images.length > 0 && (
+              <div className="flex gap-2 flex-wrap">
+                {images.map((src, i) => (
+                  <div key={i} className="relative">
+                    <img src={src} alt="" className="w-16 h-16 object-cover rounded-lg border border-nv-border" />
+                    <button onClick={() => setImages(imgs => imgs.filter((_, idx) => idx !== i))} className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-nv-black border border-nv-border flex items-center justify-center text-nv-text-muted hover:text-red-400"><X size={11} /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <p className="text-[11px] text-nv-text-faint flex items-start gap-1.5">
+              <Wand2 size={12} className="text-primary shrink-0 mt-0.5" />
+              Astuce : dans {isYT ? 'YouTube Studio → Contenu (colonnes Vues/Commentaires/J\'aime)' : 'Instagram → Insights → Contenu partagé, ou le tableau de bord pro'}, capture la liste de tes contenus du mois. L&apos;IA lit tous les chiffres d&apos;un coup.
+            </p>
+
+            <button onClick={analyze} disabled={analyzing || images.length === 0} className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-primary text-nv-black rounded-lg font-medium disabled:opacity-60">
+              {analyzing ? <><Loader2 size={16} className="animate-spin" /> Analyse en cours…</> : <><Sparkles size={16} /> Analyser avec l&apos;IA</>}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

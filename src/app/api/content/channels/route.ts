@@ -55,6 +55,7 @@ export async function PATCH(req: NextRequest) {
     if ('handle' in b) data.handle = b.handle?.trim() || null
     if ('accessToken' in b) data.accessToken = b.accessToken?.trim() || null
     if ('platformUserId' in b) data.platformUserId = b.platformUserId?.trim() || null
+    if ('followers' in b && b.followers != null) data.followers = Number(b.followers)
     const channel = await db.contentChannel.update({ where: { id }, data })
     return NextResponse.json(channel)
   } catch (e) {

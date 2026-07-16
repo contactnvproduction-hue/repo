@@ -29,6 +29,33 @@ export async function POST(req: NextRequest) {
   if (!session?.user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   try {
     const b = await req.json()
+
+    // Création en masse (import d'un bilan mensuel par screenshot)
+    if (Array.isArray(b.items)) {
+      if (!b.channelId) return NextResponse.json({ error: 'channelId requis' }, { status: 400 })
+      const rows = b.items
+        .filter((it: any) => it && String(it.title || '').trim())
+        .map((it: any) => {
+          const views = Number(it.views) || 0
+          const likes = Number(it.likes) || 0
+          const comments = Number(it.comments) || 0
+          const shares = Number(it.shares) || 0
+          return {
+            channelId: b.channelId,
+            title: String(it.title).trim().slice(0, 200),
+            url: it.url?.trim() || null,
+            format: ['SHORT', 'LONG', 'REEL', 'POST', 'AUTRE'].includes(it.format) ? it.format : 'AUTRE',
+            publishedAt: it.publishedAt ? new Date(it.publishedAt) : new Date(),
+            views, likes, comments, shares,
+            engagementRate: engagement(likes, comments, shares, views),
+            manual: true,
+          }
+        })
+      if (rows.length === 0) return NextResponse.json({ error: 'Aucun contenu à enregistrer' }, { status: 400 })
+      await db.contentPiece.createMany({ data: rows })
+      return NextResponse.json({ created: rows.length }, { status: 201 })
+    }
+
     if (!b.channelId || !b.title?.trim()) return NextResponse.json({ error: 'channelId et title requis' }, { status: 400 })
     const views = Number(b.views) || 0
     const likes = Number(b.likes) || 0
