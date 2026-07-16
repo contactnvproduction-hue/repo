@@ -14,10 +14,10 @@ type Month = { key: string; month: number; inflow: number; outflow: number; bala
 type Snap = { id: string; date: string; balance: number; note: string | null }
 
 export function TreasuryForecastView({
-  startBalance, latestDate, months, recurringMonthly, salaryEstimate, recoverableVatYear, recoverableVatMonthly, snapshots,
+  startBalance, latestDate, months, avgMonthlyCharges, chargesMonthsUsed, recoverableVatYear, recoverableVatMonthly, snapshots,
 }: {
   startBalance: number; latestDate: string | null; months: Month[]
-  recurringMonthly: number; salaryEstimate: number; recoverableVatYear: number; recoverableVatMonthly: number; snapshots: Snap[]
+  avgMonthlyCharges: number; chargesMonthsUsed: number; recoverableVatYear: number; recoverableVatMonthly: number; snapshots: Snap[]
 }) {
   const router = useRouter()
   const [showSnap, setShowSnap] = useState(false)
@@ -95,7 +95,7 @@ export function TreasuryForecastView({
       <div className="flex items-start gap-2 text-[11px] text-nv-text-faint border-t border-nv-border pt-3">
         <PiggyBank size={13} className="text-primary shrink-0 mt-0.5" />
         <p>
-          Sorties récurrentes prises en compte : <span className="text-nv-text-muted">{eur(recurringMonthly)}/mois d&apos;abonnements</span> + <span className="text-nv-text-muted">~{eur(salaryEstimate)}/mois de salaires estimés</span> + vos investissements planifiés.
+          Sorties estimées : <span className="text-nv-text-muted">~{eur(avgMonthlyCharges)}/mois de charges{chargesMonthsUsed > 0 ? ` (moyenne des ${chargesMonthsUsed} derniers mois, tous pôles + salaires)` : ''}</span> + vos investissements planifiés.
           Entrées : MRR des retainers + factures ponctuelles à échoir{recoverableVatYear > 0 ? ' + TVA récupérable estimée' : ''}. Placez vos investissements sur les mois où le solde projeté reste confortable.
         </p>
       </div>

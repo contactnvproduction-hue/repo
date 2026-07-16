@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   RefreshCw, Loader2, AlertTriangle, Receipt, Repeat, Wallet,
-  TrendingUp, TrendingDown, Users2, Building2,
+  TrendingUp, TrendingDown, Building2,
 } from 'lucide-react'
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, Legend,
@@ -225,7 +225,7 @@ export function SalesForecast({
           <div className="bg-nv-dark border border-nv-border rounded-xl p-4">
             <p className="text-xs text-nv-text-muted flex items-center gap-1.5 mb-1"><TrendingDown size={13} className="text-red-400" />Charges prévues</p>
             <p className="text-2xl font-bold text-white">{eur(selected.chargesTotal)}</p>
-            <p className="text-[11px] text-nv-text-faint mt-0.5">{eur(selected.chargesFixed)} fixes + {eur(selected.chargesTeam)} équipe{selected.chargesTeamEstimated ? ' (est.)' : ''}</p>
+            <p className="text-[11px] text-nv-text-faint mt-0.5">{selected.chargesMonthsUsed > 0 ? `moyenne des ${selected.chargesMonthsUsed} derniers mois` : 'aucune charge saisie'}</p>
           </div>
           <div className={`rounded-xl p-4 border ${selected.profit >= 0 ? 'bg-emerald-500/5 border-emerald-500/25' : 'bg-red-500/5 border-red-500/25'}`}>
             <p className="text-xs text-nv-text-muted flex items-center gap-1.5 mb-1"><Wallet size={13} className={selected.profit >= 0 ? 'text-emerald-400' : 'text-red-400'} />Profit net prévu</p>
@@ -308,20 +308,12 @@ export function SalesForecast({
               <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-nv-border bg-nv-dark text-sm">
                 <Building2 className="w-3.5 h-3.5 text-nv-text-muted shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <span className="text-nv-text">Charges fixes</span>
-                  <span className="text-[10px] text-nv-text-faint block">Dépenses récurrentes (Finance)</span>
-                </div>
-                <span className="font-semibold text-nv-text shrink-0">{eur(selected.chargesFixed)}</span>
-              </div>
-              <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-nv-border bg-nv-dark text-sm">
-                <Users2 className="w-3.5 h-3.5 text-nv-text-muted shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <span className="text-nv-text">Équipe (monteurs, freelances…)</span>
+                  <span className="text-nv-text">Charges (estimation)</span>
                   <span className="text-[10px] text-nv-text-faint block">
-                    {selected.chargesTeamEstimated ? 'Estimation — dernier mois saisi (Équipe → Rémunérations)' : 'Montant saisi pour ce mois'}
+                    {selected.chargesMonthsUsed > 0 ? `Moyenne des ${selected.chargesMonthsUsed} derniers mois — tous pôles, salaires inclus (Finance → Charges)` : 'Aucune charge saisie sur les 4 derniers mois'}
                   </span>
                 </div>
-                <span className="font-semibold text-nv-text shrink-0">{eur(selected.chargesTeam)}</span>
+                <span className="font-semibold text-nv-text shrink-0">{eur(selected.chargesTotal)}</span>
               </div>
             </div>
           </div>

@@ -10,7 +10,6 @@ import { SalesForecast } from '@/components/sales/SalesForecast'
 import { computeSalesForecast } from '@/lib/mrr-forecast'
 import { ensureRetainerInvoices } from '@/lib/retainer-invoices'
 import { FinanceSection } from '@/components/finance/FinanceSection'
-import { TreasurySection } from '@/components/finance/TreasurySection'
 import { TreasuryForecast } from '@/components/finance/TreasuryForecast'
 import { FollowUpStats } from '@/components/sales/FollowUpStats'
 import Link from 'next/link'
@@ -283,7 +282,6 @@ export default async function SalesPage() {
               <AverageTicket />
               <TreasuryForecast />
               <SalesForecast months={forecast.months} suggestions={forecast.suggestions} />
-              <TreasurySection />
             </div>
           } />
         }

@@ -1,7 +1,8 @@
 // Prévisionnel Sales — généré depuis le CONTRACTÉ réel, mois par mois :
 // CA (retainers signés + factures en attente sélectionnables)
-// − Charges (fixes récurrentes + masse salariale équipe)
+// − Charges (moyenne des 4 derniers mois de charges réelles)
 // = Profit net prévisionnel. Aucune saisie manuelle.
+import { computeAvgMonthlyCharges } from './charges'
 
 export type ForecastRetainer = {
   retainerId: string
@@ -35,10 +36,8 @@ export type ForecastMonth = {
   invoices: ForecastInvoice[]
   invoicesTotal: number // uniquement les incluses
   caTotal: number
-  chargesFixed: number    // charges récurrentes (loyer, SaaS…)
-  chargesTeam: number     // salaires / freelances (réel si saisi, sinon estimation)
-  chargesTeamEstimated: boolean
-  chargesTotal: number
+  chargesTotal: number     // estimation = moyenne des N derniers mois de charges
+  chargesMonthsUsed: number // nb de mois utilisés dans la moyenne
   profit: number
 }
 
@@ -58,9 +57,8 @@ export async function computeSalesForecast(db: any, monthsAhead = 6): Promise<{
 }> {
   const now = new Date()
   const currentIdx = monthIndex(now)
-  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 
-  const [retainers, pendingInvoices, recurringExpenses, teamPayments, monthlyClients] = await Promise.all([
+  const [retainers, pendingInvoices, avgCharges, monthlyClients] = await Promise.all([
     db.clientRetainer.findMany({
       include: { client: { select: { id: true, name: true } } },
     }),
@@ -71,16 +69,8 @@ export async function computeSalesForecast(db: any, monthsAhead = 6): Promise<{
         payments: { select: { amount: true, confirmed: true } },
       },
     }),
-    db.expense.findMany({
-      where: { isRecurring: true },
-      select: { amount: true },
-    }),
-    // Masse salariale des 4 derniers mois pour l'estimation
-    (async () => {
-      try {
-        return await db.memberPayment.findMany({ select: { month: true, amount: true } })
-      } catch { return [] }
-    })(),
+    // Charges estimées = moyenne des 4 derniers mois complets (tous pôles, salaires inclus)
+    computeAvgMonthlyCharges(db, 4),
     // Clients mensualisés SANS engagement (case cochée sur la fiche client)
     (async () => {
       try {
@@ -92,17 +82,8 @@ export async function computeSalesForecast(db: any, monthsAhead = 6): Promise<{
     })(),
   ])
 
-  // Charges fixes mensuelles (récurrentes)
-  const chargesFixed = recurringExpenses.reduce((s: number, e: any) => s + e.amount, 0)
-
-  // Masse salariale par mois saisie + estimation (dernier mois renseigné)
-  const teamByMonth: Record<string, number> = {}
-  for (const p of teamPayments) {
-    teamByMonth[p.month] = (teamByMonth[p.month] ?? 0) + p.amount
-  }
-  const filledMonths = Object.keys(teamByMonth).sort()
-  const lastFilled = filledMonths.length > 0 ? filledMonths[filledMonths.length - 1] : null
-  const teamEstimate = lastFilled ? teamByMonth[lastFilled] : 0
+  const chargesEstimate = avgCharges.avg
+  const chargesMonthsUsed = avgCharges.monthsUsed
 
   const retainerRanges = retainers.map((r: any) => {
     const startIdx = monthIndex(new Date(r.startDate))
@@ -182,11 +163,8 @@ export async function computeSalesForecast(db: any, monthsAhead = 6): Promise<{
     const invoicesTotal = monthInvoices.filter(o => o.included).reduce((s, o) => s + o.amount, 0)
     const caTotal = mrrTotal + invoicesTotal
 
-    // Charges équipe : réel si le mois est saisi, sinon estimation (dernier mois connu)
-    const teamActual = teamByMonth[key]
-    const chargesTeamEstimated = teamActual == null && key !== currentMonthKey ? true : teamActual == null
-    const chargesTeam = teamActual ?? teamEstimate
-    const chargesTotal = chargesFixed + chargesTeam
+    // Charges estimées = moyenne des 4 derniers mois de charges réelles
+    const chargesTotal = chargesEstimate
 
     months.push({
       key,
@@ -198,10 +176,8 @@ export async function computeSalesForecast(db: any, monthsAhead = 6): Promise<{
       invoices: monthInvoices,
       invoicesTotal,
       caTotal,
-      chargesFixed,
-      chargesTeam,
-      chargesTeamEstimated,
       chargesTotal,
+      chargesMonthsUsed,
       profit: caTotal - chargesTotal,
     })
   }
