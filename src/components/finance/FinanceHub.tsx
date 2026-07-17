@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
-  BarChart3, TrendingUp, TrendingDown, Wallet, Layers, Rocket, Landmark, Loader2, Check,
+  BarChart3, TrendingUp, TrendingDown, Wallet, Layers, Rocket, Landmark, Loader2, Check, Gauge,
 } from 'lucide-react'
 import {
   ComposedChart, Bar, Line, BarChart, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell,
@@ -111,6 +111,8 @@ function Synthese({ data }: { data: Synthese }) {
         ))}
       </div>
 
+      <MarginHealthGauge marginNet={data.margin} marginPre={data.caYear > 0 ? Math.round((data.resultBeforeTax / data.caYear) * 100) : 0} hasData={data.caYear > 0} />
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* Compte de résultat (bilan) */}
         <div className="bg-nv-card border border-nv-border rounded-2xl p-5">
@@ -155,6 +157,69 @@ function Synthese({ data }: { data: Synthese }) {
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── Indicateur santé de la marge (repères secteur agence de contenu) ──
+// Repère : pour une agence de création de contenu qui délègue captation/montage
+// à des freelances, une marge nette (après IS) saine se situe autour de 15-25%.
+// En-dessous de 10% la structure de coûts est fragile ; au-dessus de 30% c'est
+// excellent. Zones sur une échelle 0-40%.
+function MarginHealthGauge({ marginNet, marginPre, hasData }: { marginNet: number; marginPre: number; hasData: boolean }) {
+  const zone =
+    marginNet < 0 ? { label: 'Déficitaire', color: '#b91c1c', verdict: 'Vous perdez de l\'argent : la structure de coûts (freelances, charges) est à revoir en priorité.' }
+    : marginNet < 10 ? { label: 'Fragile', color: '#ef4444', verdict: 'Rentabilité faible pour une agence. La marge est à sécuriser avant de scaler.' }
+    : marginNet < 20 ? { label: 'Correct', color: '#f59e0b', verdict: 'Dans la norme, mais il reste de la marge d\'optimisation (coût de délégation, pricing).' }
+    : marginNet < 30 ? { label: 'Sain', color: '#10b981', verdict: 'Bonne rentabilité pour une agence de création de contenu. Modèle solide.' }
+    : { label: 'Excellent', color: '#059669', verdict: 'Très bonne rentabilité — modèle très sain, tu peux réinvestir sereinement.' }
+
+  // Position du curseur sur l'échelle 0-40% (négatif → 0)
+  const pos = Math.min(100, Math.max(0, (marginNet / 40) * 100))
+  const segments = [
+    { w: 25, color: '#ef4444' },  // 0-10%
+    { w: 25, color: '#f59e0b' },  // 10-20%
+    { w: 25, color: '#10b981' },  // 20-30%
+    { w: 25, color: '#059669' },  // 30-40%+
+  ]
+
+  return (
+    <div className="bg-nv-card border border-nv-border rounded-2xl p-5">
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <h3 className="text-sm font-semibold text-white flex items-center gap-2"><Gauge size={15} className="text-primary" /> Santé de la marge</h3>
+        {hasData && (
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl font-bold tabular-nums" style={{ color: zone.color }}>{marginNet}%</span>
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ color: zone.color, backgroundColor: `${zone.color}1f` }}>{zone.label}</span>
+          </div>
+        )}
+      </div>
+
+      {!hasData ? (
+        <p className="text-xs text-nv-text-faint text-center py-4">Renseignez du CA et des charges pour évaluer la rentabilité.</p>
+      ) : (
+        <>
+          {/* Jauge segmentée rouge → vert */}
+          <div className="relative mt-2">
+            <div className="flex h-2.5 rounded-full overflow-hidden">
+              {segments.map((s, i) => <div key={i} style={{ width: `${s.w}%`, backgroundColor: s.color, opacity: 0.85 }} />)}
+            </div>
+            {/* Curseur position marge */}
+            <div className="absolute -top-1 -bottom-1 flex flex-col items-center" style={{ left: `${pos}%`, transform: 'translateX(-50%)' }}>
+              <div className="w-0.5 h-[18px] bg-white rounded-full shadow-[0_0_0_2px_rgba(0,0,0,0.6)]" />
+            </div>
+          </div>
+          <div className="flex justify-between mt-1.5 text-[10px] text-nv-text-faint tabular-nums">
+            <span>0%</span><span>10%</span><span>20%</span><span>30%</span><span>40%+</span>
+          </div>
+
+          <p className="text-xs text-nv-text mt-3">{zone.verdict}</p>
+          <p className="text-[11px] text-nv-text-faint mt-2 pt-2 border-t border-nv-border/50">
+            Repère secteur — agence de création de contenu (captation & montage délégués) : marge nette saine ≈ <span className="text-nv-text-muted">15-25%</span>.
+            {' '}Ta marge est calculée après IS{marginPre !== marginNet ? ` (soit ${marginPre}% avant impôt)` : ''}.
+          </p>
+        </>
+      )}
     </div>
   )
 }
