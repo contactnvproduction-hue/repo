@@ -116,7 +116,9 @@ export default async function TeamPage() {
 
       {isAdmin && (
         <MemberInvoiceTracker
-          members={users.map(u => ({ id: u.id, name: u.name, role: u.role, avatar: u.avatar }))}
+          members={users
+            .filter(u => !['ADMIN', 'MANAGER'].includes(u.role)) // freelances uniquement (hors associés)
+            .map(u => ({ id: u.id, name: u.name, role: u.role, avatar: u.avatar }))}
           initialMonth={currentMonth}
           initialRows={memberInvoices.map((r: any) => ({
             id: r.id, userId: r.userId, month: r.month, status: r.status,

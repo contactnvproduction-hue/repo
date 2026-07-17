@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { DashboardShell } from '@/components/layout/DashboardShell'
+import { ensureInvoiceReminder } from '@/lib/invoice-reminder'
 
 export default async function DashboardLayout({
   children,
@@ -13,6 +14,9 @@ export default async function DashboardLayout({
   if (!session?.user) {
     redirect('/login')
   }
+
+  // Rappel factures freelances à partir du 28 (idempotent, admins uniquement)
+  await ensureInvoiceReminder(prisma, { id: session.user.id, role: session.user.role })
 
   // Fetch notifs + avatar in parallel (avatar no longer in JWT to keep token small)
   const [notifCount, currentUser] = await Promise.all([
