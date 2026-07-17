@@ -48,6 +48,7 @@ model User {
   dailyCheckins     UserDailyCheckin[]
   dailyFollowUps    DailyClientFollowUp[]
   memberPayments    MemberPayment[]
+  memberInvoices    MemberInvoice[]
 
   @@map("users")
 }
@@ -1185,6 +1186,26 @@ model MemberPayment {
 
   @@unique([userId, month, type])
   @@map("member_payments")
+}
+
+// Suivi de la collecte des factures freelances. Chaque membre doit transmettre
+// sa facture avant le 28 du mois ; règlement le 1er du mois suivant. Passé le 28,
+// les factures non transmises sont reportées au cycle suivant.
+model MemberInvoice {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  month         String   // "YYYY-MM" — mois de travail concerné (deadline le 28)
+  status        String   @default("EN_ATTENTE") // EN_ATTENTE | TRANSMISE | REPORTEE | PAYEE
+  amount        Float?   // montant de la facture (optionnel)
+  transmittedAt DateTime? // date de transmission de la facture
+  paidAt        DateTime? // date de règlement (1er du mois suivant)
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([userId, month])
+  @@map("member_invoices")
 }
 
 // ─── FORMULAIRE D'ONBOARDING CLIENT (public, remplace Google Forms) ──────────

@@ -8,6 +8,7 @@ import { TeamAvailabilityEditor } from '@/components/team/TeamAvailabilityEditor
 import { DeleteButton } from '@/components/ui/DeleteButton'
 import { DailyFollowUpSection } from '@/components/team/DailyFollowUpSection'
 import { UserAvatarUpload } from '@/components/team/UserAvatarUpload'
+import { MemberInvoiceTracker } from '@/components/team/MemberInvoiceTracker'
 
 // Page personnalisée + écritures DB (upsert Samuel) → jamais de prérendu statique.
 export const dynamic = 'force-dynamic'
@@ -50,6 +51,11 @@ export default async function TeamPage() {
   } catch {}
 
   const todayStr = new Date().toISOString().slice(0, 10)
+  const currentMonth = todayStr.slice(0, 7) // "YYYY-MM"
+
+  const memberInvoices = await (async () => {
+    try { return await (prisma as any).memberInvoice.findMany({ where: { month: currentMonth } }) } catch { return [] }
+  })()
 
   const [users, availabilities, todayFollowUps] = await Promise.all([
     prisma.user.findMany({
@@ -107,6 +113,18 @@ export default async function TeamPage() {
         }))}
         isAdmin={isAdmin}
       />
+
+      {isAdmin && (
+        <MemberInvoiceTracker
+          members={users.map(u => ({ id: u.id, name: u.name, role: u.role, avatar: u.avatar }))}
+          initialMonth={currentMonth}
+          initialRows={memberInvoices.map((r: any) => ({
+            id: r.id, userId: r.userId, month: r.month, status: r.status,
+            amount: r.amount, transmittedAt: r.transmittedAt ? new Date(r.transmittedAt).toISOString() : null,
+            paidAt: r.paidAt ? new Date(r.paidAt).toISOString() : null,
+          }))}
+        />
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {users.map((user) => (
