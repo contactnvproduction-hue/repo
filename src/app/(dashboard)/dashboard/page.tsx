@@ -30,7 +30,7 @@ async function getDashboardData(userId: string) {
     caMonth, caLastMonth, caYear, activeClients, activeProjects, pendingInvoices,
     urgentTasks, recentProjects, overdueInvoices, prospectsToRelance, monthlyPayments,
     leadCalls, leadsFollowUp, allRetainers, upcomingCeoMeetings, todayCheckin,
-    upcomingBilans, allClientInvoices, recentClosings,
+    upcomingBilans, allClientInvoices, recentClosings, contractedRetainers,
   ] = await Promise.all([
     prisma.payment.aggregate({ where: { date: { gte: startOfMonth }, confirmed: true }, _sum: { amount: true } }),
     prisma.payment.aggregate({ where: { date: { gte: lastMonthStart, lte: lastMonthEnd }, confirmed: true }, _sum: { amount: true } }),
@@ -104,11 +104,15 @@ async function getDashboardData(userId: string) {
         return await (prisma as any).closingEvent.findMany({ where: { date: { gte: start } }, select: { date: true, amount: true, type: true } })
       } catch { return [] }
     })(),
+    // Contrats (retainers) signés ce mois → CA contracté du mois (mensualité × durée)
+    prisma.clientRetainer.findMany({ where: { createdAt: { gte: startOfMonth } }, select: { monthlyAmount: true, durationMonths: true } }),
   ])
 
   const caMonthVal = caMonth._sum.amount || 0
   const caLastMonthVal = caLastMonth._sum.amount || 0
   const trend = caLastMonthVal > 0 ? Math.round(((caMonthVal - caLastMonthVal) / caLastMonthVal) * 100) : 0
+  // CA contracté ce mois = valeur totale des contrats signés ce mois (mensualité × durée)
+  const contractedThisMonth = contractedRetainers.reduce((s, r) => s + r.monthlyAmount * r.durationMonths, 0)
   const totalCalls = leadCalls.length
   const showedUp = leadCalls.filter(c => c.showedUp).length
   const qualified = leadCalls.filter(c => c.qualified).length
@@ -136,7 +140,7 @@ async function getDashboardData(userId: string) {
   }).filter(r => r.daysLeft > 0 && r.daysLeft <= 15).sort((a, b) => a.daysLeft - b.daysLeft)
 
   return {
-    caMonth: caMonthVal, caYear: caYear._sum.amount || 0, trend,
+    caMonth: caMonthVal, caYear: caYear._sum.amount || 0, trend, contractedThisMonth,
     activeClients, activeProjects, pendingInvoices,
     urgentTasks, recentProjects, overdueInvoices, prospectsToRelance, monthlyPayments,
     acquisition: { totalCalls, showupRate, qualifRate, closingRate },
@@ -251,9 +255,16 @@ export default async function DashboardPage() {
         </Link>
       )}
 
-      {/* ── KPIs ── */}
+      {/* ── Vue chiffre d'affaires ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="MRR actuel" value={formatCurrency(data.currentMRR)} icon={RepeatIcon} color="success" subtitle="Revenu récurrent / mois" />
+        <StatCard title="Collecté ce mois" value={formatCurrency(data.caMonth)} icon={TrendingUp} color="primary" subtitle={data.trend !== 0 ? `${data.trend > 0 ? '▲' : '▼'} ${Math.abs(data.trend)}% vs mois dernier` : 'encaissé ce mois'} />
+        <StatCard title="Contracté ce mois" value={formatCurrency(data.contractedThisMonth)} icon={Briefcase} color="success" subtitle="contrats signés × durée" />
+        <StatCard title="MRR actuel" value={formatCurrency(data.currentMRR)} icon={RepeatIcon} color="warning" subtitle="récurrent / mois" />
+        <StatCard title="Collecté cette année" value={formatCurrency(data.caYear)} icon={TrendingUp} color="primary" subtitle={`année ${new Date().getFullYear()}`} />
+      </div>
+
+      {/* ── KPIs ── */}
+      <div className="grid grid-cols-3 gap-4">
         <StatCard title="Clients actifs" value={String(data.activeClients)} icon={Users} color="primary" />
         <StatCard title="Projets en cours" value={String(data.activeProjects)} icon={FolderKanban} color="warning" />
         <StatCard title="Factures impayées" value={String(data.pendingInvoices)} icon={Receipt} color={data.pendingInvoices > 0 ? 'danger' : 'success'} />
