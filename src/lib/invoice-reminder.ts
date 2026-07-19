@@ -18,9 +18,14 @@ export async function ensureInvoiceReminder(prisma: any, user: { id: string; rol
     const freelances = await prisma.user.findMany({ where: { role: { notIn: ['ADMIN', 'MANAGER'] } }, select: { id: true } })
     if (freelances.length === 0) return
     const invoices = await prisma.memberInvoice.findMany({ where: { month } })
-    const statusByUser: Record<string, string> = {}
-    for (const inv of invoices) statusByUser[inv.userId] = inv.status
-    const missing = freelances.filter((f: any) => !['TRANSMISE', 'PAYEE'].includes(statusByUser[f.id])).length
+    const byUser: Record<string, any> = {}
+    for (const inv of invoices) byUser[inv.userId] = inv
+    // « manquant » = a une facture à transmettre, pas encore transmise ni réglée
+    const missing = freelances.filter((f: any) => {
+      const inv = byUser[f.id]
+      if (inv && inv.hasInvoice === false) return false
+      return !['TRANSMISE', 'PAYEE'].includes(inv?.status)
+    }).length
     if (missing === 0) return
 
     const monthLabel = new Date(now.getFullYear(), now.getMonth(), 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })

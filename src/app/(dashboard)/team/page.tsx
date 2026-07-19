@@ -54,7 +54,7 @@ export default async function TeamPage() {
   const currentMonth = todayStr.slice(0, 7) // "YYYY-MM"
 
   const memberInvoices = await (async () => {
-    try { return await (prisma as any).memberInvoice.findMany({ where: { month: currentMonth } }) } catch { return [] }
+    try { return await (prisma as any).memberInvoice.findMany() } catch { return [] }
   })()
 
   const [users, availabilities, todayFollowUps] = await Promise.all([
@@ -122,7 +122,8 @@ export default async function TeamPage() {
           initialMonth={currentMonth}
           initialRows={memberInvoices.map((r: any) => ({
             id: r.id, userId: r.userId, month: r.month, status: r.status,
-            amount: r.amount, transmittedAt: r.transmittedAt ? new Date(r.transmittedAt).toISOString() : null,
+            hasInvoice: r.hasInvoice ?? true,
+            transmittedAt: r.transmittedAt ? new Date(r.transmittedAt).toISOString() : null,
             paidAt: r.paidAt ? new Date(r.paidAt).toISOString() : null,
           }))}
         />

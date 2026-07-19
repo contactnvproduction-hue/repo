@@ -5,15 +5,14 @@ import { prisma } from '@/lib/db'
 const db = prisma as any
 const STATUSES = ['EN_ATTENTE', 'TRANSMISE', 'REPORTEE', 'PAYEE']
 
-// GET ?month=YYYY-MM → suivi des factures freelances du mois
+// GET → toutes les lignes de suivi (?month=YYYY-MM pour filtrer un mois)
 export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   const { searchParams } = new URL(req.url)
   const month = searchParams.get('month')
-  if (!month) return NextResponse.json({ error: 'month requis' }, { status: 400 })
   try {
-    const rows = await db.memberInvoice.findMany({ where: { month } })
+    const rows = await db.memberInvoice.findMany({ where: month ? { month } : undefined })
     return NextResponse.json(rows)
   } catch { return NextResponse.json([]) }
 }
@@ -30,20 +29,29 @@ export async function PATCH(req: NextRequest) {
     if (!b.userId || !b.month) return NextResponse.json({ error: 'userId et month requis' }, { status: 400 })
 
     const data: Record<string, unknown> = {}
+    if (typeof b.hasInvoice === 'boolean') {
+      data.hasInvoice = b.hasInvoice
+      // « Pas de facture ce mois » → on remet le statut à zéro
+      if (!b.hasInvoice) { data.status = 'EN_ATTENTE'; data.transmittedAt = null; data.paidAt = null }
+    }
     if (typeof b.status === 'string' && STATUSES.includes(b.status)) {
       data.status = b.status
-      // Auto-date de transmission quand on passe en TRANSMISE
       if (b.status === 'TRANSMISE') data.transmittedAt = b.transmittedAt ? new Date(b.transmittedAt) : new Date()
       if (b.status === 'EN_ATTENTE') { data.transmittedAt = null; data.paidAt = null }
+      if (b.status === 'REPORTEE') { data.transmittedAt = null }
       if (b.status === 'PAYEE') data.paidAt = b.paidAt ? new Date(b.paidAt) : new Date()
     }
-    if ('amount' in b) data.amount = b.amount == null || b.amount === '' ? null : Number(b.amount)
     if ('notes' in b) data.notes = b.notes || null
 
     const row = await db.memberInvoice.upsert({
       where: { userId_month: { userId: b.userId, month: b.month } },
       update: data,
-      create: { userId: b.userId, month: b.month, status: (data.status as string) || 'EN_ATTENTE', ...data },
+      create: {
+        userId: b.userId, month: b.month,
+        hasInvoice: typeof b.hasInvoice === 'boolean' ? b.hasInvoice : true,
+        status: (data.status as string) || 'EN_ATTENTE',
+        ...data,
+      },
     })
     return NextResponse.json(row)
   } catch (e) {
@@ -52,7 +60,7 @@ export async function PATCH(req: NextRequest) {
   }
 }
 
-// POST — actions groupées : reporter les manquants, marquer les transmises payées
+// POST — actions groupées : reporter les manquants, régler les transmises
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
@@ -64,17 +72,16 @@ export async function POST(req: NextRequest) {
     if (!month || !action) return NextResponse.json({ error: 'month et action requis' }, { status: 400 })
 
     if (action === 'report') {
-      // Reporter au cycle suivant : les membres non transmis (aucune ligne, EN_ATTENTE ou déjà REPORTEE) → REPORTEE
-      // On crée/maj une ligne REPORTEE pour chaque userId fourni encore non transmis
+      // Les freelances non transmis (et avec facture) → REPORTEE pour ce mois
       const ids: string[] = Array.isArray(userIds) ? userIds : []
       let count = 0
       for (const userId of ids) {
         const existing = await db.memberInvoice.findUnique({ where: { userId_month: { userId, month } } })
-        if (existing && (existing.status === 'TRANSMISE' || existing.status === 'PAYEE')) continue
+        if (existing && (existing.status === 'TRANSMISE' || existing.status === 'PAYEE' || existing.hasInvoice === false)) continue
         await db.memberInvoice.upsert({
           where: { userId_month: { userId, month } },
           update: { status: 'REPORTEE' },
-          create: { userId, month, status: 'REPORTEE' },
+          create: { userId, month, status: 'REPORTEE', hasInvoice: true },
         })
         count++
       }
@@ -82,12 +89,21 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'markPaid') {
-      // Règlement du 1er : toutes les factures TRANSMISE du mois → PAYEE
-      const res = await db.memberInvoice.updateMany({
-        where: { month, status: 'TRANSMISE' },
-        data: { status: 'PAYEE', paidAt: new Date() },
-      })
-      return NextResponse.json({ paid: res.count })
+      // Règlement du 1er : pour chaque freelance TRANSMISE ce mois, on règle sa
+      // facture du mois + tous ses arriérés reportés (mois précédents REPORTEE).
+      const transmitted = await db.memberInvoice.findMany({ where: { month, status: 'TRANSMISE' } })
+      let paid = 0
+      for (const t of transmitted) {
+        await db.memberInvoice.update({ where: { id: t.id }, data: { status: 'PAYEE', paidAt: new Date() } })
+        paid++
+        // Arriérés reportés de ce freelance (mois antérieurs, encore reportés)
+        const backlog = await db.memberInvoice.findMany({ where: { userId: t.userId, status: 'REPORTEE', month: { lt: month } } })
+        for (const b of backlog) {
+          await db.memberInvoice.update({ where: { id: b.id }, data: { status: 'PAYEE', paidAt: new Date() } })
+          paid++
+        }
+      }
+      return NextResponse.json({ paid })
     }
 
     return NextResponse.json({ error: 'Action inconnue' }, { status: 400 })

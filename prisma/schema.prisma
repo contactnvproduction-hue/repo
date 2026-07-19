@@ -1196,8 +1196,9 @@ model MemberInvoice {
   userId        String
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   month         String   // "YYYY-MM" — mois de travail concerné (deadline le 28)
+  hasInvoice    Boolean  @default(true) // y a-t-il une facture à transmettre ce mois ?
   status        String   @default("EN_ATTENTE") // EN_ATTENTE | TRANSMISE | REPORTEE | PAYEE
-  amount        Float?   // montant de la facture (optionnel)
+  amount        Float?   // (déprécié — les salaires sont calculés dans Finance)
   transmittedAt DateTime? // date de transmission de la facture
   paidAt        DateTime? // date de règlement (1er du mois suivant)
   notes         String?
