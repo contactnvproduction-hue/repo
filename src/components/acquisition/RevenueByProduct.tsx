@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react'
 import Link from 'next/link'
-import { PieChart as PieChartIcon, Trophy } from 'lucide-react'
+import { PieChart as PieChartIcon, Trophy, Star, Target } from 'lucide-react'
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
 } from 'recharts'
@@ -36,6 +36,7 @@ export function RevenueByProduct({
     .map(p => ({ name: p.name, value: p.total, color: p.color }))
 
   return (
+   <div className="space-y-4">
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       {/* Donut CA par produit */}
       <div className="lg:col-span-2 bg-nv-card border border-nv-border rounded-xl p-5">
@@ -129,6 +130,81 @@ export function RevenueByProduct({
             ))}
           </div>
         )}
+      </div>
+    </div>
+
+    {/* Tier-list des produits phares */}
+    <ProductTierList productStats={productStats} totalCA={totalCA} />
+   </div>
+  )
+}
+
+// ── Tier-list : quels produits performent auprès de la cible ──
+const TIERS: { key: string; label: string; color: string; desc: string }[] = [
+  { key: 'S', label: 'Phare', color: '#e8b84b', desc: 'Produits phares — forte traction sur ta cible' },
+  { key: 'A', label: 'Fort', color: '#10b981', desc: 'Validés par la cible, bonne demande' },
+  { key: 'B', label: 'Moyen', color: '#3b82f6', desc: 'Corrects, à pousser' },
+  { key: 'C', label: 'Faible', color: '#f59e0b', desc: 'Peu de traction — à questionner' },
+  { key: 'D', label: 'Non validé', color: '#6b7280', desc: 'Jamais vendu — à tester ou retirer' },
+]
+
+function tierOf(pct: number, total: number): string {
+  if (total <= 0 || pct <= 0) return 'D'
+  if (pct >= 30) return 'S'
+  if (pct >= 15) return 'A'
+  if (pct >= 5) return 'B'
+  return 'C'
+}
+
+function ProductTierList({ productStats, totalCA }: { productStats: ProductStat[]; totalCA: number }) {
+  const ranked = useMemo(() => {
+    return productStats.map(p => {
+      const pct = totalCA > 0 ? (p.total / totalCA) * 100 : 0
+      return { ...p, pct, tier: tierOf(pct, p.total) }
+    })
+  }, [productStats, totalCA])
+
+  const byTier = useMemo(() => {
+    const map: Record<string, typeof ranked> = { S: [], A: [], B: [], C: [], D: [] }
+    for (const p of ranked) map[p.tier].push(p)
+    for (const k in map) map[k].sort((a, b) => b.total - a.total)
+    return map
+  }, [ranked])
+
+  if (productStats.length === 0) return null
+  const activeTiers = TIERS.filter(t => byTier[t.key].length > 0)
+
+  return (
+    <div className="bg-nv-card border border-nv-border rounded-xl p-5">
+      <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+        <Star size={16} className="text-primary" /> Tier-list des offres
+      </h2>
+      <p className="text-xs text-nv-text-muted mt-0.5 mb-4 flex items-center gap-1.5">
+        <Target size={12} className="text-primary shrink-0" />
+        Classement par part de CA : repère tes produits phares et ceux qui accrochent (ou non) ta cible. <span className="text-nv-text-faint">S/A = validés par la cible · C/D = à questionner.</span>
+      </p>
+
+      <div className="space-y-2">
+        {activeTiers.map(t => (
+          <div key={t.key} className="flex items-stretch gap-3 rounded-xl border border-nv-border overflow-hidden">
+            <div className="flex flex-col items-center justify-center w-16 shrink-0 py-3" style={{ backgroundColor: `${t.color}1f` }}>
+              <span className="text-2xl font-black leading-none" style={{ color: t.color }}>{t.key}</span>
+              <span className="text-[9px] uppercase tracking-wider font-semibold mt-1" style={{ color: t.color }}>{t.label}</span>
+            </div>
+            <div className="flex-1 min-w-0 py-3 pr-3">
+              <div className="flex flex-wrap gap-1.5">
+                {byTier[t.key].map(p => (
+                  <span key={p.productId} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border" style={{ borderColor: `${p.color}55`, backgroundColor: `${p.color}12` }}>
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: p.color }} />
+                    <span className="text-nv-text font-medium">{p.name}</span>
+                    {p.total > 0 && <span className="text-nv-text-faint tabular-nums">· {Math.round(p.pct)}% · {p.quantity} client{p.quantity > 1 ? 's' : ''}</span>}
+                  </span>
+                ))}
+              </div>
+              <p className="text-[10px] text-nv-text-faint mt-1.5">{t.desc}</p>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   )
