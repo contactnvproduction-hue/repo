@@ -19,28 +19,38 @@ import { MrrSection } from '@/components/dashboard/MrrSection'
 
 function todayStr() { return new Date().toISOString().slice(0, 10) }
 
-// CA réellement encaissé sur une fenêtre : somme des paiements confirmés en
-// dédupliquant les doublons (même facture + même montant + même jour) qui
-// gonflaient artificiellement le CA du mois.
-async function collectedDedup(where: any): Promise<number> {
+// CA réellement encaissé sur une fenêtre :
+//  - déduplique les doublons (même facture + même montant + même jour)
+//  - plafonne par facture au montant TTC (paiements en double d'un même montant)
+//  - option excludeDueAfter : ignore les mensualités FUTURES validées d'avance
+//    (l'ancien bouton MRR payait la dernière facture, parfois un mois à venir,
+//    ce qui gonflait le CA du mois)
+async function collectedDedup(where: any, opts?: { excludeDueAfter?: Date }): Promise<number> {
   const payments = await prisma.payment.findMany({
     where: { confirmed: true, ...where },
-    select: { amount: true, invoiceId: true, date: true },
+    select: { amount: true, invoiceId: true, date: true, invoice: { select: { totalTTC: true, dueDate: true } } },
   })
   const seen = new Set<string>()
+  const perInvoice = new Map<string, { sum: number; cap: number }>()
   let total = 0
   for (const p of payments) {
+    if (opts?.excludeDueAfter && p.invoice?.dueDate && p.invoice.dueDate > opts.excludeDueAfter) continue
     const key = `${p.invoiceId ?? 'x'}|${p.amount}|${p.date.toISOString().slice(0, 10)}`
     if (seen.has(key)) continue
     seen.add(key)
-    total += p.amount
+    if (!p.invoiceId) { total += p.amount; continue }
+    const cur = perInvoice.get(p.invoiceId) ?? { sum: 0, cap: p.invoice?.totalTTC ?? Number.POSITIVE_INFINITY }
+    cur.sum += p.amount
+    perInvoice.set(p.invoiceId, cur)
   }
+  for (const { sum, cap } of perInvoice.values()) total += Math.min(sum, cap)
   return total
 }
 
 async function getDashboardData(userId: string) {
   const now = new Date()
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59)
   const startOfYear = new Date(now.getFullYear(), 0, 1)
   const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
   const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0)
@@ -51,8 +61,8 @@ async function getDashboardData(userId: string) {
     leadCalls, leadsFollowUp, allRetainers, upcomingCeoMeetings, todayCheckin,
     upcomingBilans, allClientInvoices, recentClosings, contractedRetainers,
   ] = await Promise.all([
-    collectedDedup({ date: { gte: startOfMonth } }),
-    collectedDedup({ date: { gte: lastMonthStart, lte: lastMonthEnd } }),
+    collectedDedup({ date: { gte: startOfMonth } }, { excludeDueAfter: endOfMonth }),
+    collectedDedup({ date: { gte: lastMonthStart, lte: lastMonthEnd } }, { excludeDueAfter: lastMonthEnd }),
     collectedDedup({ date: { gte: startOfYear } }),
     prisma.client.count({ where: { status: 'ACTIF' } }),
     prisma.project.count({ where: { status: { notIn: ['LIVRÉ', 'ARCHIVÉ'] } } }),
@@ -114,7 +124,7 @@ async function getDashboardData(userId: string) {
     prisma.invoice.findMany({
       where: { status: { in: ['EN_ATTENTE', 'PARTIELLEMENT_PAYÉE', 'EN_RETARD', 'PAYÉE'] }, type: { in: ['TOTALE', 'SOLDE'] } },
       orderBy: { createdAt: 'desc' },
-      select: { id: true, clientId: true, status: true, totalTTC: true },
+      select: { id: true, clientId: true, status: true, totalTTC: true, dueDate: true },
     }),
     // Closings des 6 derniers mois (KPI mois par mois)
     (async () => {
@@ -147,9 +157,19 @@ async function getDashboardData(userId: string) {
   }, 0)
   const nextMeeting = upcomingCeoMeetings[0] ?? null
   const ceoMeetingSoon = nextMeeting && (new Date(nextMeeting.date).getTime() - now.getTime()) < 48 * 3600 * 1000 ? nextMeeting : null
-  const latestInvoiceByClient = new Map<string, typeof allClientInvoices[0]>()
+  // Facture de la MENSUALITÉ DU MOIS EN COURS par client (échéance ce mois-ci).
+  // C'est celle qu'on doit encaisser ce mois → on ne cible plus la « dernière »
+  // facture (qui pouvait être un mois futur et fausser le CA + la liste MRR).
+  const currentMonthInvoiceByClient = new Map<string, typeof allClientInvoices[0]>()
   for (const inv of allClientInvoices) {
-    if (!latestInvoiceByClient.has(inv.clientId)) latestInvoiceByClient.set(inv.clientId, inv)
+    if (!inv.dueDate) continue
+    const d = new Date(inv.dueDate)
+    if (d.getFullYear() !== now.getFullYear() || d.getMonth() !== now.getMonth()) continue
+    const existing = currentMonthInvoiceByClient.get(inv.clientId)
+    // Préfère une facture NON payée ; sinon garde la première rencontrée
+    if (!existing || (existing.status === 'PAYÉE' && inv.status !== 'PAYÉE')) {
+      currentMonthInvoiceByClient.set(inv.clientId, inv)
+    }
   }
   const activeRetainers = allRetainers.filter(r => { const end = new Date(r.startDate); end.setMonth(end.getMonth() + r.durationMonths); return end > now })
   const retainersEndingSoon = allRetainers.map(r => {
@@ -168,10 +188,12 @@ async function getDashboardData(userId: string) {
     upcomingMeetings: upcomingCeoMeetings.map(m => ({ id: m.id, title: m.title, date: m.date.toISOString() })),
     checkinDone: !!todayCheckin,
     activeRetainers: activeRetainers.filter(r => r.client).filter(r => {
-      const latestInv = latestInvoiceByClient.get(r.client!.id)
-      return !latestInv || latestInv.status !== 'PAYÉE'
+      // À relancer ce mois = mensualité du mois en cours pas encore réglée.
+      // Payée → retirée de la liste. Pas encore générée → à facturer (affichée).
+      const inv = currentMonthInvoiceByClient.get(r.client!.id)
+      return !inv || inv.status !== 'PAYÉE'
     }).map(r => {
-      const inv = latestInvoiceByClient.get(r.client!.id) ?? null
+      const inv = currentMonthInvoiceByClient.get(r.client!.id) ?? null
       return { id: r.id, clientId: r.client!.id, clientName: r.client!.name, clientCompany: r.client!.company, monthlyAmount: r.monthlyAmount, durationMonths: r.durationMonths, startDate: r.startDate.toISOString(), description: r.description, invoiceId: inv?.id ?? null, invoiceTTC: inv?.totalTTC ?? r.monthlyAmount }
     }),
     retainersEndingSoon: retainersEndingSoon.filter(r => r.client).map(r => ({ id: r.id, clientId: r.client!.id, clientName: r.client!.name, clientCompany: r.client!.company, monthlyAmount: r.monthlyAmount, daysLeft: r.daysLeft, endDate: r.endDate })),
