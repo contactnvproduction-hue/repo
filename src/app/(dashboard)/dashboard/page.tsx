@@ -19,6 +19,25 @@ import { MrrSection } from '@/components/dashboard/MrrSection'
 
 function todayStr() { return new Date().toISOString().slice(0, 10) }
 
+// CA réellement encaissé sur une fenêtre : somme des paiements confirmés en
+// dédupliquant les doublons (même facture + même montant + même jour) qui
+// gonflaient artificiellement le CA du mois.
+async function collectedDedup(where: any): Promise<number> {
+  const payments = await prisma.payment.findMany({
+    where: { confirmed: true, ...where },
+    select: { amount: true, invoiceId: true, date: true },
+  })
+  const seen = new Set<string>()
+  let total = 0
+  for (const p of payments) {
+    const key = `${p.invoiceId ?? 'x'}|${p.amount}|${p.date.toISOString().slice(0, 10)}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    total += p.amount
+  }
+  return total
+}
+
 async function getDashboardData(userId: string) {
   const now = new Date()
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
@@ -32,9 +51,9 @@ async function getDashboardData(userId: string) {
     leadCalls, leadsFollowUp, allRetainers, upcomingCeoMeetings, todayCheckin,
     upcomingBilans, allClientInvoices, recentClosings, contractedRetainers,
   ] = await Promise.all([
-    prisma.payment.aggregate({ where: { date: { gte: startOfMonth }, confirmed: true }, _sum: { amount: true } }),
-    prisma.payment.aggregate({ where: { date: { gte: lastMonthStart, lte: lastMonthEnd }, confirmed: true }, _sum: { amount: true } }),
-    prisma.payment.aggregate({ where: { date: { gte: startOfYear }, confirmed: true }, _sum: { amount: true } }),
+    collectedDedup({ date: { gte: startOfMonth } }),
+    collectedDedup({ date: { gte: lastMonthStart, lte: lastMonthEnd } }),
+    collectedDedup({ date: { gte: startOfYear } }),
     prisma.client.count({ where: { status: 'ACTIF' } }),
     prisma.project.count({ where: { status: { notIn: ['LIVRÉ', 'ARCHIVÉ'] } } }),
     prisma.invoice.count({ where: { status: { in: ['EN_ATTENTE', 'EN_RETARD'] } } }),
@@ -108,8 +127,8 @@ async function getDashboardData(userId: string) {
     prisma.clientRetainer.findMany({ where: { createdAt: { gte: startOfMonth } }, select: { monthlyAmount: true, durationMonths: true } }),
   ])
 
-  const caMonthVal = caMonth._sum.amount || 0
-  const caLastMonthVal = caLastMonth._sum.amount || 0
+  const caMonthVal = caMonth
+  const caLastMonthVal = caLastMonth
   const trend = caLastMonthVal > 0 ? Math.round(((caMonthVal - caLastMonthVal) / caLastMonthVal) * 100) : 0
   // CA contracté ce mois = valeur totale des contrats signés ce mois (mensualité × durée)
   const contractedThisMonth = contractedRetainers.reduce((s, r) => s + r.monthlyAmount * r.durationMonths, 0)
@@ -140,7 +159,7 @@ async function getDashboardData(userId: string) {
   }).filter(r => r.daysLeft > 0 && r.daysLeft <= 15).sort((a, b) => a.daysLeft - b.daysLeft)
 
   return {
-    caMonth: caMonthVal, caYear: caYear._sum.amount || 0, trend, contractedThisMonth,
+    caMonth: caMonthVal, caYear, trend, contractedThisMonth,
     activeClients, activeProjects, pendingInvoices,
     urgentTasks, recentProjects, overdueInvoices, prospectsToRelance, monthlyPayments,
     acquisition: { totalCalls, showupRate, qualifRate, closingRate },

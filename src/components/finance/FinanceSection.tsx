@@ -13,7 +13,7 @@ export async function FinanceSection({ previsionnel }: { previsionnel: React.Rea
   const db = prisma as any
 
   const [payments, lastYearAgg, expenses, settings, investments, recurringExpenses] = await Promise.all([
-    prisma.payment.findMany({ where: { confirmed: true, date: { gte: startOfYear } }, select: { amount: true, date: true, invoice: { select: { clientId: true, client: { select: { name: true } } } } } }),
+    prisma.payment.findMany({ where: { confirmed: true, date: { gte: startOfYear } }, select: { amount: true, date: true, invoiceId: true, invoice: { select: { clientId: true, client: { select: { name: true } } } } } }),
     prisma.payment.aggregate({ where: { confirmed: true, date: { gte: startLastYear, lte: endLastYear } }, _sum: { amount: true } }),
     prisma.expense.findMany({ where: { date: { gte: startOfYear } }, orderBy: { date: 'desc' } }),
     prisma.agencySetting.findFirst(),
@@ -21,10 +21,15 @@ export async function FinanceSection({ previsionnel }: { previsionnel: React.Rea
     prisma.expense.findMany({ where: { isRecurring: true }, orderBy: { amount: 'desc' } }),
   ])
 
-  // CA mensuel encaissé
+  // CA mensuel encaissé — déduplication des paiements en double (même facture +
+  // même montant + même jour) qui gonflaient le CA
   const monthlyCa = Array(12).fill(0)
   const caByClient: Record<string, { name: string; total: number }> = {}
+  const seenPayments = new Set<string>()
   for (const p of payments) {
+    const key = `${(p as any).invoiceId ?? 'x'}|${p.amount}|${new Date(p.date).toISOString().slice(0, 10)}`
+    if (seenPayments.has(key)) continue
+    seenPayments.add(key)
     const m = new Date(p.date).getMonth()
     monthlyCa[m] += p.amount
     const cid = p.invoice?.clientId
