@@ -526,6 +526,7 @@ export default async function ClientDetailPage({ params }: PageProps) {
                 }))}
                 initialMensualise={(client as any).mensualise ?? false}
                 initialMensualiteAmount={(client as any).mensualiteAmount ?? null}
+                initialMensualiteFrequency={(client as any).mensualiteFrequency ?? 'MENSUEL'}
                 initialVatExempt={(client as any).vatExempt ?? false}
               />
             </CardContent>

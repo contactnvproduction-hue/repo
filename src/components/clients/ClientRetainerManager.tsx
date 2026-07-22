@@ -19,6 +19,7 @@ interface Props {
   initialRetainers: Retainer[]
   initialMensualise?: boolean
   initialMensualiteAmount?: number | null
+  initialMensualiteFrequency?: string
   initialVatExempt?: boolean
 }
 
@@ -35,7 +36,7 @@ function isActive(r: Retainer): boolean {
   return now >= start && now < end
 }
 
-export function ClientRetainerManager({ clientId, initialRetainers, initialMensualise = false, initialMensualiteAmount = null, initialVatExempt = false }: Props) {
+export function ClientRetainerManager({ clientId, initialRetainers, initialMensualise = false, initialMensualiteAmount = null, initialMensualiteFrequency = 'MENSUEL', initialVatExempt = false }: Props) {
   const [retainers, setRetainers] = useState<Retainer[]>(initialRetainers)
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -73,9 +74,10 @@ export function ClientRetainerManager({ clientId, initialRetainers, initialMensu
   // Mensualisation sans engagement : prévoit les paiements dans le prévisionnel Sales
   const [mensualise, setMensualise] = useState(initialMensualise)
   const [mensualiteAmount, setMensualiteAmount] = useState(initialMensualiteAmount != null ? String(initialMensualiteAmount) : '')
+  const [frequency, setFrequency] = useState(initialMensualiteFrequency === 'TRIMESTRIEL' ? 'TRIMESTRIEL' : 'MENSUEL')
   const [savingMensualise, setSavingMensualise] = useState(false)
 
-  const saveMensualisation = async (nextMensualise: boolean, amountStr: string) => {
+  const saveMensualisation = async (nextMensualise: boolean, amountStr: string, freq: string = frequency) => {
     setSavingMensualise(true)
     try {
       const res = await fetch(`/api/clients/${clientId}`, {
@@ -84,6 +86,7 @@ export function ClientRetainerManager({ clientId, initialRetainers, initialMensu
         body: JSON.stringify({
           mensualise: nextMensualise,
           mensualiteAmount: amountStr ? parseFloat(amountStr) : null,
+          mensualiteFrequency: freq,
         }),
       })
       if (!res.ok) throw new Error()
@@ -160,21 +163,37 @@ export function ClientRetainerManager({ clientId, initialRetainers, initialMensu
             </span>
           </label>
           {mensualise && (
-            <div className="flex items-center gap-1.5">
-              <input
-                type="number"
-                placeholder="Montant"
-                value={mensualiteAmount}
-                onChange={e => setMensualiteAmount(e.target.value)}
-                onBlur={() => saveMensualisation(mensualise, mensualiteAmount)}
-                className="w-28 bg-nv-black border border-nv-border rounded-lg px-3 py-1.5 text-sm text-white text-right focus:outline-none focus:border-primary/60"
-              />
-              <span className="text-xs text-nv-text-muted">€/mois</span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="number"
+                  placeholder="Montant"
+                  value={mensualiteAmount}
+                  onChange={e => setMensualiteAmount(e.target.value)}
+                  onBlur={() => saveMensualisation(mensualise, mensualiteAmount)}
+                  className="w-24 bg-nv-black border border-nv-border rounded-lg px-3 py-1.5 text-sm text-white text-right focus:outline-none focus:border-primary/60"
+                />
+                <span className="text-xs text-nv-text-muted">€/{frequency === 'TRIMESTRIEL' ? 'trim.' : 'mois'}</span>
+              </div>
+              {/* Fréquence */}
+              <div className="flex gap-0.5 bg-nv-black border border-nv-border rounded-lg p-0.5">
+                {(['MENSUEL', 'TRIMESTRIEL'] as const).map(f => (
+                  <button
+                    key={f}
+                    type="button"
+                    disabled={savingMensualise}
+                    onClick={() => { setFrequency(f); saveMensualisation(mensualise, mensualiteAmount, f) }}
+                    className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${frequency === f ? 'bg-primary text-nv-black' : 'text-nv-text-muted hover:text-white'}`}
+                  >
+                    {f === 'MENSUEL' ? 'Mensuel' : 'Trimestriel'}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>
         <p className="text-[11px] text-nv-text-faint mt-1.5">
-          Sans engagement : prévoit les prochains paiements du client dans le prévisionnel Sales, tous les mois, tant que la case est cochée. Les retainers signés (engagement + durée) priment sur les mois qu&apos;ils couvrent.
+          Sans engagement : prévoit les prochains paiements du client dans le prévisionnel Sales ({frequency === 'TRIMESTRIEL' ? 'tous les trimestres' : 'tous les mois'}), tant que la case est cochée. Indépendant des contrats signés — les retainers priment sur les mois qu&apos;ils couvrent (pas de double comptage).
         </p>
       </div>
 

@@ -76,7 +76,7 @@ export async function computeSalesForecast(db: any, monthsAhead = 6): Promise<{
       try {
         return await db.client.findMany({
           where: { mensualise: true },
-          select: { id: true, name: true, mensualiteAmount: true },
+          select: { id: true, name: true, mensualiteAmount: true, mensualiteFrequency: true },
         })
       } catch { return [] }
     })(),
@@ -119,11 +119,14 @@ export async function computeSalesForecast(db: any, monthsAhead = 6): Promise<{
     for (const mc of monthlyClients) {
       if (!mc.mensualiteAmount || mc.mensualiteAmount <= 0) continue
       if (clientsWithRetainer.has(mc.id)) continue
+      // Trimestriel : facturé un mois sur trois (ancré sur le mois courant : i = 0, 3, 6…)
+      const trimestriel = mc.mensualiteFrequency === 'TRIMESTRIEL'
+      if (trimestriel && i % 3 !== 0) continue
       monthRetainers.push({
         retainerId: `rolling_${mc.id}`,
         clientId: mc.id,
         clientName: mc.name,
-        description: 'Mensualisation sans engagement',
+        description: trimestriel ? 'Trimestrialité sans engagement' : 'Mensualisation sans engagement',
         amount: mc.mensualiteAmount,
         isLastMonth: false,
         endLabel: '',

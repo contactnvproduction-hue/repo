@@ -97,8 +97,9 @@ model Client {
   lastBilanDate       DateTime?  // Date du dernier bilan mensuel effectué
   nextBilanDate       DateTime?  // Prochain bilan programmé
   followUpEnabled     Boolean    @default(false) // Suivi mensuel opt-in (clients hors retainer)
-  mensualise          Boolean    @default(false) // paiements mensuels prévus SANS engagement (prévisionnel roulant)
-  mensualiteAmount    Float?     // montant mensuel prévu quand mensualise = true
+  mensualise          Boolean    @default(false) // paiements récurrents prévus SANS engagement (prévisionnel roulant)
+  mensualiteAmount    Float?     // montant récurrent prévu quand mensualise = true
+  mensualiteFrequency String?    @default("MENSUEL") // MENSUEL | TRIMESTRIEL (ex : Fitness Park 2000€/trimestre)
   lastFollowUpAt      DateTime?  // dernière relance confirmée — le prompt « Client relancé ? » revient tous les 3 jours
   vatExempt           Boolean    @default(false) // client étranger : exonération de TVA (art. 259-1 du CGI, autoliquidation)
   createdAt   DateTime     @default(now())

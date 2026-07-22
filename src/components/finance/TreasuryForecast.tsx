@@ -18,12 +18,17 @@ export async function TreasuryForecast() {
   const startOfYear = new Date(year, 0, 1)
   const [snapshots, retainers, pendingInvoices, avgCharges, yearExpenses, investments] = await Promise.all([
     (async () => { try { return await db.treasurySnapshot.findMany({ orderBy: { date: 'desc' }, take: 12 }) } catch { return [] } })(),
-    prisma.clientRetainer.findMany({ select: { monthlyAmount: true, startDate: true, durationMonths: true } }),
+    prisma.clientRetainer.findMany({ select: { clientId: true, monthlyAmount: true, startDate: true, durationMonths: true } }),
     prisma.invoice.findMany({ where: { status: { in: ['EN_ATTENTE', 'EN_RETARD', 'PARTIELLEMENT_PAYÉE'] } }, select: { totalTTC: true, dueDate: true, notes: true, payments: { select: { amount: true, confirmed: true } } } }),
     computeAvgMonthlyCharges(db, 4),
     prisma.expense.findMany({ where: { date: { gte: startOfYear } }, select: { amount: true, date: true, categoryLabel: true } as any }),
     (async () => { try { return await db.investmentPlan.findMany({ select: { month: true, amount: true } }) } catch { return [] } })(),
   ])
+
+  // Clients mensualisés SANS engagement (case cochée sur la fiche) — mensuel ou trimestriel
+  const monthlyClients: any[] = await (async () => {
+    try { return await db.client.findMany({ where: { mensualise: true }, select: { id: true, mensualiteAmount: true, mensualiteFrequency: true } }) } catch { return [] }
+  })()
 
   const latest = snapshots[0] ?? null
   const startBalance = latest?.balance ?? 0
@@ -53,9 +58,19 @@ export async function TreasuryForecast() {
     const key = `${y}-${String(m + 1).padStart(2, '0')}`
 
     // MRR : retainers actifs ce mois
+    const coveredClients = new Set<string>()
     const mrr = retainers.reduce((s, r) => {
       const si = monthIndex(new Date(r.startDate))
-      return si <= idx && idx < si + r.durationMonths ? s + r.monthlyAmount : s
+      if (si <= idx && idx < si + r.durationMonths) { coveredClients.add(r.clientId); return s + r.monthlyAmount }
+      return s
+    }, 0)
+    // Clients mensualisés sans engagement (hors ceux déjà couverts par un retainer)
+    const rolling = (idx - curIdx)
+    const mensualiseIn = monthlyClients.reduce((s, mc) => {
+      if (!mc.mensualiteAmount || mc.mensualiteAmount <= 0) return s
+      if (coveredClients.has(mc.id)) return s
+      if (mc.mensualiteFrequency === 'TRIMESTRIEL' && rolling % 3 !== 0) return s
+      return s + mc.mensualiteAmount
     }, 0)
     // Factures ponctuelles en attente échéant ce mois (hors mensualités = déjà dans le MRR)
     const invoicesIn = (pendingInvoices as any[])
@@ -65,7 +80,7 @@ export async function TreasuryForecast() {
         return s + Math.max(0, inv.totalTTC - paid)
       }, 0)
 
-    const inflow = mrr + invoicesIn + recoverableVatMonthly
+    const inflow = mrr + mensualiseIn + invoicesIn + recoverableVatMonthly
     const outflow = avgMonthlyCharges + (invByMonth[key] ?? 0)
     balance = balance + inflow - outflow
     months.push({ key, month: m, inflow: Math.round(inflow), outflow: Math.round(outflow), balance: Math.round(balance), isCurrent: idx === curIdx })

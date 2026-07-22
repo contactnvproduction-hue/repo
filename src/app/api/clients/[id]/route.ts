@@ -20,6 +20,7 @@ const updateClientSchema = z.object({
   adaNotes: z.record(z.string(), z.unknown()).optional().nullable(),
   mensualise: z.boolean().optional(),
   mensualiteAmount: z.number().optional().nullable(),
+  mensualiteFrequency: z.enum(['MENSUEL', 'TRIMESTRIEL']).optional(),
   vatExempt: z.boolean().optional(), // client étranger — exonération TVA art. 259-1 CGI
 })
 
