@@ -16,6 +16,7 @@ export interface MrrRetainer {
   description:   string | null
   invoiceId:     string | null
   invoiceTTC:    number
+  cadence?:      'RETAINER' | 'MENSUEL' | 'TRIMESTRIEL'
 }
 
 interface Props { retainers: MrrRetainer[] }
@@ -79,7 +80,11 @@ export function MrrSection({ retainers }: Props) {
                   {r.clientName.charAt(0)}
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-white group-hover:text-primary transition-colors">{r.clientName}</p>
+                  <p className="text-sm font-medium text-white group-hover:text-primary transition-colors flex items-center gap-1.5">
+                    {r.clientName}
+                    {r.cadence === 'TRIMESTRIEL' && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 font-semibold">Trimestriel</span>}
+                    {r.cadence === 'MENSUEL' && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-white/8 text-nv-text-muted font-semibold">Mensualisé</span>}
+                  </p>
                   <p className="text-[10px] text-nv-text-muted truncate">{r.description}</p>
                 </div>
               </Link>
@@ -87,9 +92,11 @@ export function MrrSection({ retainers }: Props) {
               {/* Right: montant + actions */}
               <div className="flex items-center gap-2 shrink-0 ml-3">
                 <div className="text-right">
-                  <p className="text-sm font-semibold text-emerald-400">{fmt(r.monthlyAmount)}</p>
+                  <p className="text-sm font-semibold text-emerald-400">{fmt(r.monthlyAmount)}{r.cadence === 'TRIMESTRIEL' ? '/trim' : ''}</p>
                   <p className="text-[10px] text-nv-text-muted">
-                    jusqu&apos;au {end.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+                    {r.cadence === 'RETAINER' || !r.cadence
+                      ? <>jusqu&apos;au {end.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</>
+                      : 'sans engagement'}
                   </p>
                 </div>
 

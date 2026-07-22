@@ -178,6 +178,47 @@ async function getDashboardData(userId: string) {
     return { ...r, endDate: end.toISOString(), daysLeft }
   }).filter(r => r.daysLeft > 0 && r.daysLeft <= 15).sort((a, b) => a.daysLeft - b.daysLeft)
 
+  // ── Liste MRR à encaisser ce mois : retainers signés + clients mensualisés ──
+  const retainerMrr = activeRetainers.filter(r => r.client).filter(r => {
+    const inv = currentMonthInvoiceByClient.get(r.client!.id)
+    return !inv || inv.status !== 'PAYÉE'
+  }).map(r => {
+    const inv = currentMonthInvoiceByClient.get(r.client!.id) ?? null
+    return { id: r.id, clientId: r.client!.id, clientName: r.client!.name, clientCompany: r.client!.company, monthlyAmount: r.monthlyAmount, durationMonths: r.durationMonths, startDate: r.startDate.toISOString(), description: r.description, invoiceId: inv?.id ?? null, invoiceTTC: inv?.totalTTC ?? r.monthlyAmount, cadence: 'RETAINER' as const }
+  })
+
+  // Clients mensualisés (case cochée, sans engagement) — ex : Lucas, Fitness Park.
+  // Non couverts par un retainer actif, dus ce mois (mensuel) ou ce trimestre (trimestriel).
+  const activeRetainerClientIds = new Set(activeRetainers.filter(r => r.client).map(r => r.client!.id))
+  const mensualiseClients: any[] = await (prisma as any).client.findMany({
+    where: { mensualise: true, status: 'ACTIF' },
+    select: { id: true, name: true, company: true, mensualiteAmount: true, mensualiteFrequency: true },
+  }).catch(() => [])
+  const candidates = mensualiseClients.filter(c => (c.mensualiteAmount ?? 0) > 0 && !activeRetainerClientIds.has(c.id))
+  // Dernier encaissement par client candidat (pour savoir si déjà payé ce mois/trimestre)
+  const qStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1)
+  const lastPayByClient = new Map<string, Date>()
+  if (candidates.length > 0) {
+    const pays = await prisma.payment.findMany({
+      where: { confirmed: true, invoice: { clientId: { in: candidates.map(c => c.id) } } },
+      select: { date: true, invoice: { select: { clientId: true } } },
+    })
+    for (const p of pays) {
+      const cid = p.invoice?.clientId; if (!cid) continue
+      const d = new Date(p.date); const cur = lastPayByClient.get(cid)
+      if (!cur || d > cur) lastPayByClient.set(cid, d)
+    }
+  }
+  const mensualiseMrr = candidates.filter(c => {
+    const last = lastPayByClient.get(c.id)
+    return c.mensualiteFrequency === 'TRIMESTRIEL' ? (!last || last < qStart) : (!last || last < startOfMonth)
+  }).map(c => {
+    const inv = currentMonthInvoiceByClient.get(c.id) ?? null
+    const trimestriel = c.mensualiteFrequency === 'TRIMESTRIEL'
+    return { id: `mens_${c.id}`, clientId: c.id, clientName: c.name, clientCompany: c.company, monthlyAmount: c.mensualiteAmount, durationMonths: 0, startDate: now.toISOString(), description: trimestriel ? 'Trimestrialité sans engagement' : 'Mensualisation sans engagement', invoiceId: inv?.id ?? null, invoiceTTC: inv?.totalTTC ?? c.mensualiteAmount, cadence: (trimestriel ? 'TRIMESTRIEL' : 'MENSUEL') as 'TRIMESTRIEL' | 'MENSUEL' }
+  })
+  const mrrList = [...retainerMrr, ...mensualiseMrr]
+
   return {
     caMonth: caMonthVal, caYear, trend, contractedThisMonth,
     activeClients, activeProjects, pendingInvoices,
@@ -187,15 +228,7 @@ async function getDashboardData(userId: string) {
     ceoMeetingSoon: ceoMeetingSoon ? { ...ceoMeetingSoon, date: ceoMeetingSoon.date.toISOString() } : null,
     upcomingMeetings: upcomingCeoMeetings.map(m => ({ id: m.id, title: m.title, date: m.date.toISOString() })),
     checkinDone: !!todayCheckin,
-    activeRetainers: activeRetainers.filter(r => r.client).filter(r => {
-      // À relancer ce mois = mensualité du mois en cours pas encore réglée.
-      // Payée → retirée de la liste. Pas encore générée → à facturer (affichée).
-      const inv = currentMonthInvoiceByClient.get(r.client!.id)
-      return !inv || inv.status !== 'PAYÉE'
-    }).map(r => {
-      const inv = currentMonthInvoiceByClient.get(r.client!.id) ?? null
-      return { id: r.id, clientId: r.client!.id, clientName: r.client!.name, clientCompany: r.client!.company, monthlyAmount: r.monthlyAmount, durationMonths: r.durationMonths, startDate: r.startDate.toISOString(), description: r.description, invoiceId: inv?.id ?? null, invoiceTTC: inv?.totalTTC ?? r.monthlyAmount }
-    }),
+    activeRetainers: mrrList,
     retainersEndingSoon: retainersEndingSoon.filter(r => r.client).map(r => ({ id: r.id, clientId: r.client!.id, clientName: r.client!.name, clientCompany: r.client!.company, monthlyAmount: r.monthlyAmount, daysLeft: r.daysLeft, endDate: r.endDate })),
     leadsFollowUp: leadsFollowUp.map(l => ({ ...l, followUpDate: l.followUpDate!.toISOString(), isToday: l.followUpDate! >= todayStart && l.followUpDate! < todayEnd })),
     clientsToFollowUp: (upcomingBilans as any[]).map((c: any) => ({
