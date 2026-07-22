@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { CheckCircle2, Loader2, Plus, ChevronDown, X } from 'lucide-react'
+import { CheckCircle2, Loader2, Plus, ChevronDown, X, Moon } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const FOLLOW_UP_TYPES = [
@@ -24,10 +24,12 @@ export default function SuiviPage() {
   const [clientNames, setClientNames] = useState<string[]>([''])
   const [types, setTypes] = useState<string[]>([])
   const [notes, setNotes] = useState('')
+  const [noProject, setNoProject] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [success, setSuccess] = useState(false)
   const [submittedCount, setSubmittedCount] = useState(0)
   const [lastClients, setLastClients] = useState<string[]>([])
+  const [lastNoProject, setLastNoProject] = useState(false)
 
   useEffect(() => {
     fetch('/api/suivi/members')
@@ -49,8 +51,10 @@ export default function SuiviPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!memberName.trim()) { toast.error('Sélectionne ton prénom'); return }
-    if (filledClients.length === 0) { toast.error('Indique au moins un client relancé'); return }
-    if (types.length === 0) { toast.error('Coche au moins une action'); return }
+    if (!noProject) {
+      if (filledClients.length === 0) { toast.error('Indique au moins un client relancé'); return }
+      if (types.length === 0) { toast.error('Coche au moins une action'); return }
+    }
     setSubmitting(true)
     try {
       const res = await fetch('/api/suivi', {
@@ -59,13 +63,14 @@ export default function SuiviPage() {
         body: JSON.stringify({
           memberName: memberName.trim(),
           date: todayISO(),
-          clientNames: filledClients,
-          types,
+          clientNames: noProject ? [] : filledClients,
+          types: noProject ? ['pas_de_projet'] : types,
           notes: notes.trim() || undefined,
         }),
       })
       if (!res.ok) throw new Error()
-      setLastClients(filledClients)
+      setLastClients(noProject ? [] : filledClients)
+      setLastNoProject(noProject)
       setSuccess(true)
       setSubmittedCount(c => c + 1)
     } catch {
@@ -79,6 +84,7 @@ export default function SuiviPage() {
     setClientNames([''])
     setTypes([])
     setNotes('')
+    setNoProject(false)
     setSuccess(false)
   }
 
@@ -93,12 +99,14 @@ export default function SuiviPage() {
         </div>
         <h2 className="text-2xl font-black text-white mb-2">C&apos;est envoyé !</h2>
         <p className="text-nv-text-muted text-sm mb-0.5">
-          {lastClients.length === 1
-            ? <>Relance <span className="text-white font-medium">{lastClients[0]}</span> enregistrée</>
-            : <><span className="text-white font-medium">{lastClients.length} clients</span> relancés enregistrés</>
+          {lastNoProject
+            ? <>Pointage enregistré — <span className="text-white font-medium">pas de projet en cours</span></>
+            : lastClients.length === 1
+              ? <>Relance <span className="text-white font-medium">{lastClients[0]}</span> enregistrée</>
+              : <><span className="text-white font-medium">{lastClients.length} clients</span> relancés enregistrés</>
           }
         </p>
-        {lastClients.length > 1 && (
+        {!lastNoProject && lastClients.length > 1 && (
           <p className="text-xs text-nv-text-faint mb-0.5">{lastClients.join(', ')}</p>
         )}
         <p className="text-nv-text-faint text-xs mb-8 capitalize">{today}</p>
@@ -158,10 +166,30 @@ export default function SuiviPage() {
           )}
         </div>
 
+        {/* Pas de projet en cours — pointage sans client */}
+        <button
+          type="button"
+          onClick={() => setNoProject(v => !v)}
+          className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-left transition-all"
+          style={noProject
+            ? { background: 'rgba(129,140,248,0.10)', borderColor: 'rgba(129,140,248,0.4)', color: '#fff' }
+            : { background: 'rgba(255,255,255,0.03)', borderColor: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.6)' }
+          }
+        >
+          <div className="w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-all"
+            style={noProject ? { background: '#818cf8', borderColor: '#818cf8' } : { background: 'transparent', borderColor: 'rgba(255,255,255,0.2)' }}>
+            {noProject && <CheckCircle2 size={12} color="#000" />}
+          </div>
+          <div className="flex-1">
+            <span className="text-sm flex items-center gap-1.5"><Moon size={13} /> Pas de projet en cours</span>
+            <span className="block text-[11px] text-white/35 mt-0.5">Je pointe quand même — aucun client à relancer aujourd&apos;hui</span>
+          </div>
+        </button>
+
         {/* Quels clients ? */}
-        <div>
+        <div className={noProject ? 'opacity-40 pointer-events-none select-none' : ''}>
           <label className="block text-xs font-semibold text-white/50 uppercase tracking-widest mb-2">
-            Client(s) relancé(s) *
+            Client(s) relancé(s) {noProject ? '' : '*'}
           </label>
           <div className="space-y-2">
             {clientNames.map((name, i) => (
@@ -197,9 +225,9 @@ export default function SuiviPage() {
         </div>
 
         {/* Qu'est-ce que tu as fait ? */}
-        <div>
+        <div className={noProject ? 'opacity-40 pointer-events-none select-none' : ''}>
           <label className="block text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">
-            Action(s) réalisée(s) *
+            Action(s) réalisée(s) {noProject ? '' : '*'}
           </label>
           <div className="space-y-2">
             {FOLLOW_UP_TYPES.map(t => {
@@ -246,12 +274,12 @@ export default function SuiviPage() {
         {/* Submit */}
         <button
           type="submit"
-          disabled={submitting || !memberName || filledClients.length === 0 || types.length === 0}
+          disabled={submitting || !memberName || (!noProject && (filledClients.length === 0 || types.length === 0))}
           className="w-full py-3.5 rounded-xl text-sm font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           style={{ background: '#e8b84b', color: '#000' }}
         >
           {submitting ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
-          {submitting ? 'Envoi…' : `Valider la relance${filledClients.length > 1 ? ` (${filledClients.length} clients)` : ''}`}
+          {submitting ? 'Envoi…' : noProject ? 'Valider mon pointage' : `Valider la relance${filledClients.length > 1 ? ` (${filledClients.length} clients)` : ''}`}
         </button>
 
         <p className="text-center text-xs text-white/20 pb-4">

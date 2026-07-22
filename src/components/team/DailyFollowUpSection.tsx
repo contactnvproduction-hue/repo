@@ -34,12 +34,14 @@ const TYPE_LABELS: Record<string, string> = {
   avancement_livrable: 'Avancement livrables',
   avancement_projet: 'Avancement projet',
   relance_elements: 'Relance éléments',
+  pas_de_projet: 'Pas de projet en cours',
 }
 const TYPE_EMOJI: Record<string, string> = {
   relance_client: '📞',
   avancement_livrable: '🎬',
   avancement_projet: '📊',
   relance_elements: '📎',
+  pas_de_projet: '🌙',
 }
 
 function MemberHistoryModal({ member, onClose }: { member: Member; onClose: () => void }) {
@@ -311,11 +313,17 @@ export function DailyFollowUpSection({ members: initialMembers, todayStr, initia
                       </p>
                       {excluded ? (
                         <p className="text-[10px] text-nv-text-faint">Exclu du suivi</p>
-                      ) : done ? (
-                        <p className="text-[10px] text-emerald-400 font-medium">
-                          {memberEntries.reduce((acc, e) => acc + e.clientNames.length, 0)} client{memberEntries.reduce((acc, e) => acc + e.clientNames.length, 0) > 1 ? 's' : ''} · {memberEntries.flatMap(e => e.clientNames).join(', ')}
-                        </p>
-                      ) : (
+                      ) : done ? (() => {
+                        const clientCount = memberEntries.reduce((acc, e) => acc + e.clientNames.length, 0)
+                        const onlyNoProject = clientCount === 0 && memberEntries.every(e => e.types.includes('pas_de_projet'))
+                        return (
+                          <p className="text-[10px] text-emerald-400 font-medium">
+                            {onlyNoProject
+                              ? '🌙 Pointé · pas de projet en cours'
+                              : `${clientCount} client${clientCount > 1 ? 's' : ''} · ${memberEntries.flatMap(e => e.clientNames).join(', ')}`}
+                          </p>
+                        )
+                      })() : (
                         <p className="text-[10px] text-nv-text-faint">Pas encore soumis</p>
                       )}
                     </div>
@@ -358,10 +366,16 @@ export function DailyFollowUpSection({ members: initialMembers, todayStr, initia
                       <div className="flex-1 min-w-0">
                         <div className="flex items-baseline gap-2 flex-wrap mb-1">
                           <span className="text-xs font-semibold text-white">{e.memberName}</span>
-                          <span className="text-nv-text-faint text-[10px]">→</span>
-                          {e.clientNames.map(c => (
-                            <span key={c} className="text-xs font-medium text-primary">{c}</span>
-                          ))}
+                          {e.clientNames.length > 0 ? (
+                            <>
+                              <span className="text-nv-text-faint text-[10px]">→</span>
+                              {e.clientNames.map(c => (
+                                <span key={c} className="text-xs font-medium text-primary">{c}</span>
+                              ))}
+                            </>
+                          ) : (
+                            <span className="text-[10px] text-indigo-300">🌙 Pas de projet en cours</span>
+                          )}
                         </div>
                         <div className="flex flex-wrap gap-1">
                           {e.types.map(t => (

@@ -3,15 +3,19 @@ import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { z } from 'zod'
 
-const FOLLOW_UP_TYPES = ['relance_client', 'avancement_livrable', 'avancement_projet', 'relance_elements'] as const
+const FOLLOW_UP_TYPES = ['relance_client', 'avancement_livrable', 'avancement_projet', 'relance_elements', 'pas_de_projet'] as const
 
 const createSchema = z.object({
   memberName: z.string().min(1),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  clientNames: z.array(z.string().min(1)).min(1),
+  clientNames: z.array(z.string().min(1)),
   types: z.array(z.enum(FOLLOW_UP_TYPES)).min(1),
   notes: z.string().optional(),
-})
+}).refine(
+  // « Pas de projet en cours » = pointage valide sans client ; sinon ≥ 1 client
+  d => d.types.includes('pas_de_projet') || d.clientNames.length >= 1,
+  { path: ['clientNames'], message: 'Au moins un client requis' },
+)
 
 // POST — public, no auth required (external form)
 export async function POST(req: NextRequest) {
@@ -30,7 +34,7 @@ export async function POST(req: NextRequest) {
       memberName: result.data.memberName,
       userId: user?.id ?? null,
       date: result.data.date,
-      clientName: result.data.clientNames[0],   // legacy compat
+      clientName: result.data.clientNames[0] ?? null,   // legacy compat
       clientNames: result.data.clientNames,
       types: result.data.types,
       notes: result.data.notes,
