@@ -15,7 +15,6 @@ import Link from 'next/link'
 import { DashboardCharts } from '@/components/dashboard/DashboardCharts'
 import { LeadFollowUpModal } from '@/components/dashboard/LeadFollowUpModal'
 import { DailyCheckinModal } from '@/components/dashboard/DailyCheckinModal'
-import { MrrSection } from '@/components/dashboard/MrrSection'
 
 function todayStr() { return new Date().toISOString().slice(0, 10) }
 
@@ -43,7 +42,19 @@ async function collectedDedup(where: any, opts?: { excludeDueAfter?: Date }): Pr
     cur.sum += p.amount
     perInvoice.set(p.invoiceId, cur)
   }
-  for (const { sum, cap } of perInvoice.values()) total += Math.min(sum, cap)
+  // Plafond RÉEL par facture = montant TTC − ce qui a déjà été encaissé AVANT la
+  // fenêtre. Sans ça, une facture soldée un mois précédent avec un paiement fantôme
+  // ce mois-ci se recompte (source d'inflation du CA du mois).
+  const ids = [...perInvoice.keys()]
+  const paidBefore = new Map<string, number>()
+  if (ids.length > 0 && where?.date?.gte) {
+    const before = await prisma.payment.findMany({
+      where: { confirmed: true, date: { lt: where.date.gte }, invoiceId: { in: ids } },
+      select: { amount: true, invoiceId: true },
+    })
+    for (const p of before) paidBefore.set(p.invoiceId!, (paidBefore.get(p.invoiceId!) ?? 0) + p.amount)
+  }
+  for (const [id, { sum, cap }] of perInvoice) total += Math.max(0, Math.min(sum, cap - (paidBefore.get(id) ?? 0)))
   return total
 }
 
@@ -460,9 +471,6 @@ export default async function DashboardPage() {
           )}
         </div>
       )}
-
-      {/* ── MRR à facturer ── */}
-      <MrrSection retainers={data.activeRetainers} />
 
       {/* ── Closings mois par mois ── */}
       {data.closingsByMonth.some(m => m.count > 0) && (
