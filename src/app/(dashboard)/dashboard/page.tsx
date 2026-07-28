@@ -22,87 +22,49 @@ function todayStr() { return new Date().toISOString().slice(0, 10) }
 
 export type CaRow = { date: string; clientName: string; invoiceNumber: string | null; amount: number; counted: number; note: string | null }
 
-// CA encaissé du mois RETRACÉ paiement par paiement (date par date) depuis l'onglet
-// factures : chaque virement confirmé daté du mois est compté, plafonné à la valeur
-// réelle restante de sa facture, en écartant les doublons et les mensualités futures.
-// Renvoie le total ET le détail ligne par ligne (pour vérification).
+// CA encaissé = TOUS les virements confirmés datés de la fenêtre (l'onglet factures
+// date chaque règlement au jour de réception). Dédoublonnage d'un même virement
+// enregistré deux fois : même CLIENT + même montant + même jour → compté une fois
+// (ex : Lucas payé 6000 € sur 2 factures le même jour). 100% indépendant du
+// prévisionnel finance (qui n'est que de l'estimation).
 async function getMonthCollection(startOfMonth: Date, endOfMonth: Date): Promise<{ total: number; rows: CaRow[] }> {
   const payments = await prisma.payment.findMany({
     where: { confirmed: true, date: { gte: startOfMonth, lte: endOfMonth } },
-    select: { amount: true, date: true, invoiceId: true, invoice: { select: { number: true, totalTTC: true, dueDate: true, client: { select: { name: true } } } } },
+    select: { amount: true, date: true, invoice: { select: { number: true, client: { select: { id: true, name: true } } } } },
     orderBy: { date: 'asc' },
   })
-  const ids = [...new Set(payments.map(p => p.invoiceId).filter(Boolean))] as string[]
-  const paidBefore = new Map<string, number>()
-  if (ids.length > 0) {
-    const before = await prisma.payment.findMany({ where: { confirmed: true, date: { lt: startOfMonth }, invoiceId: { in: ids } }, select: { amount: true, invoiceId: true } })
-    for (const p of before) paidBefore.set(p.invoiceId, (paidBefore.get(p.invoiceId) ?? 0) + p.amount)
-  }
   const seen = new Set<string>()
-  const countedPerInvoice = new Map<string, number>()
   let total = 0
   const rows: CaRow[] = []
   for (const p of payments) {
-    const invId = p.invoiceId
-    const cap = p.invoice?.totalTTC ?? Number.POSITIVE_INFINITY
+    const cid = p.invoice?.client?.id ?? 'x'
+    const key = `${cid}|${p.amount}|${p.date.toISOString().slice(0, 10)}`
     let counted = p.amount
     let note: string | null = null
-    if (p.invoice?.dueDate && p.invoice.dueDate > endOfMonth) { counted = 0; note = 'Mensualité future (écartée)' }
-    else {
-      const key = `${invId}|${p.amount}|${p.date.toISOString().slice(0, 10)}`
-      if (seen.has(key)) { counted = 0; note = 'Doublon (ignoré)' }
-      else {
-        seen.add(key)
-        const before = paidBefore.get(invId) ?? 0
-        const already = countedPerInvoice.get(invId) ?? 0
-        counted = Math.max(0, Math.min(p.amount, cap - before - already))
-        countedPerInvoice.set(invId, already + p.amount)
-        if (counted < p.amount) note = 'Plafonné (facture déjà soldée)'
-      }
-    }
+    if (seen.has(key)) { counted = 0; note = 'Doublon — virement déjà compté' }
+    else seen.add(key)
     total += counted
     rows.push({ date: p.date.toISOString(), clientName: p.invoice?.client?.name ?? '—', invoiceNumber: p.invoice?.number ?? null, amount: p.amount, counted, note })
   }
   return { total, rows }
 }
 
-// CA réellement encaissé sur une fenêtre :
-//  - déduplique les doublons (même facture + même montant + même jour)
-//  - plafonne par facture au montant TTC (paiements en double d'un même montant)
-//  - option excludeDueAfter : ignore les mensualités FUTURES validées d'avance
-//    (l'ancien bouton MRR payait la dernière facture, parfois un mois à venir,
-//    ce qui gonflait le CA du mois)
-async function collectedDedup(where: any, opts?: { excludeDueAfter?: Date }): Promise<number> {
+// Même logique pour un total simple (mois précédent, année) : somme des virements
+// confirmés de la fenêtre, dédoublonnés par (client + montant + jour).
+async function collectedDedup(where: any): Promise<number> {
   const payments = await prisma.payment.findMany({
     where: { confirmed: true, ...where },
-    select: { amount: true, invoiceId: true, date: true, invoice: { select: { totalTTC: true, dueDate: true } } },
+    select: { amount: true, date: true, invoice: { select: { client: { select: { id: true } } } } },
   })
   const seen = new Set<string>()
-  const perInvoice = new Map<string, { sum: number; cap: number }>()
   let total = 0
   for (const p of payments) {
-    if (opts?.excludeDueAfter && p.invoice?.dueDate && p.invoice.dueDate > opts.excludeDueAfter) continue
-    const key = `${p.invoiceId ?? 'x'}|${p.amount}|${p.date.toISOString().slice(0, 10)}`
+    const cid = p.invoice?.client?.id ?? 'x'
+    const key = `${cid}|${p.amount}|${p.date.toISOString().slice(0, 10)}`
     if (seen.has(key)) continue
     seen.add(key)
-    if (!p.invoiceId) { total += p.amount; continue }
-    const cur = perInvoice.get(p.invoiceId) ?? { sum: 0, cap: p.invoice?.totalTTC ?? Number.POSITIVE_INFINITY }
-    cur.sum += p.amount
-    perInvoice.set(p.invoiceId, cur)
+    total += p.amount
   }
-  // Plafond RÉEL par facture = montant TTC − ce qui a déjà été encaissé AVANT la
-  // fenêtre. Sans ça, une facture soldée un mois précédent avec un paiement fantôme
-  // ce mois-ci se recompte (source d'inflation du CA du mois).
-  const ids = [...perInvoice.keys()]
-  const paidBefore = new Map<string, number>()
-  if (ids.length > 0 && where?.date?.gte) {
-    const before = await prisma.payment.findMany({
-      where: { confirmed: true, date: { lt: where.date.gte }, invoiceId: { in: ids } },
-      select: { amount: true, invoiceId: true },
-    })
-    for (const p of before) paidBefore.set(p.invoiceId!, (paidBefore.get(p.invoiceId!) ?? 0) + p.amount)
-  }
-  for (const [id, { sum, cap }] of perInvoice) total += Math.max(0, Math.min(sum, cap - (paidBefore.get(id) ?? 0)))
   return total
 }
 
@@ -121,7 +83,7 @@ async function getDashboardData(userId: string) {
     upcomingBilans, allClientInvoices, recentClosings, contractedRetainers,
   ] = await Promise.all([
     getMonthCollection(startOfMonth, endOfMonth),
-    collectedDedup({ date: { gte: lastMonthStart, lte: lastMonthEnd } }, { excludeDueAfter: lastMonthEnd }),
+    collectedDedup({ date: { gte: lastMonthStart, lte: lastMonthEnd } }),
     collectedDedup({ date: { gte: startOfYear } }),
     prisma.client.count({ where: { status: 'ACTIF' } }),
     prisma.project.count({ where: { status: { notIn: ['LIVRÉ', 'ARCHIVÉ'] } } }),

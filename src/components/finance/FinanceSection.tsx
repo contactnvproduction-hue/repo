@@ -21,13 +21,13 @@ export async function FinanceSection({ previsionnel }: { previsionnel: React.Rea
     prisma.expense.findMany({ where: { isRecurring: true }, orderBy: { amount: 'desc' } }),
   ])
 
-  // CA mensuel encaissé — déduplication des paiements en double (même facture +
-  // même montant + même jour) qui gonflaient le CA
+  // CA mensuel encaissé = tous les virements confirmés, dédoublonnés par
+  // (client + montant + jour) — cohérent avec le CA du dashboard.
   const monthlyCa = Array(12).fill(0)
   const caByClient: Record<string, { name: string; total: number }> = {}
   const seenPayments = new Set<string>()
   for (const p of payments) {
-    const key = `${(p as any).invoiceId ?? 'x'}|${p.amount}|${new Date(p.date).toISOString().slice(0, 10)}`
+    const key = `${p.invoice?.clientId ?? 'x'}|${p.amount}|${new Date(p.date).toISOString().slice(0, 10)}`
     if (seenPayments.has(key)) continue
     seenPayments.add(key)
     const m = new Date(p.date).getMonth()
