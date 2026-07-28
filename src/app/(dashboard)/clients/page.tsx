@@ -9,6 +9,7 @@ import { ClientsHeader } from '@/components/clients/ClientsHeader'
 import { ClientRowActions } from '@/components/clients/ClientRowActions'
 import { DuplicateClientsBanner } from '@/components/clients/DuplicateClientsBanner'
 import { FollowUpPrompt } from '@/components/clients/FollowUpPrompt'
+import { ResyncContractsButton } from '@/components/clients/ResyncContractsButton'
 import { detectDuplicates } from '@/lib/client-matching'
 
 const statusBadge: Record<string, 'success' | 'info' | 'warning' | 'muted'> = {
@@ -117,10 +118,12 @@ export default async function ClientsPage({ searchParams }: PageProps) {
       <Card>
         <CardContent className="p-0">
           {/* Barre filtre archivés */}
-          <div className="px-6 py-3 border-b border-nv-border flex items-center justify-between">
+          <div className="px-6 py-3 border-b border-nv-border flex items-center justify-between gap-2 flex-wrap">
             <div className="text-xs text-nv-text-muted">
               {clients.length} client{clients.length !== 1 ? 's' : ''} affiché{clients.length !== 1 ? 's' : ''}
             </div>
+            <div className="flex items-center gap-2">
+            <ResyncContractsButton />
             <Link
               href={showArchived ? '/clients' : '/clients?archived=1'}
               className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors ${
@@ -132,6 +135,7 @@ export default async function ClientsPage({ searchParams }: PageProps) {
               <Archive size={12} />
               {showArchived ? 'Masquer les archivés' : `Voir les archivés (${stats.archivés})`}
             </Link>
+            </div>
           </div>
 
           {/* Table header */}

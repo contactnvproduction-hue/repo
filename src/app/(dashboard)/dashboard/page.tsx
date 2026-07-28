@@ -16,8 +16,55 @@ import { DashboardCharts } from '@/components/dashboard/DashboardCharts'
 import { LeadFollowUpModal } from '@/components/dashboard/LeadFollowUpModal'
 import { DailyCheckinModal } from '@/components/dashboard/DailyCheckinModal'
 import { NewSignedClientModal } from '@/components/dashboard/NewSignedClientModal'
+import { CaMonthDetail } from '@/components/dashboard/CaMonthDetail'
 
 function todayStr() { return new Date().toISOString().slice(0, 10) }
+
+export type CaRow = { date: string; clientName: string; invoiceNumber: string | null; amount: number; counted: number; note: string | null }
+
+// CA encaissé du mois RETRACÉ paiement par paiement (date par date) depuis l'onglet
+// factures : chaque virement confirmé daté du mois est compté, plafonné à la valeur
+// réelle restante de sa facture, en écartant les doublons et les mensualités futures.
+// Renvoie le total ET le détail ligne par ligne (pour vérification).
+async function getMonthCollection(startOfMonth: Date, endOfMonth: Date): Promise<{ total: number; rows: CaRow[] }> {
+  const payments = await prisma.payment.findMany({
+    where: { confirmed: true, date: { gte: startOfMonth, lte: endOfMonth } },
+    select: { amount: true, date: true, invoiceId: true, invoice: { select: { number: true, totalTTC: true, dueDate: true, client: { select: { name: true } } } } },
+    orderBy: { date: 'asc' },
+  })
+  const ids = [...new Set(payments.map(p => p.invoiceId).filter(Boolean))] as string[]
+  const paidBefore = new Map<string, number>()
+  if (ids.length > 0) {
+    const before = await prisma.payment.findMany({ where: { confirmed: true, date: { lt: startOfMonth }, invoiceId: { in: ids } }, select: { amount: true, invoiceId: true } })
+    for (const p of before) paidBefore.set(p.invoiceId, (paidBefore.get(p.invoiceId) ?? 0) + p.amount)
+  }
+  const seen = new Set<string>()
+  const countedPerInvoice = new Map<string, number>()
+  let total = 0
+  const rows: CaRow[] = []
+  for (const p of payments) {
+    const invId = p.invoiceId
+    const cap = p.invoice?.totalTTC ?? Number.POSITIVE_INFINITY
+    let counted = p.amount
+    let note: string | null = null
+    if (p.invoice?.dueDate && p.invoice.dueDate > endOfMonth) { counted = 0; note = 'Mensualité future (écartée)' }
+    else {
+      const key = `${invId}|${p.amount}|${p.date.toISOString().slice(0, 10)}`
+      if (seen.has(key)) { counted = 0; note = 'Doublon (ignoré)' }
+      else {
+        seen.add(key)
+        const before = paidBefore.get(invId) ?? 0
+        const already = countedPerInvoice.get(invId) ?? 0
+        counted = Math.max(0, Math.min(p.amount, cap - before - already))
+        countedPerInvoice.set(invId, already + p.amount)
+        if (counted < p.amount) note = 'Plafonné (facture déjà soldée)'
+      }
+    }
+    total += counted
+    rows.push({ date: p.date.toISOString(), clientName: p.invoice?.client?.name ?? '—', invoiceNumber: p.invoice?.number ?? null, amount: p.amount, counted, note })
+  }
+  return { total, rows }
+}
 
 // CA réellement encaissé sur une fenêtre :
 //  - déduplique les doublons (même facture + même montant + même jour)
@@ -73,7 +120,7 @@ async function getDashboardData(userId: string) {
     leadCalls, leadsFollowUp, allRetainers, upcomingCeoMeetings, todayCheckin,
     upcomingBilans, allClientInvoices, recentClosings, contractedRetainers,
   ] = await Promise.all([
-    collectedDedup({ date: { gte: startOfMonth } }, { excludeDueAfter: endOfMonth }),
+    getMonthCollection(startOfMonth, endOfMonth),
     collectedDedup({ date: { gte: lastMonthStart, lte: lastMonthEnd } }, { excludeDueAfter: lastMonthEnd }),
     collectedDedup({ date: { gte: startOfYear } }),
     prisma.client.count({ where: { status: 'ACTIF' } }),
@@ -149,7 +196,7 @@ async function getDashboardData(userId: string) {
     prisma.clientRetainer.findMany({ where: { createdAt: { gte: startOfMonth } }, select: { monthlyAmount: true, durationMonths: true } }),
   ])
 
-  const caMonthVal = caMonth
+  const caMonthVal = caMonth.total
   const caLastMonthVal = caLastMonth
   const trend = caLastMonthVal > 0 ? Math.round(((caMonthVal - caLastMonthVal) / caLastMonthVal) * 100) : 0
   // CA contracté ce mois = valeur totale des contrats signés ce mois (mensualité × durée)
@@ -232,7 +279,7 @@ async function getDashboardData(userId: string) {
   const mrrList = [...retainerMrr, ...mensualiseMrr]
 
   return {
-    caMonth: caMonthVal, caYear, trend, contractedThisMonth,
+    caMonth: caMonthVal, caMonthRows: caMonth.rows, caYear, trend, contractedThisMonth,
     activeClients, activeProjects, pendingInvoices,
     urgentTasks, recentProjects, overdueInvoices, prospectsToRelance, monthlyPayments,
     acquisition: { totalCalls, showupRate, qualifRate, closingRate },
@@ -380,7 +427,9 @@ export default async function DashboardPage() {
 
       {/* ── Vue chiffre d'affaires ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="Collecté ce mois" value={formatCurrency(data.caMonth)} icon={TrendingUp} color="primary" subtitle={data.trend !== 0 ? `${data.trend > 0 ? '▲' : '▼'} ${Math.abs(data.trend)}% vs mois dernier` : 'encaissé ce mois'} />
+        <CaMonthDetail rows={data.caMonthRows}>
+          <StatCard title="Collecté ce mois" value={formatCurrency(data.caMonth)} icon={TrendingUp} color="primary" subtitle={data.trend !== 0 ? `${data.trend > 0 ? '▲' : '▼'} ${Math.abs(data.trend)}% vs mois dernier` : 'voir le détail'} />
+        </CaMonthDetail>
         <StatCard title="Contracté ce mois" value={formatCurrency(data.contractedThisMonth)} icon={Briefcase} color="success" subtitle="contrats signés × durée" />
         <StatCard title="MRR actuel" value={formatCurrency(data.currentMRR)} icon={RepeatIcon} color="warning" subtitle="récurrent / mois" />
         <StatCard title="Collecté cette année" value={formatCurrency(data.caYear)} icon={TrendingUp} color="primary" subtitle={`année ${new Date().getFullYear()}`} />
