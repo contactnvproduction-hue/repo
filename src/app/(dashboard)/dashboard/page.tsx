@@ -15,6 +15,7 @@ import Link from 'next/link'
 import { DashboardCharts } from '@/components/dashboard/DashboardCharts'
 import { LeadFollowUpModal } from '@/components/dashboard/LeadFollowUpModal'
 import { DailyCheckinModal } from '@/components/dashboard/DailyCheckinModal'
+import { NewSignedClientModal } from '@/components/dashboard/NewSignedClientModal'
 
 function todayStr() { return new Date().toISOString().slice(0, 10) }
 
@@ -256,6 +257,40 @@ async function getDashboardData(userId: string) {
   }
 }
 
+// Clients récemment signés via la plateforme de contrat, encore sans offre taguée
+// → proposés à l'admin pour leur associer une catégorie de produit.
+async function getNewSignedClients() {
+  try {
+    const since = new Date(Date.now() - 30 * 86_400_000)
+    const [signed, products] = await Promise.all([
+      (prisma as any).signedContract.findMany({
+        where: { status: 'SIGNED', clientId: { not: null }, signedAt: { gte: since } },
+        select: { clientId: true, signedAt: true },
+        orderBy: { signedAt: 'desc' },
+      }),
+      prisma.product.findMany({ where: { active: true }, orderBy: [{ order: 'asc' }, { createdAt: 'asc' }], select: { id: true, name: true, color: true } }),
+    ])
+    const clientIds = [...new Set(signed.map((s: any) => s.clientId).filter(Boolean))] as string[]
+    if (clientIds.length === 0) return { clients: [] as any[], products }
+    const [tagged, infos] = await Promise.all([
+      (prisma as any).clientProduct.findMany({ where: { clientId: { in: clientIds } }, select: { clientId: true } }),
+      prisma.client.findMany({ where: { id: { in: clientIds }, status: { not: 'ARCHIVÉ' as any } }, select: { id: true, name: true, company: true } }),
+    ])
+    const taggedSet = new Set(tagged.map((t: any) => t.clientId))
+    const infoMap = new Map(infos.map(c => [c.id, c]))
+    const seen = new Set<string>()
+    const clients: any[] = []
+    for (const s of signed as any[]) {
+      const cid = s.clientId as string
+      if (seen.has(cid) || taggedSet.has(cid) || !infoMap.has(cid)) continue
+      seen.add(cid)
+      const info = infoMap.get(cid)!
+      clients.push({ clientId: cid, clientName: info.name, company: info.company, signedAt: new Date(s.signedAt).toISOString() })
+    }
+    return { clients, products }
+  } catch { return { clients: [] as any[], products: [] as any[] } }
+}
+
 const projectStatusLabel: Record<string, string> = {
   BRIEF_REÇU: 'Brief reçu', EN_PRODUCTION: 'En production', EN_POST_PRODUCTION: 'Post-prod',
   EN_VALIDATION: 'Validation', LIVRÉ: 'Livré', ARCHIVÉ: 'Archivé',
@@ -269,6 +304,8 @@ export default async function DashboardPage() {
   const session = await auth()
   if (!session?.user) return null
   const data = await getDashboardData(session.user.id)
+  const isAdmin = ['ADMIN', 'MANAGER'].includes(session.user.role)
+  const signedToLabel = isAdmin ? await getNewSignedClients() : { clients: [], products: [] }
 
   const today = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })
   const alertCount = data.prospectsToRelance.length + data.leadsFollowUp.length + data.retainersEndingSoon.length
@@ -277,6 +314,7 @@ export default async function DashboardPage() {
     <div className="space-y-6 animate-fade-in">
       <DailyCheckinModal initialDone={data.checkinDone} />
       <LeadFollowUpModal leads={data.leadsFollowUp} />
+      {signedToLabel.clients.length > 0 && <NewSignedClientModal clients={signedToLabel.clients} products={signedToLabel.products} />}
 
       {/* ── Hero greeting ── */}
       <div className="relative overflow-hidden rounded-2xl border border-nv-border bg-nv-card p-6">

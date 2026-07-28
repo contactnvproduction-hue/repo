@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db'
 import { findMatchingClient } from '@/lib/client-matching'
+import { ensureRetainerInvoices } from '@/lib/retainer-invoices'
 import { NextResponse } from 'next/server'
 
 function corsHeaders() {
@@ -250,6 +251,12 @@ export async function PATCH(
         where: { id: settings.id },
         data: { invoiceCounter: counter },
       })
+    }
+
+    // ── 4b. MRR : générer TOUTES les mensualités à venir (pas seulement la 1re) ──
+    // Idempotent : ne recrée pas les mois déjà couverts (« Mensualité » dans les notes).
+    if (contract.missionType === 'MRR') {
+      await ensureRetainerInvoices(prisma as any).catch(() => {})
     }
 
     // ── 5. Lier le lead + passer en statut "Signé" (taux de closing) ──────────
