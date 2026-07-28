@@ -13,8 +13,11 @@ export async function POST() {
     return NextResponse.json({ error: 'Permission refusée' }, { status: 403 })
   }
   try {
-    const contracts = await (prisma as any).signedContract.findMany({ where: { status: 'SIGNED' } })
-    let clientsCreated = 0, retainersCreated = 0
+    // Contrats signés OU avec une signature enregistrée mais restés en attente
+    const contracts = await (prisma as any).signedContract.findMany({
+      where: { OR: [{ status: 'SIGNED' }, { signedAt: { not: null } }, { signeeName: { not: null } }] },
+    })
+    let clientsCreated = 0, retainersCreated = 0, unarchived = 0
     for (const c of contracts) {
       // 1. Retrouver / créer le client
       let client = c.clientId ? await prisma.client.findUnique({ where: { id: c.clientId } }) : null
@@ -25,10 +28,16 @@ export async function POST() {
           data: { name: c.clientName, company: c.clientCompany || null, siret, email: c.clientEmail || null, address: c.clientAddress || null, type: 'PARTICULIER', status: 'ACTIF', source: 'AUTRE' },
         })
         clientsCreated++
+      } else if ((client as any).status === 'ARCHIVÉ') {
+        // Un client signé ne doit pas rester archivé (sinon absent de la liste)
+        client = await prisma.client.update({ where: { id: client.id }, data: { status: 'ACTIF' } })
+        unarchived++
       }
-      if (c.clientId !== client.id) {
-        await (prisma as any).signedContract.update({ where: { id: c.id }, data: { clientId: client.id } }).catch(() => {})
-      }
+      // Marque le contrat comme SIGNED + relie le client
+      await (prisma as any).signedContract.update({
+        where: { id: c.id },
+        data: { status: 'SIGNED', clientId: client.id, ...(c.signedAt ? {} : { signedAt: new Date() }) },
+      }).catch(() => {})
       // 2. Retainer si MRR (idempotent)
       if (c.missionType === 'MRR' && c.monthlyAmount && c.durationMonths) {
         const desc = Array.isArray(c.deliverables) && c.deliverables.length > 0
@@ -45,7 +54,7 @@ export async function POST() {
     }
     // 3. Générer toutes les factures de mensualités manquantes
     const invoicesCreated = await ensureRetainerInvoices(prisma as any)
-    return NextResponse.json({ processed: contracts.length, clientsCreated, retainersCreated, invoicesCreated })
+    return NextResponse.json({ processed: contracts.length, clientsCreated, retainersCreated, unarchived, invoicesCreated })
   } catch (e) {
     console.error('[contracts/resync]', e)
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })

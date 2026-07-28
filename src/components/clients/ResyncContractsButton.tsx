@@ -18,6 +18,7 @@ export function ResyncContractsButton() {
       if (!res.ok) throw new Error(json.error)
       const parts = []
       if (json.clientsCreated) parts.push(`${json.clientsCreated} client(s)`)
+      if (json.unarchived) parts.push(`${json.unarchived} désarchivé(s)`)
       if (json.retainersCreated) parts.push(`${json.retainersCreated} retainer(s)`)
       if (json.invoicesCreated) parts.push(`${json.invoicesCreated} facture(s)`)
       toast.success(parts.length ? `Rattrapé : ${parts.join(', ')}` : 'Tout est déjà à jour ✓')

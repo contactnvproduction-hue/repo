@@ -39,12 +39,10 @@ async function getMonthCollection(startOfMonth: Date, endOfMonth: Date): Promise
   for (const p of payments) {
     const cid = p.invoice?.client?.id ?? 'x'
     const key = `${cid}|${p.amount}|${p.date.toISOString().slice(0, 10)}`
-    let counted = p.amount
-    let note: string | null = null
-    if (seen.has(key)) { counted = 0; note = 'Doublon — virement déjà compté' }
-    else seen.add(key)
-    total += counted
-    rows.push({ date: p.date.toISOString(), clientName: p.invoice?.client?.name ?? '—', invoiceNumber: p.invoice?.number ?? null, amount: p.amount, counted, note })
+    if (seen.has(key)) continue // même virement enregistré 2× → ni compté ni affiché
+    seen.add(key)
+    total += p.amount
+    rows.push({ date: p.date.toISOString(), clientName: p.invoice?.client?.name ?? '—', invoiceNumber: p.invoice?.number ?? null, amount: p.amount, counted: p.amount, note: null })
   }
   return { total, rows }
 }

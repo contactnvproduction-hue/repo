@@ -14,7 +14,6 @@ const frDate = (d: string) => new Date(d).toLocaleDateString('fr-FR', { day: '2-
 export function CaMonthDetail({ rows, children }: { rows: CaRow[]; children: React.ReactNode }) {
   const [open, setOpen] = useState(false)
   const total = rows.reduce((s, r) => s + r.counted, 0)
-  const brut = rows.reduce((s, r) => s + r.amount, 0)
 
   return (
     <>
@@ -38,19 +37,18 @@ export function CaMonthDetail({ rows, children }: { rows: CaRow[]; children: Rea
               <p className="text-sm text-nv-text-faint text-center py-10">Aucun virement encaissé ce mois-ci.</p>
             ) : (
               <div className="overflow-y-auto">
-                <div className="grid grid-cols-[64px_1fr_90px_90px] gap-2 px-5 py-2 text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold border-b border-nv-border/50 sticky top-0 bg-nv-dark">
-                  <span>Date</span><span>Client · facture</span><span className="text-right">Virement</span><span className="text-right">Retenu</span>
+                <div className="grid grid-cols-[64px_1fr_100px] gap-2 px-5 py-2 text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold border-b border-nv-border/50 sticky top-0 bg-nv-dark">
+                  <span>Date</span><span>Client · facture</span><span className="text-right">Encaissé</span>
                 </div>
                 <div className="divide-y divide-nv-border/40">
                   {rows.map((r, i) => (
-                    <div key={i} className={`grid grid-cols-[64px_1fr_90px_90px] gap-2 px-5 py-2 items-center ${r.counted === 0 ? 'opacity-45' : ''}`}>
+                    <div key={i} className="grid grid-cols-[64px_1fr_100px] gap-2 px-5 py-2 items-center">
                       <span className="text-xs text-nv-text-muted tabular-nums">{frDate(r.date)}</span>
                       <div className="min-w-0">
                         <p className="text-sm text-white truncate">{r.clientName}</p>
-                        <p className="text-[10px] text-nv-text-faint">{r.invoiceNumber ?? '—'}{r.note ? ` · ${r.note}` : ''}</p>
+                        <p className="text-[10px] text-nv-text-faint">{r.invoiceNumber ?? '—'}</p>
                       </div>
-                      <span className="text-xs text-nv-text-muted tabular-nums text-right">{eur(r.amount)}</span>
-                      <span className={`text-xs font-semibold tabular-nums text-right ${r.counted > 0 ? 'text-emerald-400' : 'text-nv-text-faint'}`}>{eur(r.counted)}</span>
+                      <span className="text-xs font-semibold tabular-nums text-right text-emerald-400">{eur(r.amount)}</span>
                     </div>
                   ))}
                 </div>
@@ -58,8 +56,8 @@ export function CaMonthDetail({ rows, children }: { rows: CaRow[]; children: Rea
             )}
 
             <div className="border-t border-nv-border px-5 py-3 flex items-center justify-between">
-              <span className="text-xs text-nv-text-muted">{rows.length} virement{rows.length > 1 ? 's' : ''} · brut {eur(brut)}</span>
-              <span className="text-sm font-bold text-white">CA retenu : <span className="text-emerald-400">{eur(total)}</span></span>
+              <span className="text-xs text-nv-text-muted">{rows.length} virement{rows.length > 1 ? 's' : ''} encaissé{rows.length > 1 ? 's' : ''}</span>
+              <span className="text-sm font-bold text-white">CA encaissé : <span className="text-emerald-400">{eur(total)}</span></span>
             </div>
           </div>
         </div>,
