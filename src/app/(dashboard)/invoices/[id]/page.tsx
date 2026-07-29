@@ -40,6 +40,21 @@ export default async function InvoiceDetailPage({ params }: PageProps) {
 
   if (!invoice) notFound()
 
+  // Auto-correction de la ventilation TVA : le TTC fait foi. TVA 20% par défaut
+  // (HT = TTC / 1,2), 0 si le client est exonéré. Ne touche que les factures « simples »
+  // (sans lignes détaillées) — celles créées via le formulaire montant. Corrige et
+  // persiste au passage les anciennes factures nées avec TVA à 0.
+  if (invoice.lines.length === 0) {
+    const exempt = (invoice.client as any)?.vatExempt === true
+    const correctHT = exempt ? invoice.totalTTC : Math.round((invoice.totalTTC / 1.2) * 100) / 100
+    const correctTVA = Math.round((invoice.totalTTC - correctHT) * 100) / 100
+    if (Math.abs(invoice.totalHT - correctHT) > 0.01 || Math.abs(invoice.totalTVA - correctTVA) > 0.01) {
+      await prisma.invoice.update({ where: { id }, data: { totalHT: correctHT, totalTVA: correctTVA } }).catch(() => {})
+      invoice.totalHT = correctHT
+      invoice.totalTVA = correctTVA
+    }
+  }
+
   const restant = invoice.totalTTC - invoice.amountPaid
 
   return (
