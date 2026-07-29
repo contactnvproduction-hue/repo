@@ -8,25 +8,31 @@ import {
   LayoutDashboard, Users, FolderKanban, Receipt, BarChart3,
   CheckSquare, Target, Calendar, Users2, Settings,
   LogOut, X, ChevronRight, Database, Crosshair, Briefcase,
-  ClipboardCheck,
+  ClipboardCheck, Wallet, Clapperboard,
 } from 'lucide-react'
 
 const navItems = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { href: '/ceo', icon: Briefcase, label: 'Espace CEO' },
   {
-    label: 'Sales',
+    label: 'Ventes',
     icon: Crosshair,
     children: [
-      { href: '/sales/prospection', label: 'Prospection' },
+      { href: '/sales/prospection', label: 'Dashboard commercial' },
       { href: '/sales?tab=pipeline', label: 'Pipeline closing' },
-      { href: '/sales?tab=finance', label: 'Finance & prévisionnel' },
       { href: '/sales?tab=contracts', label: 'Contrats' },
-      { href: '/sales?tab=content', label: 'Contenu' },
       { href: '/sales?tab=products', label: 'Répartition CA' },
+    ],
+  },
+  {
+    label: 'Finances',
+    icon: Wallet,
+    children: [
+      { href: '/sales?tab=finance', label: 'Prévisionnel & tréso' },
       { href: '/invoices', label: 'Factures' },
     ],
   },
+  { href: '/sales?tab=content', icon: Clapperboard, label: 'Contenu' },
   { href: '/clients', icon: Users, label: 'Clients' },
   { href: '/onboardings', icon: ClipboardCheck, label: 'Onboarding' },
   { href: '/projects', icon: FolderKanban, label: 'Projets' },
