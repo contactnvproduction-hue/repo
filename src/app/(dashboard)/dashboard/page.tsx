@@ -17,6 +17,7 @@ import { LeadFollowUpModal } from '@/components/dashboard/LeadFollowUpModal'
 import { DailyCheckinModal } from '@/components/dashboard/DailyCheckinModal'
 import { NewSignedClientModal } from '@/components/dashboard/NewSignedClientModal'
 import { CaMonthDetail } from '@/components/dashboard/CaMonthDetail'
+import { ContractedMonthDetail } from '@/components/dashboard/ContractedMonthDetail'
 
 function todayStr() { return new Date().toISOString().slice(0, 10) }
 
@@ -153,7 +154,7 @@ async function getDashboardData(userId: string) {
       } catch { return [] }
     })(),
     // Contrats (retainers) signés ce mois → CA contracté du mois (mensualité × durée)
-    prisma.clientRetainer.findMany({ where: { createdAt: { gte: startOfMonth } }, select: { monthlyAmount: true, durationMonths: true } }),
+    prisma.clientRetainer.findMany({ where: { createdAt: { gte: startOfMonth } }, select: { monthlyAmount: true, durationMonths: true, createdAt: true, client: { select: { name: true } } } }),
   ])
 
   const caMonthVal = caMonth.total
@@ -161,6 +162,9 @@ async function getDashboardData(userId: string) {
   const trend = caLastMonthVal > 0 ? Math.round(((caMonthVal - caLastMonthVal) / caLastMonthVal) * 100) : 0
   // CA contracté ce mois = valeur totale des contrats signés ce mois (mensualité × durée)
   const contractedThisMonth = contractedRetainers.reduce((s, r) => s + r.monthlyAmount * r.durationMonths, 0)
+  const contractedRows = contractedRetainers
+    .map(r => ({ date: r.createdAt.toISOString(), clientName: r.client?.name ?? '—', monthlyAmount: r.monthlyAmount, durationMonths: r.durationMonths, total: r.monthlyAmount * r.durationMonths }))
+    .sort((a, b) => b.total - a.total)
   const totalCalls = leadCalls.length
   const showedUp = leadCalls.filter(c => c.showedUp).length
   const qualified = leadCalls.filter(c => c.qualified).length
@@ -239,7 +243,7 @@ async function getDashboardData(userId: string) {
   const mrrList = [...retainerMrr, ...mensualiseMrr]
 
   return {
-    caMonth: caMonthVal, caMonthRows: caMonth.rows, caYear, trend, contractedThisMonth,
+    caMonth: caMonthVal, caMonthRows: caMonth.rows, caYear, trend, contractedThisMonth, contractedRows,
     activeClients, activeProjects, pendingInvoices,
     urgentTasks, recentProjects, overdueInvoices, prospectsToRelance, monthlyPayments,
     acquisition: { totalCalls, showupRate, qualifRate, closingRate },
@@ -390,7 +394,9 @@ export default async function DashboardPage() {
         <CaMonthDetail rows={data.caMonthRows}>
           <StatCard title="Collecté ce mois" value={formatCurrency(data.caMonth)} icon={TrendingUp} color="primary" subtitle={data.trend !== 0 ? `${data.trend > 0 ? '▲' : '▼'} ${Math.abs(data.trend)}% vs mois dernier` : 'voir le détail'} />
         </CaMonthDetail>
-        <StatCard title="Contracté ce mois" value={formatCurrency(data.contractedThisMonth)} icon={Briefcase} color="success" subtitle="contrats signés × durée" />
+        <ContractedMonthDetail rows={data.contractedRows}>
+          <StatCard title="Contracté ce mois" value={formatCurrency(data.contractedThisMonth)} icon={Briefcase} color="success" subtitle="contrats signés × durée" />
+        </ContractedMonthDetail>
         <StatCard title="MRR actuel" value={formatCurrency(data.currentMRR)} icon={RepeatIcon} color="warning" subtitle="récurrent / mois" />
         <StatCard title="Collecté cette année" value={formatCurrency(data.caYear)} icon={TrendingUp} color="primary" subtitle={`année ${new Date().getFullYear()}`} />
       </div>
