@@ -9,7 +9,7 @@ import { Select } from '@/components/ui/select'
 import { Link2, FileText, FolderKanban, Calendar, Euro, CheckCircle2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
-interface Client { id: string; name: string; company: string | null }
+interface Client { id: string; name: string; company: string | null; vatExempt?: boolean }
 interface Project { id: string; title: string; clientId: string }
 
 interface Props {
@@ -64,6 +64,15 @@ export function SimpleDocumentForm({ type, clients, projects, preselectedClientI
     ...filteredProjects.map(p => ({ value: p.id, label: p.title })),
   ]
   const statusOptions = type === 'quote' ? QUOTE_STATUSES : INVOICE_STATUSES
+
+  // Aperçu TVA en direct : montant saisi = TTC. TVA 20% par défaut, 0 si le client
+  // est exonéré (case « client étranger » cochée sur sa fiche).
+  const selectedClient = clients.find(c => c.id === clientId)
+  const exempt = selectedClient?.vatExempt === true
+  const amt = parseFloat(form.amount) || 0
+  const previewHT = exempt ? amt : Math.round((amt / 1.2) * 100) / 100
+  const previewTVA = amt - previewHT
+  const eurFmt = (n: number) => `${n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -148,6 +157,15 @@ export function SimpleDocumentForm({ type, clients, projects, preselectedClientI
                 required
                 className="w-full px-3 py-2 bg-nv-dark border border-nv-border rounded-lg text-white placeholder-nv-text-faint focus:border-primary outline-none text-sm"
               />
+              {amt > 0 && (
+                <p className="text-[11px] mt-1.5">
+                  {exempt ? (
+                    <span className="text-blue-300">Client exonéré de TVA → HT {eurFmt(amt)} · TVA 0 €</span>
+                  ) : (
+                    <span className="text-nv-text-faint">HT {eurFmt(previewHT)} · <span className="text-emerald-400">TVA 20% {eurFmt(previewTVA)}</span> · TTC {eurFmt(amt)}</span>
+                  )}
+                </p>
+              )}
             </div>
             {/* Status */}
             <Select
