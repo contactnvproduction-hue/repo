@@ -78,9 +78,20 @@ export async function POST(req: NextRequest) {
   const lines = result.data.lines
   let totalHT: number, totalTVA: number, totalTTC: number
   if (result.data.totalTTC !== undefined) {
-    totalHT = result.data.totalHT ?? result.data.totalTTC
-    totalTVA = 0
     totalTTC = result.data.totalTTC
+    // Ventilation TVA selon l'exonération du client (art. 259-1 CGI). Par défaut
+    // TVA 20% : HT = TTC / 1,2. Le formulaire simple envoie totalHT = totalTTC
+    // (montant saisi = TTC) — on recalcule donc le vrai HT ici, sauf si un HT
+    // explicite (différent du TTC) est fourni.
+    if (result.data.totalHT !== undefined && result.data.totalHT !== totalTTC) {
+      totalHT = result.data.totalHT
+      totalTVA = totalTTC - totalHT
+    } else {
+      const client = await prisma.client.findUnique({ where: { id: result.data.clientId }, select: { vatExempt: true } })
+      const exempt = (client as any)?.vatExempt === true
+      totalHT = exempt ? totalTTC : Math.round((totalTTC / 1.2) * 100) / 100
+      totalTVA = totalTTC - totalHT
+    }
   } else {
     totalHT = lines.reduce((s, l) => s + l.quantity * l.unitPrice, 0)
     totalTVA = lines.reduce((s, l) => s + l.quantity * l.unitPrice * (l.vatRate / 100), 0)
