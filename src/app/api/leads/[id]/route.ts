@@ -14,7 +14,16 @@ const schema = z.object({
   notes: z.string().optional(),
   followUpDate: z.string().optional().nullable(),
   convertedClientId: z.string().optional().nullable(),
+  // Prospection commerciale
+  commercialId: z.string().optional().nullable(),
+  rdvBookedAt: z.string().optional().nullable(),
+  rdvDate: z.string().optional().nullable(),
+  saleMonthlyAmount: z.number().optional().nullable(),
+  wonAt: z.string().optional().nullable(),
+  lostAt: z.string().optional().nullable(),
 })
+
+const dateFields = ['rdvBookedAt', 'rdvDate', 'wonAt', 'lostAt'] as const
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
@@ -42,15 +51,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const result = schema.safeParse(body)
   if (!result.success) return NextResponse.json({ error: result.error.flatten() }, { status: 400 })
 
-  const { followUpDate, ...rest } = result.data
+  const { followUpDate, rdvBookedAt, rdvDate, wonAt, lostAt, ...rest } = result.data
+  const data: Record<string, unknown> = { ...rest }
+  if (followUpDate !== undefined) data.followUpDate = followUpDate ? new Date(followUpDate) : null
+  const rawDates: Record<string, string | null | undefined> = { rdvBookedAt, rdvDate, wonAt, lostAt }
+  for (const f of dateFields) {
+    if (rawDates[f] !== undefined) data[f] = rawDates[f] ? new Date(rawDates[f] as string) : null
+  }
   const lead = await prisma.lead.update({
     where: { id },
-    data: {
-      ...rest,
-      ...(followUpDate !== undefined && {
-        followUpDate: followUpDate ? new Date(followUpDate) : null,
-      }),
-    },
+    data: data as any,
     include: { status: true, calls: true },
   })
 

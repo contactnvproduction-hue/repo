@@ -18,7 +18,12 @@ const navItems = [
     label: 'Sales',
     icon: Crosshair,
     children: [
-      { href: '/sales', label: 'Pipeline & Finance' },
+      { href: '/sales/prospection', label: 'Prospection' },
+      { href: '/sales?tab=pipeline', label: 'Pipeline closing' },
+      { href: '/sales?tab=finance', label: 'Finance & prévisionnel' },
+      { href: '/sales?tab=contracts', label: 'Contrats' },
+      { href: '/sales?tab=content', label: 'Contenu' },
+      { href: '/sales?tab=products', label: 'Répartition CA' },
       { href: '/invoices', label: 'Factures' },
     ],
   },

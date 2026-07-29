@@ -13,6 +13,7 @@ const schema = z.object({
   budget: z.number().optional().nullable(),
   notes: z.string().optional(),
   followUpDate: z.string().optional().nullable(),
+  commercialId: z.string().optional().nullable(),
 })
 
 export async function GET() {

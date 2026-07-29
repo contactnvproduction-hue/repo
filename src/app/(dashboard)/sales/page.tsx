@@ -17,9 +17,10 @@ import Link from 'next/link'
 // API Render : CORS * → les appels cross-origin fonctionnent sans restriction
 const NETLIFY_SIGNATURE = 'https://newvision-contrat.netlify.app'
 
-export default async function SalesPage() {
+export default async function SalesPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const session = await auth()
   if (!session?.user) return null
+  const { tab: initialTab } = await searchParams
 
   // Page admin (création de contrat) = Netlify sans paramètre
   const SIGNATURE_ADMIN = NETLIFY_SIGNATURE
@@ -274,6 +275,7 @@ export default async function SalesPage() {
       </div>
 
       <AcquisitionTabs
+        initialTab={initialTab}
         pipeline={<><FollowUpStats /><CallPipeline initialLeads={pipelineLeads} statuses={pipelineStatuses} clients={pipelineClients} closingsThisMonth={closingsThisMonth} closings6m={closings6m} initialScriptUrl={closingScriptUrl} /></>}
         finance={
           <FinanceSection previsionnel={

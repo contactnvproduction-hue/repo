@@ -644,6 +644,9 @@ model AgencySetting {
   expensePoles   Json?    // pôles de charges personnalisés [{ name, color }]
   corporateTaxRate Float  @default(25) // legacy — remplacé par le barème progressif auto
   isReducedRate  Boolean  @default(true) // éligible au taux réduit d'IS (15% jusqu'à 42 500 €)
+  // Commissions commerciales (prospection)
+  commissionPerBookedCall Float @default(0) // prime fixe par RDV booké
+  commissionPercent       Float @default(0) // % de commission sur la 1re mensualité d'une vente signée
   updatedAt      DateTime @updatedAt
 
   @@map("agency_settings")
@@ -809,6 +812,13 @@ model Lead {
   notes             String?
   followUpDate      DateTime?
   convertedClientId String?
+  // ── Pipeline de prospection commerciale (Léo) ──
+  commercialId      String?   // commercial en charge (User.id)
+  rdvBookedAt       DateTime? // RDV calé → déclenche la prime fixe par call booké
+  rdvDate           DateTime? // date du rendez-vous
+  saleMonthlyAmount Float?    // mensualité de la vente signée (base du % de commission)
+  wonAt             DateTime? // vente signée (closing gagné)
+  lostAt            DateTime? // prospect perdu
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 

@@ -5,20 +5,25 @@ import { Target, FileSignature, PieChart, BarChart3, Clapperboard } from 'lucide
 
 // Onglets de l'espace Sales — chaque section est rendue côté serveur
 // et passée en prop, seule la navigation est côté client.
+type TabId = 'pipeline' | 'finance' | 'contracts' | 'products' | 'content'
+
 export function AcquisitionTabs({
   pipeline,
   finance,
   contracts,
   products,
   content,
+  initialTab,
 }: {
   pipeline: React.ReactNode
   finance?: React.ReactNode
   contracts: React.ReactNode
   products: React.ReactNode
   content?: React.ReactNode
+  initialTab?: string
 }) {
-  const [tab, setTab] = useState<'pipeline' | 'finance' | 'contracts' | 'products' | 'content'>('pipeline')
+  const valid: TabId[] = ['pipeline', 'finance', 'contracts', 'products', 'content']
+  const [tab, setTab] = useState<TabId>(valid.includes(initialTab as TabId) ? (initialTab as TabId) : 'pipeline')
 
   const tabs = [
     { id: 'pipeline', label: 'Pipeline', icon: Target },
