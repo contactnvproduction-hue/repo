@@ -25,7 +25,7 @@ const navItems = [
     ],
   },
   {
-    label: 'Finances',
+    label: 'Compta',
     icon: Wallet,
     children: [
       { href: '/sales?tab=finance', label: 'Prévisionnel & tréso' },

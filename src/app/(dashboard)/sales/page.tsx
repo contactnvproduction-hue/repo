@@ -1,7 +1,8 @@
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { Target, FileSignature, ExternalLink, CheckCircle2, Clock } from 'lucide-react'
-import { ClosingPipeline } from '@/components/sales/ClosingPipeline'
+import { CallPipeline } from '@/components/sales/CallPipeline'
+import { FollowUpStats } from '@/components/sales/FollowUpStats'
 import { ContentTracker } from '@/components/sales/ContentTracker'
 import { AverageTicket } from '@/components/sales/AverageTicket'
 import { RevenueByProduct } from '@/components/acquisition/RevenueByProduct'
@@ -54,20 +55,40 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
     orderBy: { createdAt: 'desc' },
   })
 
-  // Pipeline closing unifié (mêmes leads que la prospection de Léo)
-  const closingLeads = leads.map((l: any) => ({
-    id: l.id, name: l.name, company: l.company, commercialId: l.commercialId ?? null,
-    rdvBookedAt: l.rdvBookedAt ? new Date(l.rdvBookedAt).toISOString() : null,
-    rdvDate: l.rdvDate ? new Date(l.rdvDate).toISOString() : null,
-    saleMonthlyAmount: l.saleMonthlyAmount ?? null,
-    wonAt: l.wonAt ? new Date(l.wonAt).toISOString() : null,
-    lostAt: l.lostAt ? new Date(l.lostAt).toISOString() : null,
-    convertedClientId: l.convertedClientId ?? null,
-    statusIsClosed: l.status?.isClosed ?? false,
+  // Pipeline closing (calls réels : show-up, qualification, closing mois par mois)
+  const pipelineLeads = leads.map(l => ({
+    id: l.id, name: l.name, company: l.company, email: l.email, phone: l.phone,
+    statusId: l.statusId, convertedClientId: l.convertedClientId,
     createdAt: l.createdAt.toISOString(),
+    status: l.status ? { id: l.status.id, name: l.status.name, color: l.status.color, isClosed: l.status.isClosed, order: l.status.order } : null,
+    calls: l.calls.map((c: any) => ({
+      id: c.id, leadId: l.id, date: c.date.toISOString(), duration: c.duration,
+      showedUp: c.showedUp, qualified: c.qualified,
+      closed: c.closed ?? false, followUpNeeded: c.followUpNeeded ?? false, followUpDone: c.followUpDone ?? false,
+      notes: c.notes,
+    })),
   }))
-  const usersForCom = await prisma.user.findMany({ select: { id: true, name: true, role: true }, orderBy: { name: 'asc' } })
-  const closingCommercials = (usersForCom.filter(u => u.role === 'COMMERCIAL').length > 0 ? usersForCom.filter(u => u.role === 'COMMERCIAL') : usersForCom).map(u => ({ id: u.id, name: u.name }))
+  const pipelineStatuses = statuses.map(s => ({ id: s.id, name: s.name, color: s.color, isClosed: s.isClosed, order: s.order }))
+  const pipelineClients = await prisma.client.findMany({
+    where: { status: { not: 'ARCHIVÉ' } },
+    select: { id: true, name: true, company: true },
+    orderBy: { name: 'asc' },
+  })
+  const nowDate = new Date()
+  const nowMonthStart = new Date(nowDate.getFullYear(), nowDate.getMonth(), 1)
+  const sixMonthsStart = new Date(nowDate.getFullYear(), nowDate.getMonth() - 5, 1)
+  const allClosings: any[] = await (async () => {
+    try { return await (prisma as any).closingEvent.findMany({ where: { date: { gte: sixMonthsStart } }, orderBy: { date: 'asc' } }) } catch { return [] }
+  })()
+  const monthClosings = allClosings.filter(c => new Date(c.date) >= nowMonthStart)
+  const closingsThisMonth = { count: monthClosings.length, amount: monthClosings.reduce((s, c) => s + (c.amount ?? 0), 0) }
+  const closings6m = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(nowDate.getFullYear(), nowDate.getMonth() - 5 + i, 1)
+    const inMonth = allClosings.filter(c => { const cd = new Date(c.date); return cd.getFullYear() === d.getFullYear() && cd.getMonth() === d.getMonth() })
+    return { year: d.getFullYear(), month: d.getMonth(), count: inMonth.length, amount: inMonth.reduce((s, c) => s + (c.amount ?? 0), 0), isCurrent: i === 5 }
+  })
+  const agencySettingsRow = await prisma.agencySetting.findFirst().catch(() => null)
+  const closingScriptUrl = (agencySettingsRow as any)?.closingScriptUrl ?? null
 
   // Contenu organique — canaux + pièces des 12 derniers mois
   const contentSince = new Date(new Date().getFullYear() - 1, 0, 1)
@@ -245,7 +266,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
 
       <AcquisitionTabs
         initialTab={initialTab}
-        pipeline={<ClosingPipeline leads={closingLeads} commercials={closingCommercials} />}
+        pipeline={<><FollowUpStats /><CallPipeline initialLeads={pipelineLeads} statuses={pipelineStatuses} clients={pipelineClients} closingsThisMonth={closingsThisMonth} closings6m={closings6m} initialScriptUrl={closingScriptUrl} /></>}
         finance={
           <FinanceSection previsionnel={
             <div className="space-y-5">

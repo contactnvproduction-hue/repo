@@ -48,6 +48,33 @@ async function getMonthCollection(startOfMonth: Date, endOfMonth: Date): Promise
   return { total, rows }
 }
 
+// Série mensuelle du CA encaissé (6 derniers mois), MÊME méthode que les cartes :
+// virements confirmés dédoublonnés par (client + montant + jour). Garantit que le
+// graphe colle au « Collecté ce mois » et au CA annuel.
+async function monthlyCollectedSeries(): Promise<Array<{ month: Date; total: number }>> {
+  const now = new Date()
+  const start = new Date(now.getFullYear(), now.getMonth() - 5, 1)
+  const payments = await prisma.payment.findMany({
+    where: { confirmed: true, date: { gte: start } },
+    select: { amount: true, date: true, invoice: { select: { client: { select: { id: true } } } } },
+    orderBy: { date: 'asc' },
+  })
+  const seen = new Set<string>()
+  const byMonth = new Map<string, number>()
+  for (const p of payments) {
+    const cid = p.invoice?.client?.id ?? 'x'
+    const key = `${cid}|${p.amount}|${p.date.toISOString().slice(0, 10)}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    const mk = `${p.date.getFullYear()}-${p.date.getMonth()}`
+    byMonth.set(mk, (byMonth.get(mk) ?? 0) + p.amount)
+  }
+  return Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1)
+    return { month: d, total: byMonth.get(`${d.getFullYear()}-${d.getMonth()}`) ?? 0 }
+  })
+}
+
 // Même logique pour un total simple (mois précédent, année) : somme des virements
 // confirmés de la fenêtre, dédoublonnés par (client + montant + jour).
 async function collectedDedup(where: any): Promise<number> {
@@ -104,11 +131,7 @@ async function getDashboardData(userId: string) {
       select: { id: true, name: true, company: true, relanceDate: true },
       orderBy: { relanceDate: 'asc' },
     }),
-    prisma.$queryRaw`
-      SELECT DATE_TRUNC('month', date) as month, SUM(amount) as total
-      FROM payments WHERE confirmed = true AND date >= NOW() - INTERVAL '6 months'
-      GROUP BY month ORDER BY month ASC
-    ` as Promise<Array<{ month: Date; total: number }>>,
+    monthlyCollectedSeries(),
     prisma.leadCall.findMany({
       select: { showedUp: true, qualified: true, lead: { select: { convertedClientId: true, status: { select: { isClosed: true } } } } },
     }),
@@ -554,47 +577,8 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      {/* ── Bilans & Réunions ── */}
+      {/* ── Réunions ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Clients à relancer (>3 jours sans relance) */}
-        {data.clientsToFollowUp.length > 0 && (
-          <div className="rounded-2xl border border-amber-400/25 bg-amber-400/5 p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-6 h-6 rounded-lg bg-amber-400/20 flex items-center justify-center shrink-0">
-                <Phone size={12} className="text-amber-400" />
-              </div>
-              <p className="text-sm font-semibold text-amber-300">
-                {data.clientsToFollowUp.length} client{data.clientsToFollowUp.length > 1 ? 's' : ''} à relancer
-              </p>
-              <Link href="/clients" className="ml-auto text-xs text-nv-text-muted hover:text-white transition-colors flex items-center gap-1">
-                Clients <ArrowRight size={11} />
-              </Link>
-            </div>
-            <div className="space-y-1.5">
-              {data.clientsToFollowUp.map(c => {
-                const daysSince = c.lastFollowUpAt
-                  ? Math.floor((Date.now() - new Date(c.lastFollowUpAt).getTime()) / 86_400_000)
-                  : null
-                return (
-                  <Link key={c.id} href={`/clients/${c.id}`}
-                    className="flex items-center justify-between px-3 py-2 rounded-xl bg-amber-400/5 border border-amber-400/10 hover:border-amber-400/30 transition-colors group">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-6 h-6 rounded-lg bg-amber-400/20 flex items-center justify-center text-xs font-bold text-amber-400 shrink-0">{c.name.charAt(0).toUpperCase()}</div>
-                      <div>
-                        <p className="text-sm font-medium text-white">{c.name}</p>
-                        {c.company && <p className="text-xs text-nv-text-muted">{c.company}</p>}
-                      </div>
-                    </div>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold shrink-0 ${daysSince === null || daysSince >= 7 ? 'bg-red-400/20 text-red-300' : 'bg-amber-400/15 text-amber-300'}`}>
-                      {daysSince === null ? 'Jamais relancé' : `${daysSince} j sans relance`}
-                    </span>
-                  </Link>
-                )
-              })}
-            </div>
-          </div>
-        )}
-
         {/* Réunions CEO */}
         {data.upcomingMeetings.length > 0 && (
           <div className="rounded-2xl border border-nv-border bg-nv-card p-4">
@@ -675,31 +659,6 @@ export default async function DashboardPage() {
           <DashboardCharts monthlyData={data.monthlyPayments} />
         </div>
         <div className="space-y-4">
-          {data.overdueInvoices.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-red-400">
-                  <AlertTriangle size={15} />
-                  Factures en retard ({data.overdueInvoices.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-1.5">
-                {data.overdueInvoices.map(inv => (
-                  <Link key={inv.id} href={`/invoices/${inv.id}`}
-                    className="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 transition-colors group">
-                    <div className="min-w-0">
-                      <p className="text-sm text-white truncate">{inv.client?.name ?? '—'}</p>
-                      <p className="text-xs text-nv-text-muted">{inv.number}</p>
-                    </div>
-                    <p className="text-sm font-medium text-red-400 shrink-0">{formatCurrency(inv.totalTTC - inv.amountPaid)}</p>
-                  </Link>
-                ))}
-                <Link href="/invoices?filter=retard" className="flex items-center gap-1 text-xs text-nv-text-muted hover:text-white transition-colors pt-1">
-                  Voir tout <ArrowRight size={12} />
-                </Link>
-              </CardContent>
-            </Card>
-          )}
           {data.urgentTasks.length > 0 && (
             <Card>
               <CardHeader>

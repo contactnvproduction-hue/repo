@@ -64,6 +64,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     include: { status: true, calls: true },
   })
 
+  // Pont dashboard commercial → pipeline closing : dès qu'un RDV est booké (date
+  // renseignée), on crée l'appel correspondant s'il n'existe pas → il apparaît
+  // dans le pipeline closing en « appel booké » du bon mois.
+  if (data.rdvBookedAt) {
+    const callDate = (data.rdvDate as Date) || (data.rdvBookedAt as Date)
+    const dayStart = new Date(callDate.getFullYear(), callDate.getMonth(), callDate.getDate())
+    const dayEnd = new Date(dayStart.getTime() + 86_400_000)
+    const existing = await prisma.leadCall.findFirst({ where: { leadId: id, date: { gte: dayStart, lt: dayEnd } } })
+    if (!existing) {
+      await prisma.leadCall.create({ data: { leadId: id, date: callDate, showedUp: false, qualified: false } }).catch(() => {})
+    }
+  }
+
   return NextResponse.json(lead)
 }
 
