@@ -1,7 +1,7 @@
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { Target, FileSignature, ExternalLink, CheckCircle2, Clock } from 'lucide-react'
-import { CallPipeline } from '@/components/sales/CallPipeline'
+import { ClosingPipeline } from '@/components/sales/ClosingPipeline'
 import { ContentTracker } from '@/components/sales/ContentTracker'
 import { AverageTicket } from '@/components/sales/AverageTicket'
 import { RevenueByProduct } from '@/components/acquisition/RevenueByProduct'
@@ -10,7 +10,6 @@ import { SalesForecast } from '@/components/sales/SalesForecast'
 import { computeSalesForecast } from '@/lib/mrr-forecast'
 import { FinanceSection } from '@/components/finance/FinanceSection'
 import { TreasuryForecast } from '@/components/finance/TreasuryForecast'
-import { FollowUpStats } from '@/components/sales/FollowUpStats'
 import Link from 'next/link'
 
 // Plateforme de signature hébergée sur Netlify (site statique dédié)
@@ -69,6 +68,20 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
     })),
   }))
   const pipelineStatuses = statuses.map(s => ({ id: s.id, name: s.name, color: s.color, isClosed: s.isClosed, order: s.order }))
+
+  // Pipeline closing unifié (mêmes leads que la prospection de Léo)
+  const closingLeads = leads.map((l: any) => ({
+    id: l.id, name: l.name, company: l.company, commercialId: l.commercialId ?? null,
+    rdvBookedAt: l.rdvBookedAt ? new Date(l.rdvBookedAt).toISOString() : null,
+    rdvDate: l.rdvDate ? new Date(l.rdvDate).toISOString() : null,
+    saleMonthlyAmount: l.saleMonthlyAmount ?? null,
+    wonAt: l.wonAt ? new Date(l.wonAt).toISOString() : null,
+    lostAt: l.lostAt ? new Date(l.lostAt).toISOString() : null,
+    createdAt: l.createdAt.toISOString(),
+  }))
+  const usersForCom = await prisma.user.findMany({ select: { id: true, name: true, role: true }, orderBy: { name: 'asc' } })
+  const closingCommercials = (usersForCom.filter(u => u.role === 'COMMERCIAL').length > 0 ? usersForCom.filter(u => u.role === 'COMMERCIAL') : usersForCom).map(u => ({ id: u.id, name: u.name }))
+
   const pipelineClients = await prisma.client.findMany({
     where: { status: { not: 'ARCHIVÉ' } },
     select: { id: true, name: true, company: true },
@@ -276,7 +289,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
 
       <AcquisitionTabs
         initialTab={initialTab}
-        pipeline={<><FollowUpStats /><CallPipeline initialLeads={pipelineLeads} statuses={pipelineStatuses} clients={pipelineClients} closingsThisMonth={closingsThisMonth} closings6m={closings6m} initialScriptUrl={closingScriptUrl} /></>}
+        pipeline={<ClosingPipeline leads={closingLeads} commercials={closingCommercials} />}
         finance={
           <FinanceSection previsionnel={
             <div className="space-y-5">
