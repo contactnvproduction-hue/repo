@@ -4,8 +4,7 @@ import { useState, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import {
-  Phone, Clock, CalendarCheck, Trophy, XCircle, Plus, X, Check, Loader2,
-  Percent, Euro, Users, Target, Trash2, Pencil, Settings2, Coins,
+  Plus, X, Check, Loader2, Percent, Euro, Trash2, Settings2, Coins, ChevronRight, Search, Users,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -15,23 +14,26 @@ type Lead = {
   source: string | null; notes: string | null; commercialId: string | null
   followUpDate: string | null; rdvBookedAt: string | null; rdvDate: string | null
   saleMonthlyAmount: number | null; wonAt: string | null; lostAt: string | null; createdAt: string
+  convertedClientId: string | null; statusIsClosed: boolean
 }
 type Settings = { commissionPerBookedCall: number; commissionPercent: number }
 
 const eur = (n: number) => `${Math.round(n).toLocaleString('fr-FR')} €`
+const frDate = (iso: string | null) => iso ? new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }) : ''
 const inMonth = (iso: string | null, y: number, m: number) => { if (!iso) return false; const d = new Date(iso); return d.getFullYear() === y && d.getMonth() === m }
 
 const STAGES = [
-  { key: 'CONTACTE', label: 'Contactés', color: '#6366f1', icon: Phone },
-  { key: 'RELANCE', label: 'Follow-up', color: '#f59e0b', icon: Clock },
-  { key: 'RDV_BOOKE', label: 'RDV bookés', color: '#3b82f6', icon: CalendarCheck },
-  { key: 'SIGNE', label: 'Signés', color: '#10b981', icon: Trophy },
-  { key: 'PERDU', label: 'Perdus', color: '#ef4444', icon: XCircle },
+  { key: 'CONTACTE', label: 'Contacté', color: '#6366f1' },
+  { key: 'RELANCE', label: 'Follow-up', color: '#f59e0b' },
+  { key: 'RDV_BOOKE', label: 'RDV booké', color: '#3b82f6' },
+  { key: 'SIGNE', label: 'Signé', color: '#10b981' },
+  { key: 'PERDU', label: 'Perdu', color: '#ef4444' },
 ] as const
+const stageMeta = (k: string) => STAGES.find(s => s.key === k)!
 
 function stageOf(l: Lead): string {
   if (l.lostAt) return 'PERDU'
-  if (l.wonAt) return 'SIGNE'
+  if (l.wonAt || l.convertedClientId || l.statusIsClosed) return 'SIGNE'
   if (l.rdvBookedAt) return 'RDV_BOOKE'
   if (l.followUpDate) return 'RELANCE'
   return 'CONTACTE'
@@ -46,35 +48,40 @@ export function ProspectionPipeline({ leads: initialLeads, commercials, settings
   const [showAdd, setShowAdd] = useState(false)
   const [showQuota, setShowQuota] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
+  const [filter, setFilter] = useState<string>('ACTIF') // ACTIF | CONTACTE | RELANCE | RDV_BOOKE | SIGNE | PERDU
+  const [comFilter, setComFilter] = useState<string>('')
+  const [q, setQ] = useState('')
 
-  const now = new Date()
-  const y = now.getFullYear(), m = now.getMonth()
+  const now = new Date(); const y = now.getFullYear(), m = now.getMonth()
   const comName = (id: string | null) => commercials.find(c => c.id === id)?.name ?? '—'
 
-  const byStage = useMemo(() => {
-    const map: Record<string, Lead[]> = { CONTACTE: [], RELANCE: [], RDV_BOOKE: [], SIGNE: [], PERDU: [] }
-    for (const l of leads) map[stageOf(l)].push(l)
-    return map
-  }, [leads])
+  const withStage = useMemo(() => leads.map(l => ({ ...l, stage: stageOf(l) })), [leads])
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { ACTIF: 0, CONTACTE: 0, RELANCE: 0, RDV_BOOKE: 0, SIGNE: 0, PERDU: 0 }
+    for (const l of withStage) { c[l.stage]++; if (l.stage !== 'SIGNE' && l.stage !== 'PERDU') c.ACTIF++ }
+    return c
+  }, [withStage])
 
-  // Commission par commercial (mois en cours)
-  const commissions = useMemo(() => {
-    return commercials.map(c => {
-      const rdvCount = leads.filter(l => l.commercialId === c.id && inMonth(l.rdvBookedAt, y, m)).length
-      const wonLeads = leads.filter(l => l.commercialId === c.id && inMonth(l.wonAt, y, m))
-      const prime = rdvCount * settings.commissionPerBookedCall
-      const variable = wonLeads.reduce((s, l) => s + (l.saleMonthlyAmount ?? 0), 0) * (settings.commissionPercent / 100)
-      return { commercial: c, rdvCount, wonCount: wonLeads.length, prime, variable, total: prime + variable }
-    }).filter(x => x.rdvCount > 0 || x.wonCount > 0 || commercials.length <= 3)
-      .sort((a, b) => b.total - a.total)
-  }, [leads, commercials, settings, y, m])
+  const rows = useMemo(() => withStage
+    .filter(l => filter === 'ACTIF' ? (l.stage !== 'SIGNE' && l.stage !== 'PERDU') : l.stage === filter)
+    .filter(l => !comFilter || l.commercialId === comFilter)
+    .filter(l => !q.trim() || `${l.name} ${l.company ?? ''}`.toLowerCase().includes(q.toLowerCase())),
+    [withStage, filter, comFilter, q])
 
-  const kpis = useMemo(() => ({
-    contactes: leads.filter(l => inMonth(l.createdAt, y, m)).length,
+  const commissions = useMemo(() => commercials.map(c => {
+    const rdvCount = leads.filter(l => l.commercialId === c.id && inMonth(l.rdvBookedAt, y, m)).length
+    const won = leads.filter(l => l.commercialId === c.id && inMonth(l.wonAt, y, m))
+    const prime = rdvCount * settings.commissionPerBookedCall
+    const variable = won.reduce((s, l) => s + (l.saleMonthlyAmount ?? 0), 0) * (settings.commissionPercent / 100)
+    return { c, rdvCount, wonCount: won.length, total: prime + variable, prime, variable }
+  }).filter(x => x.rdvCount > 0 || x.wonCount > 0).sort((a, b) => b.total - a.total), [leads, commercials, settings, y, m])
+
+  const kpis = {
+    actifs: counts.ACTIF,
     rdv: leads.filter(l => inMonth(l.rdvBookedAt, y, m)).length,
     signes: leads.filter(l => inMonth(l.wonAt, y, m)).length,
     commission: commissions.reduce((s, c) => s + c.total, 0),
-  }), [leads, commissions, y, m])
+  }
 
   const patchLead = async (id: string, patch: Partial<Lead>) => {
     setLeads(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l))
@@ -86,16 +93,15 @@ export function ProspectionPipeline({ leads: initialLeads, commercials, settings
     setLeads(prev => prev.filter(l => l.id !== id)); setEditId(null)
     await fetch(`/api/leads/${id}`, { method: 'DELETE' })
   }
-
   const editing = leads.find(l => l.id === editId) || null
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/* En-tête */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2"><Target size={22} className="text-primary" /> Prospection commerciale</h1>
-          <p className="text-sm text-nv-text-muted mt-0.5">Pipeline de Léo : leads → follow-up → RDV → closing, commissions et quotas.</p>
+          <h1 className="text-xl font-bold text-white">Dashboard commercial</h1>
+          <p className="text-xs text-nv-text-muted">Prospection de l&apos;équipe · leads, RDV, closing et commissions.</p>
         </div>
         <div className="flex gap-2">
           {isAdmin && <button onClick={() => setShowQuota(true)} className="text-xs px-3 py-1.5 rounded-lg border border-nv-border text-nv-text-muted hover:text-white transition-colors flex items-center gap-1"><Settings2 size={13} /> Quotas</button>}
@@ -103,68 +109,88 @@ export function ProspectionPipeline({ leads: initialLeads, commercials, settings
         </div>
       </div>
 
-      {/* KPIs du mois */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      {/* KPIs compacts */}
+      <div className="grid grid-cols-4 gap-2">
         {[
-          { label: 'Leads contactés', value: String(kpis.contactes), color: '#6366f1', icon: Phone },
-          { label: 'RDV bookés', value: String(kpis.rdv), color: '#3b82f6', icon: CalendarCheck },
-          { label: 'Ventes signées', value: String(kpis.signes), color: '#10b981', icon: Trophy },
-          { label: 'Commissions (mois)', value: eur(kpis.commission), color: '#e8b84b', icon: Coins },
+          { label: 'Pipeline actif', value: String(kpis.actifs), color: '#6366f1' },
+          { label: 'RDV bookés (mois)', value: String(kpis.rdv), color: '#3b82f6' },
+          { label: 'Signés (mois)', value: String(kpis.signes), color: '#10b981' },
+          { label: 'Commissions (mois)', value: eur(kpis.commission), color: '#e8b84b' },
         ].map(k => (
-          <div key={k.label} className="bg-nv-card border border-nv-border rounded-2xl p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: `${k.color}1f` }}><k.icon size={18} style={{ color: k.color }} /></div>
-            <div><p className="text-[11px] uppercase tracking-wider text-nv-text-faint font-semibold">{k.label}</p><p className="text-2xl font-bold text-white tabular-nums">{k.value}</p></div>
+          <div key={k.label} className="bg-nv-card border border-nv-border rounded-xl px-3 py-2.5">
+            <p className="text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold truncate">{k.label}</p>
+            <p className="text-lg font-bold tabular-nums" style={{ color: k.color }}>{k.value}</p>
           </div>
         ))}
       </div>
 
-      {/* Commissions par commercial */}
+      {/* Commissions (repli compact) */}
       {commissions.length > 0 && (
-        <div className="bg-nv-card border border-nv-border rounded-2xl p-5">
-          <h3 className="text-sm font-semibold text-white flex items-center gap-2 mb-3"><Coins size={15} className="text-primary" /> Commissions — {now.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}</h3>
-          <p className="text-[11px] text-nv-text-faint mb-3">{eur(settings.commissionPerBookedCall)}/RDV booké · {settings.commissionPercent}% sur la 1re mensualité des ventes signées.</p>
-          <div className="space-y-2">
+        <div className="bg-nv-card border border-nv-border rounded-xl p-3">
+          <div className="flex items-center gap-2 mb-2"><Coins size={13} className="text-primary" /><span className="text-xs font-semibold text-white">Commissions — {now.toLocaleDateString('fr-FR', { month: 'long' })}</span><span className="text-[10px] text-nv-text-faint ml-auto">{eur(settings.commissionPerBookedCall)}/RDV · {settings.commissionPercent}% / 1re mensualité</span></div>
+          <div className="flex flex-wrap gap-2">
             {commissions.map(c => (
-              <div key={c.commercial.id} className="flex items-center justify-between p-3 rounded-xl border border-nv-border bg-nv-dark">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-[11px] font-bold text-primary shrink-0">{c.commercial.name.charAt(0)}</div>
-                  <div className="min-w-0"><p className="text-sm font-medium text-white truncate">{c.commercial.name}</p><p className="text-[11px] text-nv-text-faint">{c.rdvCount} RDV · {c.wonCount} signé{c.wonCount > 1 ? 's' : ''}</p></div>
-                </div>
-                <div className="text-right shrink-0">
-                  <p className="text-lg font-bold text-primary tabular-nums">{eur(c.total)}</p>
-                  <p className="text-[10px] text-nv-text-faint">{eur(c.prime)} prime + {eur(c.variable)} %</p>
-                </div>
+              <div key={c.c.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-nv-dark border border-nv-border">
+                <span className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">{c.c.name.charAt(0)}</span>
+                <div><p className="text-xs font-medium text-white leading-tight">{c.c.name}</p><p className="text-[10px] text-nv-text-faint">{c.rdvCount} RDV · {c.wonCount} signé{c.wonCount > 1 ? 's' : ''}</p></div>
+                <span className="text-sm font-bold text-primary tabular-nums ml-1">{eur(c.total)}</span>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* Kanban pipeline */}
-      <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-3">
-        {STAGES.map(st => (
-          <div key={st.key} className="bg-nv-card border border-nv-border rounded-2xl p-3">
-            <div className="flex items-center gap-1.5 mb-3">
-              <st.icon size={13} style={{ color: st.color }} />
-              <span className="text-xs font-semibold text-white">{st.label}</span>
-              <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded-full font-semibold" style={{ color: st.color, backgroundColor: `${st.color}1f` }}>{byStage[st.key].length}</span>
-            </div>
-            <div className="space-y-2 min-h-[40px]">
-              {byStage[st.key].map(l => (
-                <button key={l.id} onClick={() => setEditId(l.id)} className="w-full text-left p-2.5 rounded-xl border border-nv-border bg-nv-dark hover:border-nv-border-light transition-colors">
-                  <p className="text-sm font-medium text-white truncate">{l.name}</p>
-                  {l.company && <p className="text-[11px] text-nv-text-muted truncate">{l.company}</p>}
-                  <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                    {l.commercialId && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-white/8 text-nv-text-muted">{comName(l.commercialId)}</span>}
-                    {st.key === 'SIGNE' && l.saleMonthlyAmount != null && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 font-semibold">{eur(l.saleMonthlyAmount)}/m</span>}
-                    {st.key === 'RDV_BOOKE' && l.rdvDate && <span className="text-[9px] text-nv-text-faint">{new Date(l.rdvDate).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}</span>}
-                  </div>
-                </button>
-              ))}
-              {byStage[st.key].length === 0 && <p className="text-[11px] text-nv-text-faint text-center py-2">—</p>}
-            </div>
-          </div>
-        ))}
+      {/* Barre de filtres CRM */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex gap-1 bg-nv-card border border-nv-border rounded-xl p-1 overflow-x-auto">
+          {[{ key: 'ACTIF', label: 'Pipeline actif' }, ...STAGES.map(s => ({ key: s.key, label: s.label }))].map(t => (
+            <button key={t.key} onClick={() => setFilter(t.key)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 ${filter === t.key ? 'bg-primary text-nv-black' : 'text-nv-text-muted hover:text-nv-text'}`}>
+              {t.label}<span className={`text-[10px] ${filter === t.key ? 'text-nv-black/70' : 'text-nv-text-faint'}`}>{counts[t.key]}</span>
+            </button>
+          ))}
+        </div>
+        {commercials.length > 1 && (
+          <select value={comFilter} onChange={e => setComFilter(e.target.value)} className="bg-nv-card border border-nv-border rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none">
+            <option value="">Tous les commerciaux</option>
+            {commercials.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        )}
+        <div className="relative flex-1 min-w-[140px]">
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-nv-text-faint" />
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Rechercher…" className="w-full bg-nv-card border border-nv-border rounded-lg pl-8 pr-2 py-1.5 text-xs text-white placeholder-nv-text-faint focus:outline-none focus:border-primary/50" />
+        </div>
+      </div>
+
+      {/* Tableau CRM */}
+      <div className="bg-nv-card border border-nv-border rounded-xl overflow-hidden">
+        <div className="grid grid-cols-[1fr_120px_110px_110px_28px] gap-2 px-4 py-2 text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold border-b border-nv-border bg-nv-dark/40">
+          <span>Prospect</span><span>Commercial</span><span>Étape</span><span>Détail</span><span></span>
+        </div>
+        <div className="divide-y divide-nv-border/50 max-h-[60vh] overflow-y-auto">
+          {rows.length === 0 ? (
+            <p className="text-xs text-nv-text-faint text-center py-10">Aucun lead dans cette vue.</p>
+          ) : rows.map(l => {
+            const meta = stageMeta(l.stage)
+            return (
+              <button key={l.id} onClick={() => setEditId(l.id)} className="w-full grid grid-cols-[1fr_120px_110px_110px_28px] gap-2 px-4 py-2.5 items-center text-left hover:bg-white/[0.02] transition-colors">
+                <div className="min-w-0">
+                  <p className="text-sm text-white font-medium truncate">{l.name}</p>
+                  {l.company && <p className="text-[11px] text-nv-text-faint truncate">{l.company}</p>}
+                </div>
+                <span className="text-xs text-nv-text-muted truncate">{comName(l.commercialId)}</span>
+                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full w-fit" style={{ color: meta.color, backgroundColor: `${meta.color}1f` }}>{meta.label}</span>
+                <span className="text-[11px] text-nv-text-muted tabular-nums truncate">
+                  {l.stage === 'SIGNE' && l.saleMonthlyAmount != null ? `${eur(l.saleMonthlyAmount)}/m`
+                    : l.stage === 'RDV_BOOKE' && l.rdvDate ? `RDV ${frDate(l.rdvDate)}`
+                    : l.stage === 'RELANCE' && l.followUpDate ? `Relance ${frDate(l.followUpDate)}`
+                    : ''}
+                </span>
+                <ChevronRight size={14} className="text-nv-text-faint" />
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       {showAdd && typeof document !== 'undefined' && createPortal(<AddLeadModal commercials={commercials} onClose={() => setShowAdd(false)} onDone={() => router.refresh()} />, document.body)}
@@ -229,14 +255,8 @@ function QuotaModal({ settings, onClose, onSaved }: { settings: Settings; onClos
   return (
     <Overlay onClose={onClose}>
       <div className="flex items-center justify-between"><h3 className="text-base font-semibold text-white flex items-center gap-2"><Settings2 size={16} className="text-primary" /> Quotas & commissions</h3><button onClick={onClose}><X size={16} className="text-nv-text-muted" /></button></div>
-      <div>
-        <label className="text-xs text-nv-text-muted flex items-center gap-1.5 mb-1"><Euro size={12} /> Prime par RDV booké</label>
-        <input className={inp} type="number" value={perCall} onChange={e => setPerCall(e.target.value)} />
-      </div>
-      <div>
-        <label className="text-xs text-nv-text-muted flex items-center gap-1.5 mb-1"><Percent size={12} /> Commission sur la 1re mensualité (%)</label>
-        <input className={inp} type="number" value={pct} onChange={e => setPct(e.target.value)} />
-      </div>
+      <div><label className="text-xs text-nv-text-muted flex items-center gap-1.5 mb-1"><Euro size={12} /> Prime par RDV booké</label><input className={inp} type="number" value={perCall} onChange={e => setPerCall(e.target.value)} /></div>
+      <div><label className="text-xs text-nv-text-muted flex items-center gap-1.5 mb-1"><Percent size={12} /> Commission sur la 1re mensualité (%)</label><input className={inp} type="number" value={pct} onChange={e => setPct(e.target.value)} /></div>
       <button onClick={save} disabled={saving} className="w-full flex items-center justify-center gap-1.5 py-2 bg-primary text-nv-black rounded-lg font-medium disabled:opacity-60">{saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Enregistrer</button>
     </Overlay>
   )
@@ -258,7 +278,6 @@ function LeadModal({ lead, commercials, onClose, onPatch, onDelete }: {
         <button onClick={onClose}><X size={16} className="text-nv-text-muted" /></button>
       </div>
 
-      {/* Commercial */}
       <div>
         <label className="text-[11px] text-nv-text-muted block mb-1">Commercial</label>
         <select className={inp} value={lead.commercialId ?? ''} onChange={e => onPatch(lead.id, { commercialId: e.target.value || null })}>
@@ -267,17 +286,12 @@ function LeadModal({ lead, commercials, onClose, onPatch, onDelete }: {
         </select>
       </div>
 
-      {/* Étape / progression */}
       <div className="rounded-xl border border-nv-border p-3 space-y-2.5">
         <p className="text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold">Étape du pipeline</p>
-
-        {/* Follow-up */}
         <div className="flex items-center gap-2">
           <input type="date" className={`${inp} flex-1`} value={lead.followUpDate ? lead.followUpDate.slice(0, 10) : ''} onChange={e => onPatch(lead.id, { followUpDate: e.target.value || null } as any)} />
           <span className="text-[11px] text-nv-text-muted w-20">Follow-up</span>
         </div>
-
-        {/* RDV booké */}
         <div className="flex items-center gap-2">
           {lead.rdvBookedAt ? (
             <button onClick={() => onPatch(lead.id, { rdvBookedAt: null, rdvDate: null } as any)} className="flex-1 text-xs py-1.5 rounded-lg border border-blue-500/40 bg-blue-500/10 text-blue-300">RDV booké ✓ (annuler)</button>
@@ -288,8 +302,6 @@ function LeadModal({ lead, commercials, onClose, onPatch, onDelete }: {
             </>
           )}
         </div>
-
-        {/* Signé */}
         <div className="flex items-center gap-2">
           {lead.wonAt ? (
             <button onClick={() => onPatch(lead.id, { wonAt: null } as any)} className="flex-1 text-xs py-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 text-emerald-300">Signé ✓ {lead.saleMonthlyAmount != null ? `· ${eur(lead.saleMonthlyAmount)}/m` : ''} (annuler)</button>
@@ -300,8 +312,6 @@ function LeadModal({ lead, commercials, onClose, onPatch, onDelete }: {
             </>
           )}
         </div>
-
-        {/* Perdu */}
         {stage !== 'PERDU' ? (
           <button onClick={() => onPatch(lead.id, { lostAt: nowIso() } as any)} className="w-full text-xs py-1.5 rounded-lg border border-nv-border text-nv-text-muted hover:text-red-400 hover:border-red-500/30 transition-colors">Marquer perdu</button>
         ) : (
@@ -315,7 +325,6 @@ function LeadModal({ lead, commercials, onClose, onPatch, onDelete }: {
         </div>
       )}
       {lead.notes && <p className="text-xs text-nv-text-faint italic border-t border-nv-border/50 pt-2">{lead.notes}</p>}
-
       <button onClick={() => onDelete(lead.id)} className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg border border-nv-border text-nv-text-faint hover:text-red-400 transition-colors text-xs"><Trash2 size={13} /> Supprimer le lead</button>
     </Overlay>
   )

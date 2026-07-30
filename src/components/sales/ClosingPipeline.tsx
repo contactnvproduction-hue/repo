@@ -10,7 +10,9 @@ type Lead = {
   id: string; name: string; company: string | null; commercialId: string | null
   rdvBookedAt: string | null; rdvDate: string | null
   saleMonthlyAmount: number | null; wonAt: string | null; lostAt: string | null; createdAt: string
+  convertedClientId: string | null; statusIsClosed: boolean
 }
+const isWon = (l: Lead) => !!(l.wonAt || l.convertedClientId || l.statusIsClosed)
 
 const eur = (n: number) => `${Math.round(n).toLocaleString('fr-FR')} €`
 const MONTHS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc']
@@ -19,11 +21,11 @@ const monthKey = (y: number, m: number) => `${y}-${m}`
 // Le mois de classement d'un deal dans le closing = mois où le RDV a été booké
 // (entrée en closing), sinon la date de signature.
 function classMonth(l: Lead): Date | null {
-  const iso = l.rdvBookedAt || l.wonAt
+  const iso = l.rdvBookedAt || l.wonAt || (isWon(l) ? l.createdAt : null)
   return iso ? new Date(iso) : null
 }
 function stageOf(l: Lead): 'SIGNE' | 'PERDU' | 'ENCOURS' {
-  if (l.wonAt) return 'SIGNE'
+  if (isWon(l)) return 'SIGNE'
   if (l.lostAt) return 'PERDU'
   return 'ENCOURS'
 }
@@ -39,7 +41,7 @@ export function ClosingPipeline({ leads: initial, commercials }: { leads: Lead[]
   const comName = (id: string | null) => commercials.find(c => c.id === id)?.name ?? '—'
 
   // Deals « en closing » = ceux qui ont atteint le RDV booké (ou déjà signés)
-  const closingLeads = useMemo(() => leads.filter(l => l.rdvBookedAt || l.wonAt), [leads])
+  const closingLeads = useMemo(() => leads.filter(l => l.rdvBookedAt || isWon(l)), [leads])
 
   const months = useMemo(() => {
     return Array.from({ length: 6 }, (_, i) => {

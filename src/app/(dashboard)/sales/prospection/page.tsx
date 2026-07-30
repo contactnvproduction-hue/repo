@@ -10,7 +10,7 @@ export default async function ProspectionPage() {
   const isAdmin = ['ADMIN', 'MANAGER'].includes(session.user.role)
 
   const [allLeads, users, settings] = await Promise.all([
-    (prisma as any).lead.findMany({ orderBy: { createdAt: 'desc' } }).catch(() => []),
+    (prisma as any).lead.findMany({ include: { status: { select: { isClosed: true } } }, orderBy: { createdAt: 'desc' } }).catch(() => []),
     prisma.user.findMany({ select: { id: true, name: true, avatar: true, role: true }, orderBy: { name: 'asc' } }),
     prisma.agencySetting.findFirst(),
   ])
@@ -24,6 +24,8 @@ export default async function ProspectionPage() {
     saleMonthlyAmount: l.saleMonthlyAmount ?? null,
     wonAt: l.wonAt ? new Date(l.wonAt).toISOString() : null,
     lostAt: l.lostAt ? new Date(l.lostAt).toISOString() : null,
+    convertedClientId: l.convertedClientId ?? null,
+    statusIsClosed: l.status?.isClosed ?? false,
     createdAt: new Date(l.createdAt).toISOString(),
   }))
 
