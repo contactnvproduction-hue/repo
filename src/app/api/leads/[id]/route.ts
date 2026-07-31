@@ -16,11 +16,14 @@ const schema = z.object({
   convertedClientId: z.string().optional().nullable(),
   // Prospection commerciale
   commercialId: z.string().optional().nullable(),
+  prospectStatusId: z.string().optional().nullable(),
   rdvBookedAt: z.string().optional().nullable(),
   rdvDate: z.string().optional().nullable(),
   saleMonthlyAmount: z.number().optional().nullable(),
   wonAt: z.string().optional().nullable(),
   lostAt: z.string().optional().nullable(),
+  closingNotes: z.string().optional().nullable(),
+  resources: z.array(z.object({ label: z.string().optional(), url: z.string() })).optional(),
 })
 
 const dateFields = ['rdvBookedAt', 'rdvDate', 'wonAt', 'lostAt'] as const

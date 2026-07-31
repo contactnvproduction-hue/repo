@@ -14,6 +14,7 @@ const schema = z.object({
   notes: z.string().optional(),
   followUpDate: z.string().optional().nullable(),
   commercialId: z.string().optional().nullable(),
+  prospectStatusId: z.string().optional().nullable(),
 })
 
 export async function GET() {

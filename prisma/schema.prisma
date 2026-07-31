@@ -800,6 +800,31 @@ model LeadStatus {
   @@map("lead_statuses")
 }
 
+// Statuts custom du dashboard commercial (R1, R2, R3, Follow-up…) — modulables
+model ProspectStatus {
+  id        String   @id @default(cuid())
+  name      String
+  color     String   @default("#6366f1")
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  leads     Lead[]
+
+  @@map("prospect_statuses")
+}
+
+// Annotations (timeline) sur un lead
+model LeadNote {
+  id        String   @id @default(cuid())
+  leadId    String
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  content   String
+  authorName String?
+  createdAt DateTime @default(now())
+
+  @@map("lead_notes")
+}
+
 model Lead {
   id                String    @id @default(cuid())
   statusId          String?
@@ -814,16 +839,21 @@ model Lead {
   convertedClientId String?
   // ── Pipeline de prospection commerciale (Léo) ──
   commercialId      String?   // commercial en charge (User.id)
+  prospectStatusId  String?   // statut custom (R1, R2, R3, Follow-up…) modulable
   rdvBookedAt       DateTime? // RDV calé → déclenche la prime fixe par call booké
   rdvDate           DateTime? // date du rendez-vous
   saleMonthlyAmount Float?    // mensualité de la vente signée (base du % de commission)
   wonAt             DateTime? // vente signée (closing gagné)
   lostAt            DateTime? // prospect perdu
+  closingNotes      String?   // infos transmises au closing (handoff onboarding)
+  resources         Json?     // ressources liées : [{ label, url }]
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  status LeadStatus? @relation(fields: [statusId], references: [id], onDelete: SetNull)
-  calls  LeadCall[]
+  status         LeadStatus?     @relation(fields: [statusId], references: [id], onDelete: SetNull)
+  prospectStatus ProspectStatus? @relation(fields: [prospectStatusId], references: [id], onDelete: SetNull)
+  calls          LeadCall[]
+  prospectNotes  LeadNote[]
 
   @@map("leads")
 }

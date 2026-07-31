@@ -2,6 +2,7 @@ import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { Target, FileSignature, ExternalLink, CheckCircle2, Clock } from 'lucide-react'
 import { CallPipeline } from '@/components/sales/CallPipeline'
+import { CallAgenda } from '@/components/sales/CallAgenda'
 import { FollowUpStats } from '@/components/sales/FollowUpStats'
 import { ContentTracker } from '@/components/sales/ContentTracker'
 import { AverageTicket } from '@/components/sales/AverageTicket'
@@ -266,7 +267,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
 
       <AcquisitionTabs
         initialTab={initialTab}
-        pipeline={<><FollowUpStats /><CallPipeline initialLeads={pipelineLeads} statuses={pipelineStatuses} clients={pipelineClients} closingsThisMonth={closingsThisMonth} closings6m={closings6m} initialScriptUrl={closingScriptUrl} /></>}
+        pipeline={<><FollowUpStats /><CallAgenda leads={pipelineLeads.map(l => ({ id: l.id, name: l.name, company: l.company, calls: l.calls.map(c => ({ id: c.id, date: c.date, showedUp: c.showedUp, qualified: c.qualified })) }))} /><CallPipeline initialLeads={pipelineLeads} statuses={pipelineStatuses} clients={pipelineClients} closingsThisMonth={closingsThisMonth} closings6m={closings6m} initialScriptUrl={closingScriptUrl} /></>}
         finance={
           <FinanceSection previsionnel={
             <div className="space-y-5">

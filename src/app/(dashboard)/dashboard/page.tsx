@@ -107,6 +107,7 @@ async function getDashboardData(userId: string) {
     urgentTasks, recentProjects, overdueInvoices, prospectsToRelance, monthlyPayments,
     leadCalls, leadsFollowUp, allRetainers, upcomingCeoMeetings, todayCheckin,
     upcomingBilans, allClientInvoices, recentClosings, contractedRetainers,
+    activeClientsList, salesLeads,
   ] = await Promise.all([
     getMonthCollection(startOfMonth, endOfMonth),
     collectedDedup({ date: { gte: lastMonthStart, lte: lastMonthEnd } }),
@@ -178,6 +179,9 @@ async function getDashboardData(userId: string) {
     })(),
     // Contrats (retainers) signés ce mois → CA contracté du mois (mensualité × durée)
     prisma.clientRetainer.findMany({ where: { createdAt: { gte: startOfMonth } }, select: { monthlyAmount: true, durationMonths: true, createdAt: true, client: { select: { name: true } } } }),
+    // Clients réellement actifs (fiches) + activité de vente du mois
+    prisma.client.findMany({ where: { status: 'ACTIF' }, select: { id: true, name: true, company: true, createdAt: true }, orderBy: { createdAt: 'desc' } }),
+    (prisma as any).lead.findMany({ select: { createdAt: true, rdvBookedAt: true, wonAt: true } }).catch(() => []),
   ])
 
   const caMonthVal = caMonth.total
@@ -185,6 +189,12 @@ async function getDashboardData(userId: string) {
   const trend = caLastMonthVal > 0 ? Math.round(((caMonthVal - caLastMonthVal) / caLastMonthVal) * 100) : 0
   // CA contracté ce mois = valeur totale des contrats signés ce mois (mensualité × durée)
   const contractedThisMonth = contractedRetainers.reduce((s, r) => s + r.monthlyAmount * r.durationMonths, 0)
+  const inThisMonth = (d: Date | null) => !!d && d >= startOfMonth && d <= endOfMonth
+  const salesSnapshot = {
+    leads: (salesLeads as any[]).filter(l => inThisMonth(l.createdAt)).length,
+    rdv: (salesLeads as any[]).filter(l => inThisMonth(l.rdvBookedAt)).length,
+    signes: (salesLeads as any[]).filter(l => inThisMonth(l.wonAt)).length,
+  }
   const contractedRows = contractedRetainers
     .map(r => ({ date: r.createdAt.toISOString(), clientName: r.client?.name ?? '—', monthlyAmount: r.monthlyAmount, durationMonths: r.durationMonths, total: r.monthlyAmount * r.durationMonths }))
     .sort((a, b) => b.total - a.total)
@@ -267,6 +277,8 @@ async function getDashboardData(userId: string) {
 
   return {
     caMonth: caMonthVal, caMonthRows: caMonth.rows, caYear, trend, contractedThisMonth, contractedRows,
+    salesSnapshot,
+    activeClientsList: (activeClientsList as any[]).map(c => ({ id: c.id, name: c.name, company: c.company })),
     activeClients, activeProjects, pendingInvoices,
     urgentTasks, recentProjects, overdueInvoices, prospectsToRelance, monthlyPayments,
     acquisition: { totalCalls, showupRate, qualifRate, closingRate },
@@ -576,6 +588,50 @@ export default async function DashboardPage() {
           })()}
         </div>
       )}
+
+      {/* ── Vente ce mois + Clients actifs ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="rounded-2xl border border-nv-border bg-nv-card p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Crosshair size={14} className="text-primary" />
+            <p className="text-sm font-semibold text-white">Vente ce mois</p>
+            <Link href="/sales/prospection" className="ml-auto text-xs text-nv-text-muted hover:text-primary transition-colors flex items-center gap-1">Prospection <ArrowRight size={11} /></Link>
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            {[
+              { label: 'Leads', value: data.salesSnapshot.leads, color: '#6366f1' },
+              { label: 'RDV', value: data.salesSnapshot.rdv, color: '#3b82f6' },
+              { label: 'Signés', value: data.salesSnapshot.signes, color: '#10b981' },
+            ].map(s => (
+              <div key={s.label} className="rounded-xl border border-nv-border/60 bg-nv-bg/50 py-3">
+                <p className="text-2xl font-black tabular-nums" style={{ color: s.color }}>{s.value}</p>
+                <p className="text-[10px] uppercase tracking-wider text-nv-text-faint">{s.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="lg:col-span-2 rounded-2xl border border-nv-border bg-nv-card p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Users size={14} className="text-primary" />
+            <p className="text-sm font-semibold text-white">Clients actifs</p>
+            <span className="text-xs px-2 py-0.5 bg-primary/15 text-primary rounded-full font-medium">{data.activeClientsList.length}</span>
+            <Link href="/clients" className="ml-auto text-xs text-nv-text-muted hover:text-primary transition-colors flex items-center gap-1">Fiches clients <ArrowRight size={11} /></Link>
+          </div>
+          {data.activeClientsList.length === 0 ? (
+            <p className="text-xs text-nv-text-faint text-center py-4">Aucun client actif.</p>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+              {data.activeClientsList.slice(0, 18).map(c => (
+                <Link key={c.id} href={`/clients/${c.id}`} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-nv-border/60 hover:border-primary/30 hover:bg-white/[0.02] transition-colors">
+                  <span className="w-6 h-6 rounded-full bg-primary/15 flex items-center justify-center text-[10px] font-bold text-primary shrink-0">{c.name.charAt(0).toUpperCase()}</span>
+                  <span className="min-w-0"><span className="block text-xs font-medium text-white truncate">{c.name}</span>{c.company && <span className="block text-[10px] text-nv-text-faint truncate">{c.company}</span>}</span>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* ── Réunions ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
