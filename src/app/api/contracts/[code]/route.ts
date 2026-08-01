@@ -1,6 +1,5 @@
 import { prisma } from '@/lib/db'
 import { findMatchingClient } from '@/lib/client-matching'
-import { ensureRetainerInvoices } from '@/lib/retainer-invoices'
 import { NextResponse } from 'next/server'
 
 function corsHeaders() {
@@ -104,6 +103,13 @@ export async function PATCH(
           },
         })
       }
+      // Récurrence simplifiée : coche « mensualisé » sur la fiche client avec le
+      // montant du contrat → une facture est générée chaque mois (sans notion de
+      // durée d'engagement, qui reste purement contractuelle).
+      await prisma.client.update({
+        where: { id: client.id },
+        data: { mensualise: true, mensualiteAmount: contract.monthlyAmount, mensualiteFrequency: 'MENSUEL' } as any,
+      }).catch(() => {})
     }
 
     // ── 3. Créer le projet ────────────────────────────────────────────────────
@@ -253,11 +259,8 @@ export async function PATCH(
       })
     }
 
-    // ── 4b. MRR : générer TOUTES les mensualités à venir (pas seulement la 1re) ──
-    // Idempotent : ne recrée pas les mois déjà couverts (« Mensualité » dans les notes).
-    if (contract.missionType === 'MRR') {
-      await ensureRetainerInvoices(prisma as any).catch(() => {})
-    }
+    // NB : plus de génération des mensualités par durée d'engagement. La récurrence
+    // est portée par le flag « mensualisé » du client (facture générée chaque mois).
 
     // ── 5. Lier le lead + passer en statut "Signé" (taux de closing) ──────────
     // Trouve le statut isClosed pour l'affecter au lead → comptabilise dans le taux

@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { Receipt, Plus, AlertTriangle, Clock, CheckCircle2 } from 'lucide-react'
 import { InvoicePdfButton } from '@/components/billing/InvoicePdfButton'
+import { ensureMonthlyInvoices } from '@/lib/monthly-invoices'
 
 const statusBadge: Record<string, 'success' | 'warning' | 'danger' | 'info' | 'muted'> = {
   PAYÉE: 'success', EN_ATTENTE: 'warning', EN_RETARD: 'danger',
@@ -19,6 +20,9 @@ const statusLabel: Record<string, string> = {
 export default async function InvoicesPage() {
   const session = await auth()
   if (!session?.user) return null
+
+  // Génère la facture récurrente du mois pour les clients « mensualisés » (idempotent)
+  await ensureMonthlyInvoices(prisma as any)
 
   const invoices = await prisma.invoice.findMany({
     include: {

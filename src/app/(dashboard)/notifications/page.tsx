@@ -1,16 +1,9 @@
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
-import { formatDate } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
-import { Bell, CheckCheck } from 'lucide-react'
+import { Bell } from 'lucide-react'
 import { NotificationsActions } from '@/components/notifications/NotificationsActions'
-
-const typeIcon: Record<string, string> = {
-  INFO: '💬',
-  SUCCESS: '✅',
-  WARNING: '⚠️',
-  ERROR: '❌',
-}
+import { NotificationRow } from '@/components/notifications/NotificationRow'
 
 export default async function NotificationsPage() {
   const session = await auth()
@@ -47,23 +40,7 @@ export default async function NotificationsPage() {
             </div>
           ) : (
             notifications.map((notif) => (
-              <div
-                key={notif.id}
-                className={`flex items-start gap-4 px-6 py-4 border-b border-nv-border/50 transition-colors ${
-                  !notif.read ? 'bg-primary/5' : 'hover:bg-white/2'
-                }`}
-              >
-                <div className="text-xl mt-0.5 shrink-0">{typeIcon[notif.type] || '💬'}</div>
-                <div className="flex-1 min-w-0">
-                  <p className={`text-sm ${!notif.read ? 'text-white font-medium' : 'text-nv-text-muted'}`}>
-                    {notif.message}
-                  </p>
-                  <p className="text-xs text-nv-text-faint mt-1">{formatDate(notif.createdAt)}</p>
-                </div>
-                {!notif.read && (
-                  <div className="w-2 h-2 rounded-full bg-primary shrink-0 mt-2" />
-                )}
-              </div>
+              <NotificationRow key={notif.id} notif={{ id: notif.id, type: notif.type, title: notif.title, message: notif.message, link: notif.link, read: notif.read, createdAt: notif.createdAt.toISOString() }} />
             ))
           )}
         </CardContent>

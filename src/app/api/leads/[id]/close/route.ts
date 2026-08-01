@@ -19,9 +19,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const resources = Array.isArray(b.resources) ? b.resources.filter((r: any) => r?.url) : []
     const taggedIds: string[] = Array.isArray(b.taggedAdminIds) ? b.taggedAdminIds : []
 
+    // Statut « fermé » (isClosed) → le lead compte comme signé dans le pipeline closing
+    const closedStatus = await prisma.leadStatus.findFirst({ where: { isClosed: true }, orderBy: { order: 'asc' } }).catch(() => null)
     const lead = await prisma.lead.update({
       where: { id },
-      data: { wonAt: new Date(), lostAt: null, saleMonthlyAmount, closingNotes: message || null, resources: resources.length ? resources : undefined } as any,
+      data: { wonAt: new Date(), lostAt: null, saleMonthlyAmount, closingNotes: message || null, resources: resources.length ? resources : undefined, ...(closedStatus && { statusId: closedStatus.id }) } as any,
     })
 
     // Client correspondant (déjà converti, sinon match email/nom/entreprise)
