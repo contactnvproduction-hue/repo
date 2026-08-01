@@ -8,7 +8,7 @@ import Link from 'next/link'
 import {
   Building2, Mail, Phone, MapPin, FileText, Receipt,
   FolderKanban, Plus, ClipboardList,
-  Hash, TrendingUp, StickyNote, Bell, RepeatIcon,
+  Hash, TrendingUp, StickyNote, Bell, RepeatIcon, FileSignature,
 } from 'lucide-react'
 import { ClientActions } from '@/components/clients/ClientActions'
 import { ClientNotes } from '@/components/clients/ClientNotes'
@@ -118,7 +118,7 @@ export default async function ClientDetailPage({ params }: PageProps) {
     (async () => { try { return await (prisma as any).shootingPlan.findMany({ where: { clientId: id }, orderBy: { createdAt: 'desc' }, select: { id: true, title: true, shareToken: true, shootDate: true, location: true, updatedAt: true } }) } catch { return [] } })(),
   ])
 
-  const [onboardingForm, spotSelections, contentTopics, allProducts, clientProducts] = await Promise.all([
+  const [onboardingForm, spotSelections, contentTopics, allProducts, clientProducts, clientContracts] = await Promise.all([
     // icpPdf exclu : base64 jusqu'à 8 Mo — servi à la demande via /api/onboarding/file
     (async () => { try { return await (prisma as any).clientOnboardingForm.findUnique({
       where: { clientId: id },
@@ -128,6 +128,7 @@ export default async function ClientDetailPage({ params }: PageProps) {
     (async () => { try { return await (prisma as any).clientContentTopic.findMany({ where: { clientId: id }, orderBy: [{ order: 'asc' }, { createdAt: 'asc' }] }) } catch { return [] } })(),
     (async () => { try { return await (prisma as any).product.findMany({ orderBy: [{ order: 'asc' }, { createdAt: 'asc' }] }) } catch { return [] } })(),
     (async () => { try { return await (prisma as any).clientProduct.findMany({ where: { clientId: id }, include: { product: true }, orderBy: { createdAt: 'desc' } }) } catch { return [] } })(),
+    (async () => { try { return await (prisma as any).signedContract.findMany({ where: { clientId: id }, orderBy: { createdAt: 'desc' }, select: { id: true, shortCode: true, status: true, missionType: true, monthlyAmount: true, totalAmount: true, signedAt: true } }) } catch { return [] } })(),
   ])
 
   if (!client) notFound()
@@ -531,6 +532,30 @@ export default async function ClientDetailPage({ params }: PageProps) {
               />
             </CardContent>
           </Card>
+
+          {/* Contrats signés du client */}
+          {clientContracts.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base"><FileSignature size={16} className="text-primary" /> Contrats</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {clientContracts.map((c: any) => {
+                  const amount = c.missionType === 'MRR' ? c.monthlyAmount : c.totalAmount
+                  return (
+                    <a key={c.id} href={`https://newvision-contrat.netlify.app?c=${c.shortCode}`} target="_blank" rel="noopener noreferrer"
+                      className="flex items-center justify-between p-2.5 rounded-lg border border-nv-border hover:border-primary/30 transition-colors">
+                      <div className="min-w-0">
+                        <p className="text-sm text-white">{c.missionType === 'MRR' ? 'Retainer' : 'Ponctuel'} · <span className="font-mono text-xs text-nv-text-muted">{c.shortCode}</span></p>
+                        <p className="text-[11px] text-nv-text-faint">{c.status === 'SIGNED' ? `Signé${c.signedAt ? ' le ' + new Date(c.signedAt).toLocaleDateString('fr-FR') : ''}` : 'En attente'}</p>
+                      </div>
+                      {amount != null && <span className="text-sm font-semibold text-white shrink-0">{new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(amount)}{c.missionType === 'MRR' ? '/m' : ''}</span>}
+                    </a>
+                  )
+                })}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Notes internes */}
           <Card>

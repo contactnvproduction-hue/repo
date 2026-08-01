@@ -1,73 +1,101 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { CalendarClock, ChevronLeft, ChevronRight, PhoneCall, CheckCircle2, Clock } from 'lucide-react'
+import { CalendarClock, ChevronLeft, ChevronRight, X } from 'lucide-react'
 
 type Call = { id: string; leadId: string; date: string; showedUp: boolean; qualified: boolean; leadName: string; company: string | null }
 type Lead = { id: string; name: string; company: string | null; calls: { id: string; date: string; showedUp: boolean; qualified: boolean }[] }
 
-const DAYS = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam']
+const WEEKDAYS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
 const MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre']
+const dayKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
-// Agenda jour par jour des calls (mois en cours navigable) pour le pipeline closing.
+// Agenda des calls en vrai calendrier mensuel (grille), mois navigable.
 export function CallAgenda({ leads }: { leads: Lead[] }) {
   const now = new Date()
   const [ym, setYm] = useState({ y: now.getFullYear(), m: now.getMonth() })
+  const [selDay, setSelDay] = useState<string | null>(null)
 
   const calls = useMemo<Call[]>(() => leads.flatMap(l => l.calls.map(c => ({ ...c, leadId: l.id, leadName: l.name, company: l.company }))), [leads])
-
-  const monthCalls = useMemo(() => calls
-    .filter(c => { const d = new Date(c.date); return d.getFullYear() === ym.y && d.getMonth() === ym.m })
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()), [calls, ym])
-
   const byDay = useMemo(() => {
     const map: Record<string, Call[]> = {}
-    for (const c of monthCalls) { const k = new Date(c.date).toISOString().slice(0, 10); (map[k] ??= []).push(c) }
+    for (const c of calls) { const k = dayKey(new Date(c.date)); (map[k] ??= []).push(c) }
+    for (const k in map) map[k].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
     return map
-  }, [monthCalls])
-  const days = Object.keys(byDay).sort()
+  }, [calls])
 
-  const shift = (delta: number) => setYm(({ y, m }) => { const d = new Date(y, m + delta, 1); return { y: d.getFullYear(), m: d.getMonth() } })
-  const isCurrentMonth = ym.y === now.getFullYear() && ym.m === now.getMonth()
-  const todayKey = now.toISOString().slice(0, 10)
+  const monthCount = useMemo(() => calls.filter(c => { const d = new Date(c.date); return d.getFullYear() === ym.y && d.getMonth() === ym.m }).length, [calls, ym])
+
+  // Grille : cases depuis le lundi de la 1re semaine jusqu'au dimanche de la dernière
+  const cells = useMemo(() => {
+    const first = new Date(ym.y, ym.m, 1)
+    const offset = (first.getDay() + 6) % 7 // lundi = 0
+    const start = new Date(ym.y, ym.m, 1 - offset)
+    const daysInMonth = new Date(ym.y, ym.m + 1, 0).getDate()
+    const total = Math.ceil((offset + daysInMonth) / 7) * 7
+    return Array.from({ length: total }, (_, i) => { const d = new Date(start); d.setDate(start.getDate() + i); return d })
+  }, [ym])
+
+  const shift = (delta: number) => { setSelDay(null); setYm(({ y, m }) => { const d = new Date(y, m + delta, 1); return { y: d.getFullYear(), m: d.getMonth() } }) }
+  const todayKey = dayKey(now)
+  const selCalls = selDay ? (byDay[selDay] ?? []) : []
 
   return (
     <div className="bg-nv-card border border-nv-border rounded-2xl p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-white flex items-center gap-2"><CalendarClock size={15} className="text-primary" /> Agenda des calls</h3>
+        <div>
+          <h3 className="text-sm font-semibold text-white flex items-center gap-2"><CalendarClock size={15} className="text-primary" /> Agenda des calls</h3>
+          <p className="text-[11px] text-nv-text-faint capitalize">{MONTHS[ym.m]} {ym.y} · {monthCount} call{monthCount > 1 ? 's' : ''}</p>
+        </div>
         <div className="flex items-center gap-1 bg-nv-dark border border-nv-border rounded-lg p-1">
           <button onClick={() => shift(-1)} className="p-1 text-nv-text-muted hover:text-white"><ChevronLeft size={14} /></button>
-          <span className="text-xs font-medium text-white px-2 capitalize min-w-[110px] text-center">{MONTHS[ym.m]} {ym.y}{isCurrentMonth ? ' •' : ''}</span>
+          <button onClick={() => setYm({ y: now.getFullYear(), m: now.getMonth() })} className="text-[11px] px-2 text-nv-text-muted hover:text-white">Auj.</button>
           <button onClick={() => shift(1)} className="p-1 text-nv-text-muted hover:text-white"><ChevronRight size={14} /></button>
         </div>
       </div>
-      <p className="text-[11px] text-nv-text-faint">{monthCalls.length} call{monthCalls.length > 1 ? 's' : ''} ce mois · {monthCalls.filter(c => c.showedUp).length} honoré(s)</p>
 
-      {days.length === 0 ? (
-        <p className="text-xs text-nv-text-faint text-center py-6">Aucun call ce mois-ci.</p>
-      ) : (
-        <div className="space-y-2 max-h-[50vh] overflow-y-auto">
-          {days.map(dayKey => {
-            const d = new Date(dayKey + 'T12:00:00'); const isToday = dayKey === todayKey
-            return (
-              <div key={dayKey} className="flex gap-3">
-                <div className={`w-11 shrink-0 text-center rounded-lg py-1.5 ${isToday ? 'bg-primary/15 border border-primary/30' : 'bg-nv-dark border border-nv-border'}`}>
-                  <p className={`text-[10px] uppercase ${isToday ? 'text-primary' : 'text-nv-text-faint'}`}>{DAYS[d.getDay()]}</p>
-                  <p className={`text-base font-bold leading-none ${isToday ? 'text-primary' : 'text-white'}`}>{d.getDate()}</p>
-                </div>
-                <div className="flex-1 space-y-1.5 min-w-0">
-                  {byDay[dayKey].map(c => (
-                    <div key={c.id} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-nv-dark border border-nv-border">
-                      {c.showedUp ? <CheckCircle2 size={13} className="text-emerald-400 shrink-0" /> : <Clock size={13} className="text-amber-400 shrink-0" />}
-                      <div className="min-w-0 flex-1"><p className="text-sm text-white truncate">{c.leadName}{c.company ? ` · ${c.company}` : ''}</p></div>
-                      <span className="text-[11px] text-nv-text-faint shrink-0">{new Date(c.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>
-                      {c.qualified && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 shrink-0">qualifié</span>}
-                    </div>
-                  ))}
-                </div>
+      <div className="grid grid-cols-7 gap-1">
+        {WEEKDAYS.map(d => <div key={d} className="text-center text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold py-1">{d}</div>)}
+        {cells.map((d, i) => {
+          const k = dayKey(d)
+          const inMonth = d.getMonth() === ym.m
+          const dayCalls = byDay[k] ?? []
+          const isToday = k === todayKey
+          return (
+            <button key={i} onClick={() => dayCalls.length && setSelDay(k)}
+              className={`min-h-[62px] rounded-lg border p-1 text-left align-top transition-colors ${inMonth ? 'border-nv-border bg-nv-dark' : 'border-transparent bg-transparent opacity-40'} ${dayCalls.length ? 'hover:border-primary/40 cursor-pointer' : 'cursor-default'} ${isToday ? 'ring-1 ring-primary/50' : ''}`}>
+              <span className={`text-[11px] font-medium ${isToday ? 'text-primary' : inMonth ? 'text-nv-text-muted' : 'text-nv-text-faint'}`}>{d.getDate()}</span>
+              <div className="mt-0.5 space-y-0.5">
+                {dayCalls.slice(0, 2).map(c => (
+                  <div key={c.id} className="flex items-center gap-1 rounded px-1 py-0.5 truncate" style={{ backgroundColor: c.showedUp ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)' }}>
+                    <span className="w-1 h-1 rounded-full shrink-0" style={{ backgroundColor: c.showedUp ? '#10b981' : '#f59e0b' }} />
+                    <span className="text-[9px] text-white truncate">{c.leadName}</span>
+                  </div>
+                ))}
+                {dayCalls.length > 2 && <span className="text-[9px] text-nv-text-faint pl-1">+{dayCalls.length - 2}</span>}
               </div>
-            )
-          })}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Détail du jour sélectionné */}
+      {selDay && (
+        <div className="border-t border-nv-border pt-3">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-semibold text-white capitalize">{new Date(selDay + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+            <button onClick={() => setSelDay(null)} className="text-nv-text-faint hover:text-white"><X size={14} /></button>
+          </div>
+          <div className="space-y-1.5">
+            {selCalls.map(c => (
+              <div key={c.id} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-nv-dark border border-nv-border">
+                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: c.showedUp ? '#10b981' : '#f59e0b' }} />
+                <span className="text-sm text-white truncate flex-1">{c.leadName}{c.company ? ` · ${c.company}` : ''}</span>
+                <span className="text-[11px] text-nv-text-faint">{new Date(c.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>
+                {c.qualified && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400">qualifié</span>}
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

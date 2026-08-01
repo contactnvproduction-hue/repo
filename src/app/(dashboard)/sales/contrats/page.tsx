@@ -1,6 +1,7 @@
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
-import { FileSignature, ExternalLink, CheckCircle2, Clock } from 'lucide-react'
+import Link from 'next/link'
+import { FileSignature, ExternalLink, CheckCircle2, Clock, ArrowRight } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
@@ -56,7 +57,10 @@ export default async function ContratsPage() {
                     )}
                     <div className="flex items-center gap-1.5">
                       <span className="text-[10px] font-mono text-nv-text-muted bg-nv-border px-1.5 py-0.5 rounded">{c.shortCode}</span>
-                      <a href={contractUrl(c.shortCode)} target="_blank" rel="noopener noreferrer" className="p-1.5 text-nv-text-muted hover:text-primary transition-colors"><ExternalLink size={12} /></a>
+                      {c.clientId && (
+                        <Link href={`/clients/${c.clientId}`} title="Fiche client" className="p-1.5 text-nv-text-muted hover:text-primary transition-colors"><ArrowRight size={12} /></Link>
+                      )}
+                      <a href={contractUrl(c.shortCode)} target="_blank" rel="noopener noreferrer" title="Voir le contrat signé" className="p-1.5 text-nv-text-muted hover:text-primary transition-colors"><ExternalLink size={12} /></a>
                     </div>
                   </div>
                 </div>
