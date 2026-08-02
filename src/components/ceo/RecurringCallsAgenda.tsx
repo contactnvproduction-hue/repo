@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import {
   CalendarClock, Plus, Check, X, Loader2, Trash2, Pencil,
-  ChevronDown, ChevronUp, StickyNote, Settings2,
+  ChevronDown, ChevronUp, ChevronLeft, ChevronRight, StickyNote, Settings2,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -28,7 +28,6 @@ type RecurringCall = {
 const DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
 const DAYS_SHORT = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
 const COLORS = ['#e8b84b', '#3b82f6', '#10b981', '#8b5cf6', '#ef4444', '#f59e0b', '#06b6d4', '#ec4899']
-const WEEKS_AHEAD = 4
 
 const inputCls = 'bg-nv-black border border-nv-border rounded-lg px-3 py-2 text-sm text-nv-text placeholder-nv-text-faint focus:outline-none focus:border-primary/60 transition-colors'
 
@@ -139,6 +138,7 @@ export function RecurringCallsAgenda({ initialCalls }: { initialCalls: Recurring
   const [expanded, setExpanded] = useState<string | null>(null) // `${callId}_${date}`
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [savingNote, setSavingNote] = useState<string | null>(null)
+  const [weekOffset, setWeekOffset] = useState(0) // 0 = cette semaine
 
   const today = isoDate(new Date())
   const monday = mondayOf(new Date())
@@ -211,14 +211,34 @@ export function RecurringCallsAgenda({ initialCalls }: { initialCalls: Recurring
     saveNote(call, date, { done: !(current?.done ?? false) })
   }
 
-  // ── Semaines à afficher ──
-  const weeks = Array.from({ length: WEEKS_AHEAD }, (_, w) => {
-    const start = new Date(monday)
-    start.setDate(start.getDate() + w * 7)
-    return start
-  })
+  // ── Semaine affichée (une seule à la fois, navigable) ──
+  const weekStart = new Date(monday)
+  weekStart.setDate(weekStart.getDate() + weekOffset * 7)
+  const weekEnd = new Date(weekStart)
+  weekEnd.setDate(weekEnd.getDate() + 6)
+  const weekLabel = weekOffset === 0
+    ? 'Cette semaine'
+    : weekOffset === 1
+    ? 'Semaine prochaine'
+    : `Sem. du ${weekStart.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}`
 
   const activeCalls = calls.filter(c => c.active)
+
+  // Occurrences de la semaine affichée, groupées par jour
+  const occurrencesByDay = activeCalls
+    .map(call => {
+      const d = new Date(weekStart)
+      d.setDate(d.getDate() + call.dayOfWeek)
+      return { call, date: isoDate(d), day: call.dayOfWeek }
+    })
+    .sort((a, b) => a.day - b.day || (a.call.time ?? '').localeCompare(b.call.time ?? ''))
+    .reduce<Record<number, { call: RecurringCall; date: string }[]>>((acc, o) => {
+      (acc[o.day] ??= []).push({ call: o.call, date: o.date })
+      return acc
+    }, {})
+  const daysWithCalls = Object.keys(occurrencesByDay).map(Number).sort((a, b) => a - b)
+  const weekDoneCount = daysWithCalls.flatMap(d => occurrencesByDay[d]).filter(o => noteFor(o.call, o.date)?.done).length
+  const weekTotal = daysWithCalls.flatMap(d => occurrencesByDay[d]).length
 
   return (
     <div className="bg-nv-card border border-nv-border rounded-xl p-5">
@@ -249,7 +269,7 @@ export function RecurringCallsAgenda({ initialCalls }: { initialCalls: Recurring
         </div>
       </div>
       <p className="text-xs text-nv-text-muted mb-4">
-        Points hebdomadaires automatiques — préparez les sujets de chaque occurrence dans l&apos;agenda ci-dessous.
+        Vos points hebdomadaires, une semaine à la fois — ouvrez un point pour y préparer les sujets.
       </p>
 
       {/* Formulaire création */}
@@ -306,29 +326,38 @@ export function RecurringCallsAgenda({ initialCalls }: { initialCalls: Recurring
         </div>
       )}
 
-      {/* Agenda 4 semaines */}
+      {/* Agenda — une semaine à la fois */}
       {activeCalls.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-          {weeks.map((weekStart, w) => {
-            const weekLabel = w === 0
-              ? 'Cette semaine'
-              : `Sem. du ${weekStart.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}`
-
-            const occurrences = activeCalls
-              .map(call => {
-                const d = new Date(weekStart)
-                d.setDate(d.getDate() + call.dayOfWeek)
-                return { call, date: isoDate(d) }
-              })
-              .sort((a, b) => a.call.dayOfWeek - b.call.dayOfWeek || (a.call.time ?? '').localeCompare(b.call.time ?? ''))
-
-            return (
-              <div key={w} className={`rounded-xl border p-3 ${w === 0 ? 'border-primary/30 bg-primary/[0.03]' : 'border-nv-border bg-nv-dark'}`}>
-                <p className={`text-[11px] font-semibold uppercase tracking-wider mb-2.5 ${w === 0 ? 'text-primary' : 'text-nv-text-faint'}`}>
-                  {weekLabel}
+        <>
+          {/* Navigateur de semaine */}
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <button type="button" onClick={() => setWeekOffset(w => w - 1)} className="p-1.5 rounded-lg border border-nv-border text-nv-text-muted hover:text-nv-text transition-colors" title="Semaine précédente">
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <div className="flex items-center gap-2 text-center">
+              <div>
+                <p className={`text-sm font-semibold ${weekOffset === 0 ? 'text-primary' : 'text-white'}`}>{weekLabel}</p>
+                <p className="text-[10px] text-nv-text-faint">
+                  {weekStart.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} – {weekEnd.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+                  {weekTotal > 0 && <span> · {weekDoneCount}/{weekTotal} fait{weekDoneCount > 1 ? 's' : ''}</span>}
                 </p>
+              </div>
+              {weekOffset !== 0 && (
+                <button type="button" onClick={() => setWeekOffset(0)} className="text-[11px] px-2 py-1 rounded-md border border-primary/40 text-primary hover:bg-primary/10 transition-colors">Auj.</button>
+              )}
+            </div>
+            <button type="button" onClick={() => setWeekOffset(w => w + 1)} className="p-1.5 rounded-lg border border-nv-border text-nv-text-muted hover:text-nv-text transition-colors" title="Semaine suivante">
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Points de la semaine, groupés par jour */}
+          <div className="space-y-3">
+            {daysWithCalls.map(day => (
+              <div key={day}>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-nv-text-faint mb-1.5">{DAYS[day]}</p>
                 <div className="space-y-2">
-                  {occurrences.map(({ call, date }) => {
+                  {occurrencesByDay[day].map(({ call, date }) => {
                     const key = `${call.id}_${date}`
                     const note = noteFor(call, date)
                     const isPast = date < today
@@ -345,75 +374,61 @@ export function RecurringCallsAgenda({ initialCalls }: { initialCalls: Recurring
                             : note?.done
                             ? 'border-emerald-500/25 bg-emerald-500/[0.04]'
                             : isPast
-                            ? 'border-nv-border bg-nv-card opacity-50'
-                            : 'border-nv-border bg-nv-card'
+                            ? 'border-nv-border bg-nv-dark opacity-60'
+                            : 'border-nv-border bg-nv-dark'
                         }`}
                       >
-                        <div className="flex items-center gap-2 p-2">
-                          {/* Done toggle */}
+                        <div className="flex items-center gap-2.5 p-2.5">
                           <button
                             type="button"
                             onClick={() => toggleDone(call, date)}
                             disabled={savingNote === key}
                             title={note?.done ? 'Point fait — cliquer pour annuler' : 'Marquer le point comme fait'}
-                            className={`shrink-0 w-4.5 h-4.5 rounded-full border flex items-center justify-center transition-colors ${
-                              note?.done
-                                ? 'bg-emerald-500 border-emerald-500'
-                                : 'border-nv-border-light hover:border-primary'
+                            className={`shrink-0 rounded-full border flex items-center justify-center transition-colors ${
+                              note?.done ? 'bg-emerald-500 border-emerald-500' : 'border-nv-border-light hover:border-primary'
                             }`}
-                            style={{ width: 18, height: 18 }}
+                            style={{ width: 20, height: 20 }}
                           >
                             {savingNote === key
-                              ? <Loader2 className="w-2.5 h-2.5 animate-spin text-nv-text-muted" />
-                              : note?.done && <Check className="w-2.5 h-2.5 text-white" />}
+                              ? <Loader2 className="w-3 h-3 animate-spin text-nv-text-muted" />
+                              : note?.done && <Check className="w-3 h-3 text-white" />}
                           </button>
 
-                          <span className="w-1 self-stretch rounded-full shrink-0" style={{ backgroundColor: call.color }} />
+                          <span className="w-1 self-stretch rounded-full shrink-0" style={{ backgroundColor: call.color, minHeight: 28 }} />
 
                           <button
                             type="button"
-                            onClick={() => {
-                              setExpanded(isOpen ? null : key)
-                              if (!isOpen) setDrafts(d => ({ ...d, [key]: note?.content ?? '' }))
-                            }}
+                            onClick={() => { setExpanded(isOpen ? null : key); if (!isOpen) setDrafts(d => ({ ...d, [key]: note?.content ?? '' })) }}
                             className="flex-1 min-w-0 text-left"
                           >
-                            <p className={`text-xs font-medium truncate ${note?.done ? 'text-nv-text-muted line-through' : 'text-nv-text'}`}>
+                            <p className={`text-sm font-medium truncate ${note?.done ? 'text-nv-text-muted line-through' : 'text-white'}`}>
                               {call.title}
                             </p>
-                            <p className="text-[10px] text-nv-text-faint truncate">
-                              {DAYS_SHORT[call.dayOfWeek]}{call.time ? ` ${call.time}` : ''}{call.withWho ? ` · ${call.withWho}` : ''}
+                            <p className="text-[11px] text-nv-text-faint truncate">
+                              {call.time ? call.time : 'Heure libre'}{call.withWho ? ` · ${call.withWho}` : ''}
                               {isToday && <span className="text-primary font-medium"> · Aujourd&apos;hui</span>}
                             </p>
                           </button>
 
-                          {hasNote && !isOpen && <StickyNote className="w-3 h-3 text-primary shrink-0" />}
+                          {hasNote && !isOpen && <StickyNote className="w-3.5 h-3.5 text-primary shrink-0" />}
                           <button
                             type="button"
-                            onClick={() => {
-                              setExpanded(isOpen ? null : key)
-                              if (!isOpen) setDrafts(d => ({ ...d, [key]: note?.content ?? '' }))
-                            }}
+                            onClick={() => { setExpanded(isOpen ? null : key); if (!isOpen) setDrafts(d => ({ ...d, [key]: note?.content ?? '' })) }}
                             className="p-0.5 text-nv-text-faint hover:text-nv-text transition-colors shrink-0"
                           >
-                            {isOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                            {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                           </button>
                         </div>
 
-                        {/* Sujets à préparer */}
                         {isOpen && (
-                          <div className="px-2 pb-2">
+                          <div className="px-2.5 pb-2.5">
                             <textarea
                               className={`${inputCls} w-full resize-none text-xs`}
                               rows={4}
                               placeholder={'Sujets à aborder :\n- …\n- …'}
                               value={drafts[key] ?? ''}
                               onChange={e => setDrafts(d => ({ ...d, [key]: e.target.value }))}
-                              onBlur={() => {
-                                if ((drafts[key] ?? '') !== (note?.content ?? '')) {
-                                  saveNote(call, date, { content: drafts[key] ?? '' })
-                                }
-                              }}
+                              onBlur={() => { if ((drafts[key] ?? '') !== (note?.content ?? '')) saveNote(call, date, { content: drafts[key] ?? '' }) }}
                             />
                             <p className="text-[10px] text-nv-text-faint mt-1 flex items-center gap-1">
                               {savingNote === key ? <><Loader2 className="w-2.5 h-2.5 animate-spin" /> Sauvegarde…</> : 'Sauvegarde automatique'}
@@ -425,9 +440,9 @@ export function RecurringCallsAgenda({ initialCalls }: { initialCalls: Recurring
                   })}
                 </div>
               </div>
-            )
-          })}
-        </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   )

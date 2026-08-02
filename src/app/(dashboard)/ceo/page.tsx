@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { Briefcase, TrendingUp, CheckCircle2, Calendar, ExternalLink, MessageSquare, LayoutDashboard } from 'lucide-react'
 import { CeoManager } from '@/components/ceo/CeoManager'
 import { RecurringCallsAgenda } from '@/components/ceo/RecurringCallsAgenda'
+import { ProductFeedbackBoard } from '@/components/ceo/ProductFeedbackBoard'
 
 export default async function CeoPage() {
   const session = await auth()
@@ -28,6 +29,8 @@ export default async function CeoPage() {
       orderBy: [{ dayOfWeek: 'asc' }, { time: 'asc' }],
     }) } catch { return [] } })(),
   ])
+
+  const feedback = await (async () => { try { return await (prisma as any).productFeedback.findMany({ orderBy: { createdAt: 'desc' } }) } catch { return [] } })()
 
   const now = new Date()
   const totalMeetings = meetings.length
@@ -118,6 +121,22 @@ export default async function CeoPage() {
           active: c.active,
           notes: (c.notes ?? []).map((n: any) => ({ id: n.id, date: n.date, content: n.content, done: n.done })),
         }))}
+      />
+
+      {/* Feedback interne — remarques & axes d'amélioration produit */}
+      <ProductFeedbackBoard
+        initialFeedback={(feedback ?? []).map((x: any) => ({
+          id: x.id,
+          title: x.title,
+          content: x.content,
+          category: x.category,
+          status: x.status,
+          authorName: x.authorName,
+          assignedTo: x.assignedTo ?? [],
+          createdAt: x.createdAt.toISOString(),
+        }))}
+        teamMembers={teamMembers}
+        currentUserId={session.user.id}
       />
 
       <CeoManager initialMeetings={serialized} teamMembers={teamMembers} availableTasks={availableTasks} />

@@ -1119,6 +1119,23 @@ model RecurringCall {
   @@map("recurring_calls")
 }
 
+// Feedback interne sur le produit/l'agence : remarques & axes d'amélioration,
+// avec personnes taguées (→ notification) et statut de traitement.
+model ProductFeedback {
+  id         String   @id @default(cuid())
+  title      String
+  content    String?
+  category   String?  // axe : Produit, UX, Delivery, Process, Bug…
+  status     String   @default("OPEN") // OPEN | IN_PROGRESS | DONE
+  authorId   String?
+  authorName String?
+  assignedTo String[] // userIds taggés
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("product_feedback")
+}
+
 // Notes / sujets à préparer pour UNE occurrence précise d'un call récurrent
 model RecurringCallNote {
   id        String        @id @default(cuid())
