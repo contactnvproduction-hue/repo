@@ -11,15 +11,15 @@ import toast from 'react-hot-toast'
 
 type Commercial = { id: string; name: string; avatar: string | null }
 type Admin = { id: string; name: string }
-type ProspectStatus = { id: string; name: string; color: string; order: number }
+type ProspectStatus = { id: string; name: string; color: string; isClosed?: boolean }
 type Note = { id: string; content: string; authorName: string | null; createdAt: string }
 type Resource = { label?: string; url: string }
 type Lead = {
   id: string; name: string; company: string | null; email: string | null; phone: string | null
-  source: string | null; notes: string | null; commercialId: string | null; prospectStatusId: string | null
+  source: string | null; notes: string | null; commercialId: string | null; statusId: string | null
   followUpDate: string | null; rdvBookedAt: string | null; rdvDate: string | null
   saleMonthlyAmount: number | null; wonAt: string | null; lostAt: string | null
-  convertedClientId: string | null; statusIsClosed: boolean
+  convertedClientId: string | null; status: { id: string; name: string; color: string; isClosed: boolean } | null
   closingNotes: string | null; resources: Resource[]; annotations: Note[]; createdAt: string
 }
 type Settings = { commissionPerBookedCall: number; commissionPercent: number }
@@ -39,7 +39,7 @@ const STAGES = [
 const stageMeta = (k: string) => STAGES.find(s => s.key === k)!
 function stageOf(l: Lead): string {
   if (l.lostAt) return 'PERDU'
-  if (l.wonAt || l.convertedClientId || l.statusIsClosed) return 'SIGNE'
+  if (l.wonAt || l.convertedClientId || l.status?.isClosed) return 'SIGNE'
   if (l.rdvBookedAt) return 'RDV_BOOKE'
   if (l.followUpDate) return 'RELANCE'
   return 'CONTACTE'
@@ -77,7 +77,7 @@ export function ProspectionPipeline({ leads: initialLeads, commercials, admins, 
   const rows = useMemo(() => withStage
     .filter(l => filter === 'ACTIF' ? (l.stage !== 'SIGNE' && l.stage !== 'PERDU') : l.stage === filter)
     .filter(l => !comFilter || l.commercialId === comFilter)
-    .filter(l => !statusFilter || l.prospectStatusId === statusFilter)
+    .filter(l => !statusFilter || l.statusId === statusFilter)
     .filter(l => !q.trim() || `${l.name} ${l.company ?? ''}`.toLowerCase().includes(q.toLowerCase())),
     [withStage, filter, comFilter, statusFilter, q])
 
@@ -199,7 +199,7 @@ export function ProspectionPipeline({ leads: initialLeads, commercials, admins, 
               {rows.length === 0 ? (
                 <p className="text-xs text-nv-text-faint text-center py-10">Aucun lead dans cette vue.</p>
               ) : rows.map(l => {
-                const st = stageMeta(l.stage); const ps = statusOf(l.prospectStatusId)
+                const st = stageMeta(l.stage); const ps = statusOf(l.statusId)
                 return (
                   <button key={l.id} onClick={() => setEditId(l.id)} className="w-full grid grid-cols-[1fr_110px_100px_100px_100px_28px] gap-2 px-4 py-2.5 items-center text-left hover:bg-white/[0.02] transition-colors">
                     <div className="min-w-0"><p className="text-sm text-white font-medium truncate">{l.name}</p>{l.company && <p className="text-[11px] text-nv-text-faint truncate">{l.company}</p>}</div>
@@ -207,7 +207,7 @@ export function ProspectionPipeline({ leads: initialLeads, commercials, admins, 
                     {ps ? <span className="text-[11px] font-medium px-2 py-0.5 rounded-full w-fit" style={{ color: ps.color, backgroundColor: `${ps.color}1f` }}>{ps.name}</span> : <span className="text-[11px] text-nv-text-faint">—</span>}
                     <span className="text-[11px] font-medium px-2 py-0.5 rounded-full w-fit" style={{ color: st.color, backgroundColor: `${st.color}1f` }}>{st.label}</span>
                     <span className="text-[11px] text-nv-text-muted tabular-nums truncate">
-                      {l.stage === 'SIGNE' && l.saleMonthlyAmount != null ? `${eur(l.saleMonthlyAmount)}/m`
+                      {l.stage === 'SIGNE' ? `${l.saleMonthlyAmount != null ? eur(l.saleMonthlyAmount) + '/m' : 'signé'}${l.wonAt ? ' · ' + frDate(l.wonAt) : ''}`
                         : l.stage === 'RDV_BOOKE' && l.rdvDate ? `RDV ${frDate(l.rdvDate)}`
                         : l.stage === 'RELANCE' && l.followUpDate ? `Relance ${frDate(l.followUpDate)}` : ''}
                     </span>
@@ -221,17 +221,19 @@ export function ProspectionPipeline({ leads: initialLeads, commercials, admins, 
       )}
 
       {showAdd && typeof document !== 'undefined' && createPortal(<AddLeadModal commercials={commercials} statuses={statuses} onClose={() => setShowAdd(false)} onDone={() => router.refresh()} />, document.body)}
-      {showQuota && typeof document !== 'undefined' && createPortal(<QuotaModal settings={settings} onClose={() => setShowQuota(false)} onSaved={s => { setSettings(s); router.refresh() }} />, document.body)}
+      {showQuota && typeof document !== 'undefined' && createPortal(<QuotaModal settings={settings} onClose={() => setShowQuota(false)} onSaved={s => setSettings(s)} />, document.body)}
       {showStatuses && typeof document !== 'undefined' && createPortal(<StatusManager statuses={statuses} onClose={() => setShowStatuses(false)} onChange={setStatuses} />, document.body)}
       {editing && typeof document !== 'undefined' && createPortal(<LeadModal lead={editing} commercials={commercials} statuses={statuses} onClose={() => setEditId(null)} onPatch={patchLead} onDelete={deleteLead} onOpenClose={() => { setEditId(null); setCloseId(editing.id) }} onRefresh={() => router.refresh()} />, document.body)}
-      {closing && typeof document !== 'undefined' && createPortal(<CloseModal lead={closing} admins={admins} onClose={() => setCloseId(null)} onDone={() => router.refresh()} />, document.body)}
+      {closing && typeof document !== 'undefined' && createPortal(<CloseModal lead={closing} admins={admins} commercials={commercials} onClose={() => setCloseId(null)} onDone={() => router.refresh()} />, document.body)}
     </div>
   )
 }
 
 // ── Vue Stats mois par mois + commissions à verser ──
-function StatsView({ leads, commercials, settings }: { leads: Lead[]; commercials: Commercial[]; settings: Settings }) {
+function StatsView({ leads: allLeads, commercials, settings }: { leads: Lead[]; commercials: Commercial[]; settings: Settings }) {
   const now = new Date()
+  const [sel, setSel] = useState<string>('') // filtre commercial ('' = tous)
+  const leads = sel ? allLeads.filter(l => l.commercialId === sel) : allLeads
   const months = Array.from({ length: 6 }, (_, i) => {
     const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1); const y = d.getFullYear(), m = d.getMonth()
     const gen = leads.filter(l => inMonth(l.createdAt, y, m)).length
@@ -242,13 +244,22 @@ function StatsView({ leads, commercials, settings }: { leads: Lead[]; commercial
     return { m, y, gen, rdv, ventes: ventes.length, caSigned, commission, isCurrent: i === 5 }
   })
   const totalToPay = commercials.map(c => {
-    const rdv = leads.filter(l => l.commercialId === c.id && l.rdvBookedAt).length
-    const caSigned = leads.filter(l => l.commercialId === c.id && l.wonAt).reduce((s, l) => s + (l.saleMonthlyAmount ?? 0), 0)
-    return { c, total: rdv * settings.commissionPerBookedCall + caSigned * (settings.commissionPercent / 100), rdv, ventes: leads.filter(l => l.commercialId === c.id && l.wonAt).length }
+    const rdv = allLeads.filter(l => l.commercialId === c.id && l.rdvBookedAt).length
+    const caSigned = allLeads.filter(l => l.commercialId === c.id && l.wonAt).reduce((s, l) => s + (l.saleMonthlyAmount ?? 0), 0)
+    return { c, total: rdv * settings.commissionPerBookedCall + caSigned * (settings.commissionPercent / 100), rdv, ventes: allLeads.filter(l => l.commercialId === c.id && l.wonAt).length }
   }).filter(x => x.total > 0).sort((a, b) => b.total - a.total)
 
   return (
     <div className="space-y-4">
+      {commercials.length > 0 && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-nv-text-muted">Vue :</span>
+          <button onClick={() => setSel('')} className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${!sel ? 'border-primary bg-primary/10 text-primary' : 'border-nv-border text-nv-text-muted hover:text-white'}`}>Tous</button>
+          {commercials.map(c => (
+            <button key={c.id} onClick={() => setSel(c.id)} className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${sel === c.id ? 'border-primary bg-primary/10 text-primary' : 'border-nv-border text-nv-text-muted hover:text-white'}`}>{c.name}</button>
+          ))}
+        </div>
+      )}
       <div className="bg-nv-card border border-nv-border rounded-xl overflow-hidden">
         <div className="grid grid-cols-[80px_1fr_1fr_1fr_1fr_1fr] gap-2 px-4 py-2 text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold border-b border-nv-border bg-nv-dark/40 text-right">
           <span className="text-left">Mois</span><span>Leads</span><span>RDV pris</span><span>Ventes</span><span>CA signé</span><span>Commission</span>
@@ -293,13 +304,13 @@ const Overlay = ({ children, onClose }: { children: React.ReactNode; onClose: ()
 )
 
 function AddLeadModal({ commercials, statuses, onClose, onDone }: { commercials: Commercial[]; statuses: ProspectStatus[]; onClose: () => void; onDone: () => void }) {
-  const [f, setF] = useState({ name: '', company: '', email: '', phone: '', source: '', commercialId: commercials[0]?.id ?? '', prospectStatusId: statuses[0]?.id ?? '', notes: '' })
+  const [f, setF] = useState({ name: '', company: '', email: '', phone: '', source: '', commercialId: commercials[0]?.id ?? '', statusId: statuses[0]?.id ?? '', notes: '' })
   const [saving, setSaving] = useState(false)
   const save = async () => {
     if (!f.name.trim()) { toast.error('Nom requis'); return }
     setSaving(true)
     try {
-      const res = await fetch('/api/leads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...f, email: f.email || undefined, commercialId: f.commercialId || undefined, prospectStatusId: f.prospectStatusId || undefined }) })
+      const res = await fetch('/api/leads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...f, email: f.email || undefined, commercialId: f.commercialId || undefined, statusId: f.statusId || undefined }) })
       if (!res.ok) throw new Error()
       toast.success('Lead ajouté'); onDone(); onClose()
     } catch { toast.error('Erreur') } finally { setSaving(false) }
@@ -316,7 +327,7 @@ function AddLeadModal({ commercials, statuses, onClose, onDone }: { commercials:
       <input className={inp} placeholder="Source (Insta, reco, cold…)" value={f.source} onChange={e => setF({ ...f, source: e.target.value })} />
       <div className="grid grid-cols-2 gap-2">
         <select className={inp} value={f.commercialId} onChange={e => setF({ ...f, commercialId: e.target.value })}><option value="">— Commercial —</option>{commercials.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
-        <select className={inp} value={f.prospectStatusId} onChange={e => setF({ ...f, prospectStatusId: e.target.value })}><option value="">— Statut —</option>{statuses.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
+        <select className={inp} value={f.statusId} onChange={e => setF({ ...f, statusId: e.target.value })}><option value="">— Statut —</option>{statuses.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
       </div>
       <textarea className={inp} rows={2} placeholder="Notes" value={f.notes} onChange={e => setF({ ...f, notes: e.target.value })} />
       <button onClick={save} disabled={saving} className="w-full flex items-center justify-center gap-1.5 py-2 bg-primary text-nv-black rounded-lg font-medium disabled:opacity-60">{saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Ajouter</button>
@@ -354,11 +365,11 @@ function StatusManager({ statuses, onClose, onChange }: { statuses: ProspectStat
   const [color, setColor] = useState(PALETTE[0])
   const add = async () => {
     if (!name.trim()) return
-    const res = await fetch('/api/prospect-statuses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim(), color }) })
+    const res = await fetch('/api/lead-statuses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim(), color, order: list.length }) })
     if (res.ok) { const s = await res.json(); const next = [...list, s]; setList(next); onChange(next); setName('') } else toast.error('Erreur')
   }
   const del = async (id: string) => {
-    await fetch(`/api/prospect-statuses/${id}`, { method: 'DELETE' })
+    await fetch(`/api/lead-statuses/${id}`, { method: 'DELETE' })
     const next = list.filter(s => s.id !== id); setList(next); onChange(next)
   }
   return (
@@ -420,7 +431,7 @@ function LeadModal({ lead, commercials, statuses, onClose, onPatch, onDelete, on
           <select className={inp} value={lead.commercialId ?? ''} onChange={e => onPatch(lead.id, { commercialId: e.target.value || null })}><option value="">—</option>{commercials.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
         </div>
         <div><label className="text-[11px] text-nv-text-muted block mb-1">Statut</label>
-          <select className={inp} value={lead.prospectStatusId ?? ''} onChange={e => onPatch(lead.id, { prospectStatusId: e.target.value || null })}><option value="">—</option>{statuses.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
+          <select className={inp} value={lead.statusId ?? ''} onChange={e => onPatch(lead.id, { statusId: e.target.value || null })}><option value="">—</option>{statuses.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
         </div>
       </div>
 
@@ -490,7 +501,8 @@ function LeadModal({ lead, commercials, statuses, onClose, onPatch, onDelete, on
 }
 
 // ── Popup closing : montant + infos + ressources + tag admins → notif + fiche client ──
-function CloseModal({ lead, admins, onClose, onDone }: { lead: Lead; admins: Admin[]; onClose: () => void; onDone: () => void }) {
+function CloseModal({ lead, admins, commercials, onClose, onDone }: { lead: Lead; admins: Admin[]; commercials: Commercial[]; onClose: () => void; onDone: () => void }) {
+  const [commercialId, setCommercialId] = useState(lead.commercialId ?? (commercials[0]?.id ?? ''))
   const [amount, setAmount] = useState(lead.saleMonthlyAmount != null ? String(lead.saleMonthlyAmount) : '')
   const [message, setMessage] = useState('')
   const [resources, setResources] = useState<Resource[]>([])
@@ -506,7 +518,7 @@ function CloseModal({ lead, admins, onClose, onDone }: { lead: Lead; admins: Adm
     try {
       const res = await fetch(`/api/leads/${lead.id}/close`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ saleMonthlyAmount: amount, message, resources, taggedAdminIds: tagged }),
+        body: JSON.stringify({ saleMonthlyAmount: amount, message, resources, taggedAdminIds: tagged, commercialId: commercialId || undefined }),
       })
       if (!res.ok) throw new Error()
       const j = await res.json()
@@ -520,7 +532,14 @@ function CloseModal({ lead, admins, onClose, onDone }: { lead: Lead; admins: Adm
       <div className="flex items-center justify-between"><h3 className="text-base font-semibold text-white flex items-center gap-2"><PartyPopper size={17} className="text-emerald-400" /> Closing — {lead.name}</h3><button onClick={onClose}><X size={16} className="text-nv-text-muted" /></button></div>
       <p className="text-xs text-nv-text-muted">Transmets les infos du closing à l&apos;équipe pour l&apos;onboarding.</p>
 
-      <div><label className="text-[11px] text-nv-text-muted block mb-1">Mensualité de la vente (€)</label><input className={inp} type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="ex 1000" /></div>
+      <div><label className="text-[11px] text-nv-text-muted block mb-1">Commercial (pour la commission)</label>
+        <select className={inp} value={commercialId} onChange={e => setCommercialId(e.target.value)}>
+          <option value="">— Aucun —</option>
+          {commercials.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+      </div>
+
+      <div><label className="text-[11px] text-nv-text-muted block mb-1">Mensualité NETTE signée (€) — base de la commission</label><input className={inp} type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="ex 1000" /><p className="text-[10px] text-nv-text-faint mt-0.5">Le % du commercial se calcule sur ce montant mensuel net, pas sur le total du contrat.</p></div>
 
       <div><label className="text-[11px] text-nv-text-muted block mb-1">Infos à transmettre</label>
         <textarea className={inp} rows={3} placeholder="Contexte du client, attentes, deadlines, accès…" value={message} onChange={e => setMessage(e.target.value)} />

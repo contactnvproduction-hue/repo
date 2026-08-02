@@ -57,6 +57,11 @@ export function Sidebar({ isOpen, onClose, userName, userRole, userAvatar }: Sid
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/')
 
+  // Le rôle COMMERCIAL ne voit QUE son espace Ventes (dashboard commercial + closing)
+  const items = userRole === 'COMMERCIAL'
+    ? navItems.filter(i => i.label === 'Ventes')
+    : navItems
+
   const roleLabel: Record<string, string> = {
     ADMIN: 'Administrateur',
     MANAGER: 'Manager',
@@ -104,7 +109,7 @@ export function Sidebar({ isOpen, onClose, userName, userRole, userAvatar }: Sid
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto py-3 px-3">
-          {navItems.map((item) => {
+          {items.map((item) => {
             if ('children' in item && item.children) {
               const anyActive = item.children.some((c) => isActive(c.href))
               return (
