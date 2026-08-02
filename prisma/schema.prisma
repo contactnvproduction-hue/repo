@@ -846,6 +846,7 @@ model Lead {
   wonAt             DateTime? // vente signée (closing gagné)
   lostAt            DateTime? // prospect perdu
   closingNotes      String?   // infos transmises au closing (handoff onboarding)
+  isExistingClient  Boolean   @default(false) // déjà client actuel → simple relance
   resources         Json?     // ressources liées : [{ label, url }]
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt

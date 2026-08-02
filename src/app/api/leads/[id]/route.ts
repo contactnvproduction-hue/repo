@@ -23,6 +23,7 @@ const schema = z.object({
   wonAt: z.string().optional().nullable(),
   lostAt: z.string().optional().nullable(),
   closingNotes: z.string().optional().nullable(),
+  isExistingClient: z.boolean().optional(),
   resources: z.array(z.object({ label: z.string().optional(), url: z.string() })).optional(),
 })
 

@@ -25,19 +25,27 @@ export function TeamManager() {
     }
     setLoading(true)
     try {
+      // Email auto (profil sans accès) : on retire les accents et tout caractère
+      // non-ASCII sinon la validation email échoue (« Léo » → « leo »).
+      const slug = form.name
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '')
       const res = await fetch('/api/team', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: form.name, role: form.role, specialty: form.specialty, phone: form.phone,
-          email: form.withLogin ? form.email.trim() : `${form.name.toLowerCase().replace(/\s+/g, '.')}.${Date.now()}@nv.team`,
+          email: form.withLogin ? form.email.trim() : `${slug || 'membre'}.${Date.now()}@nv.team`,
           password: form.withLogin ? form.password : (Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2)),
           hasLogin: form.withLogin,
         }),
       })
       if (!res.ok) {
-        const err = await res.json()
-        toast.error(typeof err.error === 'string' ? err.error : 'Erreur à la création')
+        const err = await res.json().catch(() => ({}))
+        const fieldErr = err?.error?.fieldErrors
+          ? Object.values(err.error.fieldErrors).flat().filter(Boolean).join(' · ')
+          : null
+        toast.error(typeof err.error === 'string' ? err.error : (fieldErr || 'Erreur à la création'))
         return
       }
       toast.success(form.withLogin ? 'Membre créé avec accès dashboard !' : 'Profil créé !')

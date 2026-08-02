@@ -22,7 +22,7 @@ type Lead = {
   closerStatusId: string | null; closerStatus: CloserStatus | null
   followUpDate: string | null; rdvBookedAt: string | null; rdvDate: string | null
   saleMonthlyAmount: number | null; wonAt: string | null; lostAt: string | null
-  convertedClientId: string | null; closingNotes: string | null; resources: Resource[]; annotations: Note[]; createdAt: string
+  convertedClientId: string | null; closingNotes: string | null; isExistingClient: boolean; resources: Resource[]; annotations: Note[]; createdAt: string
 }
 type Settings = { commissionPerBookedCall: number; commissionPercent: number }
 
@@ -49,6 +49,7 @@ export function ProspectionPipeline({ leads: initialLeads, commercials, admins, 
   const [closeId, setCloseId] = useState<string | null>(null)
   const [filter, setFilter] = useState<string>('ACTIF')
   const [comFilter, setComFilter] = useState<string>('')
+  const [monthFilter, setMonthFilter] = useState<string>('') // '' = tous les mois · sinon 'YYYY-M'
   const [q, setQ] = useState('')
 
   const now = new Date(); const y = now.getFullYear(), m = now.getMonth()
@@ -61,19 +62,35 @@ export function ProspectionPipeline({ leads: initialLeads, commercials, admins, 
   const counts = useMemo(() => {
     const c: Record<string, number> = { ACTIF: 0, SIGNE: 0, PERDU: 0, BOOKE: 0 }
     for (const s of statusList) c[s.id] = 0
-    for (const l of leads) {
+    const scoped = leads
+      .filter(l => !comFilter || l.commercialId === comFilter)
+      .filter(l => !monthFilter || `${new Date(l.createdAt).getFullYear()}-${new Date(l.createdAt).getMonth()}` === monthFilter)
+    for (const l of scoped) {
       if (l.lostAt) c.PERDU++
       else if (isSigned(l)) c.SIGNE++
       else { c.ACTIF++; if (l.settingStatusId) c[l.settingStatusId] = (c[l.settingStatusId] ?? 0) + 1; if (isBooked(l)) c.BOOKE++ }
     }
     return c
-  }, [leads, statusList])
+  }, [leads, statusList, comFilter, monthFilter])
+
+  // Liste des mois présents dans les leads (par date de création) → vue mois par mois
+  const monthOptions = useMemo(() => {
+    const set = new Map<string, { key: string; label: string; ts: number }>()
+    for (const l of leads) {
+      const d = new Date(l.createdAt); const key = `${d.getFullYear()}-${d.getMonth()}`
+      if (!set.has(key)) set.set(key, { key, label: `${MONTHS[d.getMonth()]} ${d.getFullYear()}`, ts: new Date(d.getFullYear(), d.getMonth(), 1).getTime() })
+    }
+    return [...set.values()].sort((a, b) => b.ts - a.ts)
+  }, [leads])
+
+  const inMonthKey = (iso: string, key: string) => { const d = new Date(iso); return `${d.getFullYear()}-${d.getMonth()}` === key }
 
   const rows = useMemo(() => leads
     .filter(l => filter === 'ACTIF' ? isActive(l) : filter === 'BOOKE' ? isBooked(l) : catOf(l) === filter)
     .filter(l => !comFilter || l.commercialId === comFilter)
-    .filter(l => !q.trim() || `${l.name} ${l.company ?? ''}`.toLowerCase().includes(q.toLowerCase())),
-    [leads, filter, comFilter, q]) // eslint-disable-line react-hooks/exhaustive-deps
+    .filter(l => !monthFilter || inMonthKey(l.createdAt, monthFilter))
+    .filter(l => !q.trim() || `${l.name} ${l.company ?? ''} ${l.notes ?? ''}`.toLowerCase().includes(q.toLowerCase())),
+    [leads, filter, comFilter, monthFilter, q]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const commissions = useMemo(() => commercials.map(c => {
     const rdvCount = leads.filter(l => l.commercialId === c.id && inMonth(l.rdvBookedAt, y, m)).length
@@ -177,6 +194,10 @@ export function ProspectionPipeline({ leads: initialLeads, commercials, admins, 
                 {commercials.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             )}
+            <select value={monthFilter} onChange={e => setMonthFilter(e.target.value)} className="bg-nv-card border border-nv-border rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none">
+              <option value="">Tous les mois</option>
+              {monthOptions.map(mo => <option key={mo.key} value={mo.key}>{mo.label}</option>)}
+            </select>
             <div className="relative flex-1 min-w-[140px]">
               <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-nv-text-faint" />
               <input value={q} onChange={e => setQ(e.target.value)} placeholder="Rechercher…" className="w-full bg-nv-card border border-nv-border rounded-lg pl-8 pr-2 py-1.5 text-xs text-white placeholder-nv-text-faint focus:outline-none focus:border-primary/50" />
@@ -191,15 +212,22 @@ export function ProspectionPipeline({ leads: initialLeads, commercials, admins, 
               {rows.length === 0 ? (
                 <p className="text-xs text-nv-text-faint text-center py-10">Aucun lead dans cette vue.</p>
               ) : rows.map(l => (
-                <button key={l.id} onClick={() => setEditId(l.id)} className="w-full grid grid-cols-[1fr_100px_105px_100px_90px_28px] gap-2 px-4 py-2.5 items-center text-left hover:bg-white/[0.02] transition-colors">
-                  <div className="min-w-0"><p className="text-sm text-white font-medium truncate">{l.name}</p>{l.company && <p className="text-[11px] text-nv-text-faint truncate">{l.company}</p>}</div>
+                <button key={l.id} onClick={() => setEditId(l.id)} className="w-full grid grid-cols-[1fr_100px_105px_100px_90px_28px] gap-2 px-4 py-2.5 items-start text-left hover:bg-white/[0.02] transition-colors">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-sm text-white font-medium truncate">{l.name}</p>
+                      {l.isExistingClient && <span className="shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-300 border border-blue-500/25">Client actuel</span>}
+                    </div>
+                    {l.company && <p className="text-[11px] text-nv-text-faint truncate">{l.company}</p>}
+                    {l.notes && <p className="text-[11px] text-nv-text-muted mt-0.5 line-clamp-2 whitespace-pre-wrap">{l.notes}</p>}
+                  </div>
                   <span className="text-xs text-nv-text-muted truncate">{comName(l.commercialId)}</span>
                   {l.settingStatus ? <span className="text-[11px] font-medium px-2 py-0.5 rounded-full w-fit truncate" style={{ color: l.settingStatus.color, backgroundColor: `${l.settingStatus.color}1f` }}>{l.settingStatus.name}</span> : <span className="text-[11px] text-nv-text-faint">—</span>}
                   {l.closerStatus ? <span className="text-[11px] font-medium px-2 py-0.5 rounded-full w-fit truncate" style={{ color: l.closerStatus.color, backgroundColor: `${l.closerStatus.color}1f` }}>{l.closerStatus.name}</span> : <span className="text-[11px] text-nv-text-faint">—</span>}
                   <span className="text-[11px] text-nv-text-muted tabular-nums truncate">
                     {isSigned(l) ? `${l.saleMonthlyAmount != null ? eur(l.saleMonthlyAmount) + '/m' : 'signé'}` : l.rdvDate ? `RDV ${frDate(l.rdvDate)}` : l.followUpDate ? `Relance ${frDate(l.followUpDate)}` : ''}
                   </span>
-                  <ChevronRight size={14} className="text-nv-text-faint" />
+                  <ChevronRight size={14} className="text-nv-text-faint mt-0.5" />
                 </button>
               ))}
             </div>
@@ -385,6 +413,7 @@ function LeadModal({ lead, commercials, settingStatuses, closerStatuses, onClose
 }) {
   const [rdvDate, setRdvDate] = useState(lead.rdvDate ? lead.rdvDate.slice(0, 10) : new Date().toISOString().slice(0, 10))
   const [noteText, setNoteText] = useState('')
+  const [memo, setMemo] = useState(lead.notes ?? '')
   const [resLabel, setResLabel] = useState(''); const [resUrl, setResUrl] = useState('')
   const [notes, setNotes] = useState<Note[]>(lead.annotations || [])
   const [resources, setResources] = useState<Resource[]>(lead.resources || [])
@@ -420,6 +449,18 @@ function LeadModal({ lead, commercials, settingStatuses, closerStatuses, onClose
         <div><label className="text-[11px] text-nv-text-muted block mb-1">Statut closer</label>
           <select className={inp} value={lead.closerStatusId ?? ''} onChange={e => setCloser(e.target.value)}><option value="">—</option>{closerStatuses.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
         </div>
+      </div>
+
+      <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-nv-text bg-nv-black border border-nv-border rounded-lg px-3 py-2.5">
+        <input type="checkbox" checked={lead.isExistingClient} onChange={e => onPatch(lead.id, { isExistingClient: e.target.checked })} className="w-4 h-4 accent-[#3b82f6]" />
+        Déjà client actuel <span className="text-[11px] text-nv-text-faint">(simple relance / upsell)</span>
+      </label>
+
+      <div>
+        <label className="text-[11px] text-nv-text-muted block mb-1">Contexte / mémo (visible dans la liste)</label>
+        <textarea className={inp} rows={3} placeholder="Ex : déjà bossé ensemble en 2024, relancer après son lancement, budget ~2k/mois, préfère le tel le matin…" value={memo}
+          onChange={e => setMemo(e.target.value)}
+          onBlur={() => { if (memo !== (lead.notes ?? '')) onPatch(lead.id, { notes: memo }) }} />
       </div>
 
       <div className="rounded-xl border border-nv-border p-3 space-y-2.5">

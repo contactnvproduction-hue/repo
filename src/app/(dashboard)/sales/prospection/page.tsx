@@ -60,6 +60,7 @@ export default async function ProspectionPage() {
     lostAt: l.lostAt ? new Date(l.lostAt).toISOString() : null,
     convertedClientId: l.convertedClientId ?? null,
     closingNotes: l.closingNotes ?? null,
+    isExistingClient: l.isExistingClient ?? false,
     resources: Array.isArray(l.resources) ? l.resources : [],
     annotations: (l.prospectNotes ?? []).map((n: any) => ({ id: n.id, content: n.content, authorName: n.authorName, createdAt: new Date(n.createdAt).toISOString() })),
     createdAt: new Date(l.createdAt).toISOString(),
