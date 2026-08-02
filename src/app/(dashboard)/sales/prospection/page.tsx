@@ -4,12 +4,20 @@ import { ProspectionPipeline } from '@/components/sales/ProspectionPipeline'
 
 export const dynamic = 'force-dynamic'
 
-const DEFAULT_STATUSES = [
+// Statut CLOSER (partagé avec le pipeline closing)
+const CLOSER_STATUSES = [
   { name: 'R1', color: '#3b82f6', order: 0, isClosed: false },
   { name: 'R2', color: '#8b5cf6', order: 1, isClosed: false },
   { name: 'R3', color: '#a855f7', order: 2, isClosed: false },
   { name: 'Follow-up', color: '#f59e0b', order: 3, isClosed: false },
   { name: 'Signé', color: '#10b981', order: 4, isClosed: true },
+]
+// Statut SETTING (commercial / prospection)
+const SETTING_STATUSES = [
+  { name: 'À contacter', color: '#94a3b8', order: 0 },
+  { name: 'Contacté', color: '#6366f1', order: 1 },
+  { name: 'À relancer', color: '#f59e0b', order: 2 },
+  { name: 'Abandon', color: '#ef4444', order: 3 },
 ]
 
 export default async function ProspectionPage() {
@@ -17,16 +25,20 @@ export default async function ProspectionPage() {
   if (!session?.user) return null
   const isAdmin = ['ADMIN', 'MANAGER'].includes(session.user.role)
 
-  // Statuts unifiés = LeadStatus (partagés avec le pipeline closing)
-  let statuses = await prisma.leadStatus.findMany({ orderBy: { order: 'asc' } })
-  if (statuses.length === 0) {
-    await prisma.leadStatus.createMany({ data: DEFAULT_STATUSES })
-    statuses = await prisma.leadStatus.findMany({ orderBy: { order: 'asc' } })
+  let closerStatuses = await prisma.leadStatus.findMany({ orderBy: { order: 'asc' } })
+  if (closerStatuses.length === 0) {
+    await prisma.leadStatus.createMany({ data: CLOSER_STATUSES })
+    closerStatuses = await prisma.leadStatus.findMany({ orderBy: { order: 'asc' } })
+  }
+  let settingStatuses = await (prisma as any).prospectStatus.findMany({ orderBy: [{ order: 'asc' }, { createdAt: 'asc' }] }).catch(() => [])
+  if (settingStatuses.length === 0) {
+    await (prisma as any).prospectStatus.createMany({ data: SETTING_STATUSES }).catch(() => {})
+    settingStatuses = await (prisma as any).prospectStatus.findMany({ orderBy: [{ order: 'asc' }, { createdAt: 'asc' }] }).catch(() => [])
   }
 
   const [allLeads, users] = await Promise.all([
     (prisma as any).lead.findMany({
-      include: { status: true, prospectNotes: { orderBy: { createdAt: 'desc' } } },
+      include: { status: true, prospectStatus: true, prospectNotes: { orderBy: { createdAt: 'desc' } } },
       orderBy: { createdAt: 'desc' },
     }).catch(() => []),
     prisma.user.findMany({ select: { id: true, name: true, avatar: true, role: true }, orderBy: { name: 'asc' } }),
@@ -36,8 +48,10 @@ export default async function ProspectionPage() {
   const leads = (allLeads as any[]).map(l => ({
     id: l.id, name: l.name, company: l.company, email: l.email, phone: l.phone,
     source: l.source, notes: l.notes, commercialId: l.commercialId ?? null,
-    statusId: l.statusId ?? null,
-    status: l.status ? { id: l.status.id, name: l.status.name, color: l.status.color, isClosed: l.status.isClosed } : null,
+    settingStatusId: l.prospectStatusId ?? null,
+    settingStatus: l.prospectStatus ? { id: l.prospectStatus.id, name: l.prospectStatus.name, color: l.prospectStatus.color } : null,
+    closerStatusId: l.statusId ?? null,
+    closerStatus: l.status ? { id: l.status.id, name: l.status.name, color: l.status.color, isClosed: l.status.isClosed } : null,
     followUpDate: l.followUpDate ? new Date(l.followUpDate).toISOString() : null,
     rdvBookedAt: l.rdvBookedAt ? new Date(l.rdvBookedAt).toISOString() : null,
     rdvDate: l.rdvDate ? new Date(l.rdvDate).toISOString() : null,
@@ -51,8 +65,6 @@ export default async function ProspectionPage() {
     createdAt: new Date(l.createdAt).toISOString(),
   }))
 
-  // Commerciaux = UNIQUEMENT les membres avec le rôle COMMERCIAL (défini dans Équipe).
-  // Par défaut : aucun.
   const commercials = users.filter(u => u.role === 'COMMERCIAL').map(u => ({ id: u.id, name: u.name, avatar: u.avatar }))
   const admins = users.filter(u => ['ADMIN', 'MANAGER'].includes(u.role)).map(u => ({ id: u.id, name: u.name }))
 
@@ -62,7 +74,8 @@ export default async function ProspectionPage() {
         leads={leads}
         commercials={commercials}
         admins={admins}
-        statuses={statuses.map(s => ({ id: s.id, name: s.name, color: s.color, isClosed: s.isClosed }))}
+        settingStatuses={(settingStatuses as any[]).map(s => ({ id: s.id, name: s.name, color: s.color }))}
+        closerStatuses={closerStatuses.map(s => ({ id: s.id, name: s.name, color: s.color, isClosed: s.isClosed }))}
         settings={{
           commissionPerBookedCall: (settings as any)?.commissionPerBookedCall ?? 0,
           commissionPercent: (settings as any)?.commissionPercent ?? 0,

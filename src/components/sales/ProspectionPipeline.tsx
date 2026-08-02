@@ -11,16 +11,18 @@ import toast from 'react-hot-toast'
 
 type Commercial = { id: string; name: string; avatar: string | null }
 type Admin = { id: string; name: string }
-type ProspectStatus = { id: string; name: string; color: string; isClosed?: boolean }
+type SettingStatus = { id: string; name: string; color: string }
+type CloserStatus = { id: string; name: string; color: string; isClosed: boolean }
 type Note = { id: string; content: string; authorName: string | null; createdAt: string }
 type Resource = { label?: string; url: string }
 type Lead = {
   id: string; name: string; company: string | null; email: string | null; phone: string | null
-  source: string | null; notes: string | null; commercialId: string | null; statusId: string | null
+  source: string | null; notes: string | null; commercialId: string | null
+  settingStatusId: string | null; settingStatus: SettingStatus | null
+  closerStatusId: string | null; closerStatus: CloserStatus | null
   followUpDate: string | null; rdvBookedAt: string | null; rdvDate: string | null
   saleMonthlyAmount: number | null; wonAt: string | null; lostAt: string | null
-  convertedClientId: string | null; status: { id: string; name: string; color: string; isClosed: boolean } | null
-  closingNotes: string | null; resources: Resource[]; annotations: Note[]; createdAt: string
+  convertedClientId: string | null; closingNotes: string | null; resources: Resource[]; annotations: Note[]; createdAt: string
 }
 type Settings = { commissionPerBookedCall: number; commissionPercent: number }
 
@@ -29,28 +31,15 @@ const frDate = (iso: string | null) => iso ? new Date(iso).toLocaleDateString('f
 const inMonth = (iso: string | null, y: number, m: number) => { if (!iso) return false; const d = new Date(iso); return d.getFullYear() === y && d.getMonth() === m }
 const MONTHS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc']
 
-const STAGES = [
-  { key: 'CONTACTE', label: 'Contacté', color: '#6366f1' },
-  { key: 'RELANCE', label: 'Follow-up', color: '#f59e0b' },
-  { key: 'RDV_BOOKE', label: 'RDV booké', color: '#3b82f6' },
-  { key: 'SIGNE', label: 'Signé', color: '#10b981' },
-  { key: 'PERDU', label: 'Perdu', color: '#ef4444' },
-] as const
-const stageMeta = (k: string) => STAGES.find(s => s.key === k)!
-function stageOf(l: Lead): string {
-  if (l.lostAt) return 'PERDU'
-  if (l.wonAt || l.convertedClientId || l.status?.isClosed) return 'SIGNE'
-  if (l.rdvBookedAt) return 'RDV_BOOKE'
-  if (l.followUpDate) return 'RELANCE'
-  return 'CONTACTE'
-}
+const isSigned = (l: Lead) => !!(l.wonAt || l.convertedClientId || l.closerStatus?.isClosed)
+const isBooked = (l: Lead) => !!l.rdvBookedAt && !isSigned(l) && !l.lostAt
 
-export function ProspectionPipeline({ leads: initialLeads, commercials, admins, statuses: initialStatuses, settings: initialSettings, isAdmin }: {
-  leads: Lead[]; commercials: Commercial[]; admins: Admin[]; statuses: ProspectStatus[]; settings: Settings; isAdmin: boolean
+export function ProspectionPipeline({ leads: initialLeads, commercials, admins, settingStatuses, closerStatuses, settings: initialSettings, isAdmin }: {
+  leads: Lead[]; commercials: Commercial[]; admins: Admin[]; settingStatuses: SettingStatus[]; closerStatuses: CloserStatus[]; settings: Settings; isAdmin: boolean
 }) {
   const router = useRouter()
   const [leads, setLeads] = useState<Lead[]>(initialLeads)
-  const [statuses, setStatuses] = useState<ProspectStatus[]>(initialStatuses)
+  const [statusList, setStatusList] = useState<SettingStatus[]>(settingStatuses)
   const [settings, setSettings] = useState(initialSettings)
   const [view, setView] = useState<'pipeline' | 'stats'>('pipeline')
   const [showAdd, setShowAdd] = useState(false)
@@ -60,26 +49,31 @@ export function ProspectionPipeline({ leads: initialLeads, commercials, admins, 
   const [closeId, setCloseId] = useState<string | null>(null)
   const [filter, setFilter] = useState<string>('ACTIF')
   const [comFilter, setComFilter] = useState<string>('')
-  const [statusFilter, setStatusFilter] = useState<string>('')
   const [q, setQ] = useState('')
 
   const now = new Date(); const y = now.getFullYear(), m = now.getMonth()
   const comName = (id: string | null) => commercials.find(c => c.id === id)?.name ?? '—'
-  const statusOf = (id: string | null) => statuses.find(s => s.id === id) ?? null
 
-  const withStage = useMemo(() => leads.map(l => ({ ...l, stage: stageOf(l) })), [leads])
+  // Catégorie d'un lead pour le filtre : perdu / signé / (statut commercial)
+  const catOf = (l: Lead) => l.lostAt ? 'PERDU' : isSigned(l) ? 'SIGNE' : (l.settingStatusId ?? 'NONE')
+  const isActive = (l: Lead) => !l.lostAt && !isSigned(l)
+
   const counts = useMemo(() => {
-    const c: Record<string, number> = { ACTIF: 0, CONTACTE: 0, RELANCE: 0, RDV_BOOKE: 0, SIGNE: 0, PERDU: 0 }
-    for (const l of withStage) { c[l.stage]++; if (l.stage !== 'SIGNE' && l.stage !== 'PERDU') c.ACTIF++ }
+    const c: Record<string, number> = { ACTIF: 0, SIGNE: 0, PERDU: 0, BOOKE: 0 }
+    for (const s of statusList) c[s.id] = 0
+    for (const l of leads) {
+      if (l.lostAt) c.PERDU++
+      else if (isSigned(l)) c.SIGNE++
+      else { c.ACTIF++; if (l.settingStatusId) c[l.settingStatusId] = (c[l.settingStatusId] ?? 0) + 1; if (isBooked(l)) c.BOOKE++ }
+    }
     return c
-  }, [withStage])
+  }, [leads, statusList])
 
-  const rows = useMemo(() => withStage
-    .filter(l => filter === 'ACTIF' ? (l.stage !== 'SIGNE' && l.stage !== 'PERDU') : l.stage === filter)
+  const rows = useMemo(() => leads
+    .filter(l => filter === 'ACTIF' ? isActive(l) : filter === 'BOOKE' ? isBooked(l) : catOf(l) === filter)
     .filter(l => !comFilter || l.commercialId === comFilter)
-    .filter(l => !statusFilter || l.statusId === statusFilter)
     .filter(l => !q.trim() || `${l.name} ${l.company ?? ''}`.toLowerCase().includes(q.toLowerCase())),
-    [withStage, filter, comFilter, statusFilter, q])
+    [leads, filter, comFilter, q]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const commissions = useMemo(() => commercials.map(c => {
     const rdvCount = leads.filter(l => l.commercialId === c.id && inMonth(l.rdvBookedAt, y, m)).length
@@ -96,8 +90,8 @@ export function ProspectionPipeline({ leads: initialLeads, commercials, admins, 
     commission: commissions.reduce((s, c) => s + c.total, 0),
   }
 
-  const patchLead = async (id: string, patch: any) => {
-    setLeads(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l))
+  const patchLead = async (id: string, patch: any, optimistic?: Partial<Lead>) => {
+    setLeads(prev => prev.map(l => l.id === id ? { ...l, ...patch, ...optimistic } : l))
     const res = await fetch(`/api/leads/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) })
     if (!res.ok) { toast.error('Erreur'); router.refresh() }
   }
@@ -109,13 +103,20 @@ export function ProspectionPipeline({ leads: initialLeads, commercials, admins, 
   const editing = leads.find(l => l.id === editId) || null
   const closing = leads.find(l => l.id === closeId) || null
 
+  const filterTabs = [
+    { key: 'ACTIF', label: 'Actifs', n: counts.ACTIF },
+    ...statusList.map(s => ({ key: s.id, label: s.name, n: counts[s.id] ?? 0 })),
+    { key: 'BOOKE', label: 'RDV bookés', n: counts.BOOKE },
+    { key: 'SIGNE', label: 'Signés', n: counts.SIGNE },
+    { key: 'PERDU', label: 'Perdus', n: counts.PERDU },
+  ]
+
   return (
     <div className="space-y-4">
-      {/* En-tête */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h1 className="text-xl font-bold text-white">Dashboard commercial</h1>
-          <p className="text-xs text-nv-text-muted">Prospection · leads, RDV, closing, commissions.</p>
+          <p className="text-xs text-nv-text-muted">Statut commercial (setting) + statut closer, synchronisés avec le closing.</p>
         </div>
         <div className="flex gap-2">
           <div className="flex gap-0.5 bg-nv-card border border-nv-border rounded-lg p-0.5">
@@ -128,7 +129,6 @@ export function ProspectionPipeline({ leads: initialLeads, commercials, admins, 
         </div>
       </div>
 
-      {/* KPIs compacts */}
       <div className="grid grid-cols-4 gap-2">
         {[
           { label: 'Pipeline actif', value: String(kpis.actifs), color: '#6366f1' },
@@ -149,7 +149,7 @@ export function ProspectionPipeline({ leads: initialLeads, commercials, admins, 
         <>
           {commissions.length > 0 && (
             <div className="bg-nv-card border border-nv-border rounded-xl p-3">
-              <div className="flex items-center gap-2 mb-2"><Coins size={13} className="text-primary" /><span className="text-xs font-semibold text-white">Commissions — {now.toLocaleDateString('fr-FR', { month: 'long' })}</span><span className="text-[10px] text-nv-text-faint ml-auto">{eur(settings.commissionPerBookedCall)}/RDV · {settings.commissionPercent}% / 1re mensualité</span></div>
+              <div className="flex items-center gap-2 mb-2"><Coins size={13} className="text-primary" /><span className="text-xs font-semibold text-white">Commissions — {now.toLocaleDateString('fr-FR', { month: 'long' })}</span><span className="text-[10px] text-nv-text-faint ml-auto">{eur(settings.commissionPerBookedCall)}/RDV · {settings.commissionPercent}% / 1re mensualité nette</span></div>
               <div className="flex flex-wrap gap-2">
                 {commissions.map(c => (
                   <div key={c.c.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-nv-dark border border-nv-border">
@@ -162,22 +162,15 @@ export function ProspectionPipeline({ leads: initialLeads, commercials, admins, 
             </div>
           )}
 
-          {/* Filtres CRM */}
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex gap-1 bg-nv-card border border-nv-border rounded-xl p-1 overflow-x-auto">
-              {[{ key: 'ACTIF', label: 'Pipeline actif' }, ...STAGES.map(s => ({ key: s.key, label: s.label }))].map(t => (
+              {filterTabs.map(t => (
                 <button key={t.key} onClick={() => setFilter(t.key)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 ${filter === t.key ? 'bg-primary text-nv-black' : 'text-nv-text-muted hover:text-nv-text'}`}>
-                  {t.label}<span className={`text-[10px] ${filter === t.key ? 'text-nv-black/70' : 'text-nv-text-faint'}`}>{counts[t.key]}</span>
+                  {t.label}<span className={`text-[10px] ${filter === t.key ? 'text-nv-black/70' : 'text-nv-text-faint'}`}>{t.n}</span>
                 </button>
               ))}
             </div>
-            {statuses.length > 0 && (
-              <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="bg-nv-card border border-nv-border rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none">
-                <option value="">Tous statuts</option>
-                {statuses.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-            )}
             {commercials.length > 1 && (
               <select value={comFilter} onChange={e => setComFilter(e.target.value)} className="bg-nv-card border border-nv-border rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none">
                 <option value="">Tous commerciaux</option>
@@ -190,40 +183,34 @@ export function ProspectionPipeline({ leads: initialLeads, commercials, admins, 
             </div>
           </div>
 
-          {/* Tableau CRM */}
           <div className="bg-nv-card border border-nv-border rounded-xl overflow-hidden">
-            <div className="grid grid-cols-[1fr_110px_100px_100px_100px_28px] gap-2 px-4 py-2 text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold border-b border-nv-border bg-nv-dark/40">
-              <span>Prospect</span><span>Commercial</span><span>Statut</span><span>Étape</span><span>Détail</span><span></span>
+            <div className="grid grid-cols-[1fr_100px_105px_100px_90px_28px] gap-2 px-4 py-2 text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold border-b border-nv-border bg-nv-dark/40">
+              <span>Prospect</span><span>Commercial</span><span>Statut setting</span><span>Statut closer</span><span>Détail</span><span></span>
             </div>
             <div className="divide-y divide-nv-border/50 max-h-[58vh] overflow-y-auto">
               {rows.length === 0 ? (
                 <p className="text-xs text-nv-text-faint text-center py-10">Aucun lead dans cette vue.</p>
-              ) : rows.map(l => {
-                const st = stageMeta(l.stage); const ps = statusOf(l.statusId)
-                return (
-                  <button key={l.id} onClick={() => setEditId(l.id)} className="w-full grid grid-cols-[1fr_110px_100px_100px_100px_28px] gap-2 px-4 py-2.5 items-center text-left hover:bg-white/[0.02] transition-colors">
-                    <div className="min-w-0"><p className="text-sm text-white font-medium truncate">{l.name}</p>{l.company && <p className="text-[11px] text-nv-text-faint truncate">{l.company}</p>}</div>
-                    <span className="text-xs text-nv-text-muted truncate">{comName(l.commercialId)}</span>
-                    {ps ? <span className="text-[11px] font-medium px-2 py-0.5 rounded-full w-fit" style={{ color: ps.color, backgroundColor: `${ps.color}1f` }}>{ps.name}</span> : <span className="text-[11px] text-nv-text-faint">—</span>}
-                    <span className="text-[11px] font-medium px-2 py-0.5 rounded-full w-fit" style={{ color: st.color, backgroundColor: `${st.color}1f` }}>{st.label}</span>
-                    <span className="text-[11px] text-nv-text-muted tabular-nums truncate">
-                      {l.stage === 'SIGNE' ? `${l.saleMonthlyAmount != null ? eur(l.saleMonthlyAmount) + '/m' : 'signé'}${l.wonAt ? ' · ' + frDate(l.wonAt) : ''}`
-                        : l.stage === 'RDV_BOOKE' && l.rdvDate ? `RDV ${frDate(l.rdvDate)}`
-                        : l.stage === 'RELANCE' && l.followUpDate ? `Relance ${frDate(l.followUpDate)}` : ''}
-                    </span>
-                    <ChevronRight size={14} className="text-nv-text-faint" />
-                  </button>
-                )
-              })}
+              ) : rows.map(l => (
+                <button key={l.id} onClick={() => setEditId(l.id)} className="w-full grid grid-cols-[1fr_100px_105px_100px_90px_28px] gap-2 px-4 py-2.5 items-center text-left hover:bg-white/[0.02] transition-colors">
+                  <div className="min-w-0"><p className="text-sm text-white font-medium truncate">{l.name}</p>{l.company && <p className="text-[11px] text-nv-text-faint truncate">{l.company}</p>}</div>
+                  <span className="text-xs text-nv-text-muted truncate">{comName(l.commercialId)}</span>
+                  {l.settingStatus ? <span className="text-[11px] font-medium px-2 py-0.5 rounded-full w-fit truncate" style={{ color: l.settingStatus.color, backgroundColor: `${l.settingStatus.color}1f` }}>{l.settingStatus.name}</span> : <span className="text-[11px] text-nv-text-faint">—</span>}
+                  {l.closerStatus ? <span className="text-[11px] font-medium px-2 py-0.5 rounded-full w-fit truncate" style={{ color: l.closerStatus.color, backgroundColor: `${l.closerStatus.color}1f` }}>{l.closerStatus.name}</span> : <span className="text-[11px] text-nv-text-faint">—</span>}
+                  <span className="text-[11px] text-nv-text-muted tabular-nums truncate">
+                    {isSigned(l) ? `${l.saleMonthlyAmount != null ? eur(l.saleMonthlyAmount) + '/m' : 'signé'}` : l.rdvDate ? `RDV ${frDate(l.rdvDate)}` : l.followUpDate ? `Relance ${frDate(l.followUpDate)}` : ''}
+                  </span>
+                  <ChevronRight size={14} className="text-nv-text-faint" />
+                </button>
+              ))}
             </div>
           </div>
         </>
       )}
 
-      {showAdd && typeof document !== 'undefined' && createPortal(<AddLeadModal commercials={commercials} statuses={statuses} onClose={() => setShowAdd(false)} onDone={() => router.refresh()} />, document.body)}
+      {showAdd && typeof document !== 'undefined' && createPortal(<AddLeadModal commercials={commercials} settingStatuses={statusList} onClose={() => setShowAdd(false)} onDone={() => router.refresh()} />, document.body)}
       {showQuota && typeof document !== 'undefined' && createPortal(<QuotaModal settings={settings} onClose={() => setShowQuota(false)} onSaved={s => setSettings(s)} />, document.body)}
-      {showStatuses && typeof document !== 'undefined' && createPortal(<StatusManager statuses={statuses} onClose={() => setShowStatuses(false)} onChange={setStatuses} />, document.body)}
-      {editing && typeof document !== 'undefined' && createPortal(<LeadModal lead={editing} commercials={commercials} statuses={statuses} onClose={() => setEditId(null)} onPatch={patchLead} onDelete={deleteLead} onOpenClose={() => { setEditId(null); setCloseId(editing.id) }} onRefresh={() => router.refresh()} />, document.body)}
+      {showStatuses && typeof document !== 'undefined' && createPortal(<StatusManager statuses={statusList} onClose={() => setShowStatuses(false)} onChange={setStatusList} />, document.body)}
+      {editing && typeof document !== 'undefined' && createPortal(<LeadModal lead={editing} commercials={commercials} settingStatuses={statusList} closerStatuses={closerStatuses} onClose={() => setEditId(null)} onPatch={patchLead} onDelete={deleteLead} onOpenClose={() => { setEditId(null); setCloseId(editing.id) }} />, document.body)}
       {closing && typeof document !== 'undefined' && createPortal(<CloseModal lead={closing} admins={admins} commercials={commercials} onClose={() => setCloseId(null)} onDone={() => router.refresh()} />, document.body)}
     </div>
   )
@@ -232,7 +219,7 @@ export function ProspectionPipeline({ leads: initialLeads, commercials, admins, 
 // ── Vue Stats mois par mois + commissions à verser ──
 function StatsView({ leads: allLeads, commercials, settings }: { leads: Lead[]; commercials: Commercial[]; settings: Settings }) {
   const now = new Date()
-  const [sel, setSel] = useState<string>('') // filtre commercial ('' = tous)
+  const [sel, setSel] = useState<string>('')
   const leads = sel ? allLeads.filter(l => l.commercialId === sel) : allLeads
   const months = Array.from({ length: 6 }, (_, i) => {
     const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1); const y = d.getFullYear(), m = d.getMonth()
@@ -252,7 +239,7 @@ function StatsView({ leads: allLeads, commercials, settings }: { leads: Lead[]; 
   return (
     <div className="space-y-4">
       {commercials.length > 0 && (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs text-nv-text-muted">Vue :</span>
           <button onClick={() => setSel('')} className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${!sel ? 'border-primary bg-primary/10 text-primary' : 'border-nv-border text-nv-text-muted hover:text-white'}`}>Tous</button>
           {commercials.map(c => (
@@ -277,7 +264,6 @@ function StatsView({ leads: allLeads, commercials, settings }: { leads: Lead[]; 
           ))}
         </div>
       </div>
-
       <div className="bg-nv-card border border-nv-border rounded-xl p-4">
         <h3 className="text-sm font-semibold text-white flex items-center gap-2 mb-3"><Coins size={15} className="text-primary" /> Total des commissions à verser</h3>
         {totalToPay.length === 0 ? <p className="text-xs text-nv-text-faint">Aucune commission pour l&apos;instant.</p> : (
@@ -290,7 +276,6 @@ function StatsView({ leads: allLeads, commercials, settings }: { leads: Lead[]; 
             ))}
           </div>
         )}
-        <p className="text-[10px] text-nv-text-faint mt-2">Base : {eur(settings.commissionPerBookedCall)}/RDV booké + {settings.commissionPercent}% de la 1re mensualité des ventes signées (cumul total).</p>
       </div>
     </div>
   )
@@ -303,14 +288,14 @@ const Overlay = ({ children, onClose }: { children: React.ReactNode; onClose: ()
   </div>
 )
 
-function AddLeadModal({ commercials, statuses, onClose, onDone }: { commercials: Commercial[]; statuses: ProspectStatus[]; onClose: () => void; onDone: () => void }) {
-  const [f, setF] = useState({ name: '', company: '', email: '', phone: '', source: '', commercialId: commercials[0]?.id ?? '', statusId: statuses[0]?.id ?? '', notes: '' })
+function AddLeadModal({ commercials, settingStatuses, onClose, onDone }: { commercials: Commercial[]; settingStatuses: SettingStatus[]; onClose: () => void; onDone: () => void }) {
+  const [f, setF] = useState({ name: '', company: '', email: '', phone: '', source: '', commercialId: commercials[0]?.id ?? '', settingStatusId: settingStatuses[0]?.id ?? '', notes: '' })
   const [saving, setSaving] = useState(false)
   const save = async () => {
     if (!f.name.trim()) { toast.error('Nom requis'); return }
     setSaving(true)
     try {
-      const res = await fetch('/api/leads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...f, email: f.email || undefined, commercialId: f.commercialId || undefined, statusId: f.statusId || undefined }) })
+      const res = await fetch('/api/leads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: f.name, company: f.company, email: f.email || undefined, phone: f.phone, source: f.source, notes: f.notes, commercialId: f.commercialId || undefined, prospectStatusId: f.settingStatusId || undefined }) })
       if (!res.ok) throw new Error()
       toast.success('Lead ajouté'); onDone(); onClose()
     } catch { toast.error('Erreur') } finally { setSaving(false) }
@@ -327,7 +312,7 @@ function AddLeadModal({ commercials, statuses, onClose, onDone }: { commercials:
       <input className={inp} placeholder="Source (Insta, reco, cold…)" value={f.source} onChange={e => setF({ ...f, source: e.target.value })} />
       <div className="grid grid-cols-2 gap-2">
         <select className={inp} value={f.commercialId} onChange={e => setF({ ...f, commercialId: e.target.value })}><option value="">— Commercial —</option>{commercials.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
-        <select className={inp} value={f.statusId} onChange={e => setF({ ...f, statusId: e.target.value })}><option value="">— Statut —</option>{statuses.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
+        <select className={inp} value={f.settingStatusId} onChange={e => setF({ ...f, settingStatusId: e.target.value })}><option value="">— Statut setting —</option>{settingStatuses.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
       </div>
       <textarea className={inp} rows={2} placeholder="Notes" value={f.notes} onChange={e => setF({ ...f, notes: e.target.value })} />
       <button onClick={save} disabled={saving} className="w-full flex items-center justify-center gap-1.5 py-2 bg-primary text-nv-black rounded-lg font-medium disabled:opacity-60">{saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Ajouter</button>
@@ -352,30 +337,30 @@ function QuotaModal({ settings, onClose, onSaved }: { settings: Settings; onClos
     <Overlay onClose={onClose}>
       <div className="flex items-center justify-between"><h3 className="text-base font-semibold text-white flex items-center gap-2"><Settings2 size={16} className="text-primary" /> Quotas & commissions</h3><button onClick={onClose}><X size={16} className="text-nv-text-muted" /></button></div>
       <div><label className="text-xs text-nv-text-muted flex items-center gap-1.5 mb-1"><Euro size={12} /> Prime par RDV booké</label><input className={inp} type="number" value={perCall} onChange={e => setPerCall(e.target.value)} /></div>
-      <div><label className="text-xs text-nv-text-muted flex items-center gap-1.5 mb-1"><Percent size={12} /> Commission sur la 1re mensualité (%)</label><input className={inp} type="number" value={pct} onChange={e => setPct(e.target.value)} /></div>
+      <div><label className="text-xs text-nv-text-muted flex items-center gap-1.5 mb-1"><Percent size={12} /> Commission sur la 1re mensualité nette (%)</label><input className={inp} type="number" value={pct} onChange={e => setPct(e.target.value)} /></div>
       <button onClick={save} disabled={saving} className="w-full flex items-center justify-center gap-1.5 py-2 bg-primary text-nv-black rounded-lg font-medium disabled:opacity-60">{saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Enregistrer</button>
     </Overlay>
   )
 }
 
-const PALETTE = ['#6366f1', '#f59e0b', '#3b82f6', '#10b981', '#ec4899', '#ef4444', '#8b5cf6', '#06b6d4', '#22d3ee']
-function StatusManager({ statuses, onClose, onChange }: { statuses: ProspectStatus[]; onClose: () => void; onChange: (s: ProspectStatus[]) => void }) {
+const PALETTE = ['#6366f1', '#f59e0b', '#3b82f6', '#10b981', '#ec4899', '#ef4444', '#8b5cf6', '#06b6d4', '#94a3b8']
+function StatusManager({ statuses, onClose, onChange }: { statuses: SettingStatus[]; onClose: () => void; onChange: (s: SettingStatus[]) => void }) {
   const [list, setList] = useState(statuses)
   const [name, setName] = useState('')
   const [color, setColor] = useState(PALETTE[0])
   const add = async () => {
     if (!name.trim()) return
-    const res = await fetch('/api/lead-statuses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim(), color, order: list.length }) })
+    const res = await fetch('/api/prospect-statuses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim(), color, order: list.length }) })
     if (res.ok) { const s = await res.json(); const next = [...list, s]; setList(next); onChange(next); setName('') } else toast.error('Erreur')
   }
   const del = async (id: string) => {
-    await fetch(`/api/lead-statuses/${id}`, { method: 'DELETE' })
+    await fetch(`/api/prospect-statuses/${id}`, { method: 'DELETE' })
     const next = list.filter(s => s.id !== id); setList(next); onChange(next)
   }
   return (
     <Overlay onClose={onClose}>
-      <div className="flex items-center justify-between"><h3 className="text-base font-semibold text-white flex items-center gap-2"><Tag size={16} className="text-primary" /> Statuts de lead</h3><button onClick={onClose}><X size={16} className="text-nv-text-muted" /></button></div>
-      <p className="text-xs text-nv-text-muted">Crée tes étapes de prospection (R1, R2, R3, Follow-up…) avec un code couleur.</p>
+      <div className="flex items-center justify-between"><h3 className="text-base font-semibold text-white flex items-center gap-2"><Tag size={16} className="text-primary" /> Statuts commerciaux (setting)</h3><button onClick={onClose}><X size={16} className="text-nv-text-muted" /></button></div>
+      <p className="text-xs text-nv-text-muted">Étapes de prospection (à contacter, contacté, à relancer, abandon…). Le statut closer (R1/R2/Signé) est géré côté closing.</p>
       <div className="space-y-1.5 max-h-52 overflow-y-auto">
         {list.map(s => (
           <div key={s.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-nv-card border border-nv-border">
@@ -385,39 +370,37 @@ function StatusManager({ statuses, onClose, onChange }: { statuses: ProspectStat
           </div>
         ))}
       </div>
-      <div className="flex items-center gap-1.5">
-        {PALETTE.map(c => <button key={c} onClick={() => setColor(c)} className={`w-5 h-5 rounded-full ${color === c ? 'ring-2 ring-white' : ''}`} style={{ backgroundColor: c }} />)}
-      </div>
+      <div className="flex items-center gap-1.5">{PALETTE.map(c => <button key={c} onClick={() => setColor(c)} className={`w-5 h-5 rounded-full ${color === c ? 'ring-2 ring-white' : ''}`} style={{ backgroundColor: c }} />)}</div>
       <div className="flex gap-2">
-        <input className={`${inp} flex-1`} placeholder="Nouveau statut (ex R1)…" value={name} onChange={e => setName(e.target.value)} onKeyDown={e => e.key === 'Enter' && add()} />
+        <input className={`${inp} flex-1`} placeholder="Nouveau statut…" value={name} onChange={e => setName(e.target.value)} onKeyDown={e => e.key === 'Enter' && add()} />
         <button onClick={add} className="px-3 py-2 bg-nv-card border border-nv-border rounded-lg text-nv-text-muted hover:text-white"><Plus size={15} /></button>
       </div>
     </Overlay>
   )
 }
 
-function LeadModal({ lead, commercials, statuses, onClose, onPatch, onDelete, onOpenClose, onRefresh }: {
-  lead: Lead; commercials: Commercial[]; statuses: ProspectStatus[]; onClose: () => void
-  onPatch: (id: string, patch: any) => void; onDelete: (id: string) => void; onOpenClose: () => void; onRefresh: () => void
+function LeadModal({ lead, commercials, settingStatuses, closerStatuses, onClose, onPatch, onDelete, onOpenClose }: {
+  lead: Lead; commercials: Commercial[]; settingStatuses: SettingStatus[]; closerStatuses: CloserStatus[]; onClose: () => void
+  onPatch: (id: string, patch: any, optimistic?: Partial<Lead>) => void; onDelete: (id: string) => void; onOpenClose: () => void
 }) {
   const [rdvDate, setRdvDate] = useState(lead.rdvDate ? lead.rdvDate.slice(0, 10) : new Date().toISOString().slice(0, 10))
   const [noteText, setNoteText] = useState('')
   const [resLabel, setResLabel] = useState(''); const [resUrl, setResUrl] = useState('')
   const [notes, setNotes] = useState<Note[]>(lead.annotations || [])
   const [resources, setResources] = useState<Resource[]>(lead.resources || [])
-  const stage = stageOf(lead); const nowIso = () => new Date().toISOString()
+  const nowIso = () => new Date().toISOString()
+  const firstCloser = closerStatuses.find(s => !s.isClosed)?.id ?? closerStatuses[0]?.id ?? null
 
   const addNote = async () => {
     if (!noteText.trim()) return
     const res = await fetch('/api/lead-notes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leadId: lead.id, content: noteText.trim() }) })
     if (res.ok) { const n = await res.json(); setNotes([n, ...notes]); setNoteText('') } else toast.error('Erreur')
   }
-  const addResource = () => {
-    if (!resUrl.trim()) return
-    const next = [...resources, { label: resLabel.trim() || undefined, url: resUrl.trim() }]
-    setResources(next); onPatch(lead.id, { resources: next }); setResLabel(''); setResUrl('')
-  }
+  const addResource = () => { if (!resUrl.trim()) return; const next = [...resources, { label: resLabel.trim() || undefined, url: resUrl.trim() }]; setResources(next); onPatch(lead.id, { resources: next }); setResLabel(''); setResUrl('') }
   const delResource = (i: number) => { const next = resources.filter((_, idx) => idx !== i); setResources(next); onPatch(lead.id, { resources: next }) }
+
+  const setSetting = (id: string) => onPatch(lead.id, { prospectStatusId: id || null }, { settingStatusId: id || null, settingStatus: settingStatuses.find(s => s.id === id) ?? null })
+  const setCloser = (id: string) => onPatch(lead.id, { statusId: id || null }, { closerStatusId: id || null, closerStatus: closerStatuses.find(s => s.id === id) ?? null })
 
   return (
     <Overlay onClose={onClose}>
@@ -426,18 +409,21 @@ function LeadModal({ lead, commercials, statuses, onClose, onPatch, onDelete, on
         <button onClick={onClose}><X size={16} className="text-nv-text-muted" /></button>
       </div>
 
+      <div><label className="text-[11px] text-nv-text-muted block mb-1">Commercial</label>
+        <select className={inp} value={lead.commercialId ?? ''} onChange={e => onPatch(lead.id, { commercialId: e.target.value || null })}><option value="">—</option>{commercials.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+      </div>
+
       <div className="grid grid-cols-2 gap-2">
-        <div><label className="text-[11px] text-nv-text-muted block mb-1">Commercial</label>
-          <select className={inp} value={lead.commercialId ?? ''} onChange={e => onPatch(lead.id, { commercialId: e.target.value || null })}><option value="">—</option>{commercials.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+        <div><label className="text-[11px] text-nv-text-muted block mb-1">Statut setting (commercial)</label>
+          <select className={inp} value={lead.settingStatusId ?? ''} onChange={e => setSetting(e.target.value)}><option value="">—</option>{settingStatuses.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
         </div>
-        <div><label className="text-[11px] text-nv-text-muted block mb-1">Statut</label>
-          <select className={inp} value={lead.statusId ?? ''} onChange={e => onPatch(lead.id, { statusId: e.target.value || null })}><option value="">—</option>{statuses.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
+        <div><label className="text-[11px] text-nv-text-muted block mb-1">Statut closer</label>
+          <select className={inp} value={lead.closerStatusId ?? ''} onChange={e => setCloser(e.target.value)}><option value="">—</option>{closerStatuses.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
         </div>
       </div>
 
-      {/* Étapes pipeline */}
       <div className="rounded-xl border border-nv-border p-3 space-y-2.5">
-        <p className="text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold">Étape du pipeline</p>
+        <p className="text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold">Pipeline</p>
         <div className="flex items-center gap-2">
           <input type="date" className={`${inp} flex-1`} value={lead.followUpDate ? lead.followUpDate.slice(0, 10) : ''} onChange={e => onPatch(lead.id, { followUpDate: e.target.value || null })} />
           <span className="text-[11px] text-nv-text-muted w-20">Follow-up</span>
@@ -447,29 +433,26 @@ function LeadModal({ lead, commercials, statuses, onClose, onPatch, onDelete, on
             <button onClick={() => onPatch(lead.id, { rdvBookedAt: null, rdvDate: null })} className="flex-1 text-xs py-1.5 rounded-lg border border-blue-500/40 bg-blue-500/10 text-blue-300">RDV booké ✓ (annuler)</button>
           ) : (
             <><input type="date" className={`${inp} flex-1`} value={rdvDate} onChange={e => setRdvDate(e.target.value)} />
-              <button onClick={() => onPatch(lead.id, { rdvBookedAt: nowIso(), rdvDate: rdvDate ? new Date(rdvDate).toISOString() : null })} className="text-xs px-2.5 py-1.5 rounded-lg bg-blue-500/15 border border-blue-500/30 text-blue-300 whitespace-nowrap">Booker le RDV</button></>
+              <button onClick={() => onPatch(lead.id, { rdvBookedAt: nowIso(), rdvDate: rdvDate ? new Date(rdvDate).toISOString() : null, ...(lead.closerStatusId ? {} : { statusId: firstCloser }) }, { closerStatusId: lead.closerStatusId ?? firstCloser, closerStatus: lead.closerStatus ?? (closerStatuses.find(s => s.id === firstCloser) ?? null) })} className="text-xs px-2.5 py-1.5 rounded-lg bg-blue-500/15 border border-blue-500/30 text-blue-300 whitespace-nowrap">Booker le RDV</button></>
           )}
         </div>
-        {lead.wonAt ? (
+        {lead.rdvBookedAt && !lead.closerStatusId && <p className="text-[11px] text-amber-300">↑ Choisis un statut closer pour ce RDV.</p>}
+        {isSigned(lead) ? (
           <button onClick={() => onPatch(lead.id, { wonAt: null })} className="w-full text-xs py-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 text-emerald-300">Signé ✓ {lead.saleMonthlyAmount != null ? `· ${eur(lead.saleMonthlyAmount)}/m` : ''} (annuler)</button>
         ) : (
           <button onClick={onOpenClose} className="w-full text-xs py-2 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-medium flex items-center justify-center gap-1.5"><PartyPopper size={14} /> Marquer signé & transmettre</button>
         )}
-        {stage !== 'PERDU' ? (
-          <button onClick={() => onPatch(lead.id, { lostAt: nowIso() })} className="w-full text-xs py-1.5 rounded-lg border border-nv-border text-nv-text-muted hover:text-red-400 hover:border-red-500/30 transition-colors">Marquer perdu</button>
-        ) : (
+        {lead.lostAt ? (
           <button onClick={() => onPatch(lead.id, { lostAt: null })} className="w-full text-xs py-1.5 rounded-lg border border-red-500/40 bg-red-500/10 text-red-300">Perdu ✗ (réactiver)</button>
+        ) : (
+          <button onClick={() => onPatch(lead.id, { lostAt: nowIso() })} className="w-full text-xs py-1.5 rounded-lg border border-nv-border text-nv-text-muted hover:text-red-400 hover:border-red-500/30 transition-colors">Marquer perdu</button>
         )}
       </div>
 
-      {/* Ressources */}
       <div className="rounded-xl border border-nv-border p-3 space-y-2">
         <p className="text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold flex items-center gap-1.5"><Link2 size={11} /> Ressources</p>
         {resources.map((r, i) => (
-          <div key={i} className="flex items-center gap-2 text-xs">
-            <a href={r.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline truncate flex-1">{r.label || r.url}</a>
-            <button onClick={() => delResource(i)} className="text-nv-text-faint hover:text-red-400"><X size={12} /></button>
-          </div>
+          <div key={i} className="flex items-center gap-2 text-xs"><a href={r.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline truncate flex-1">{r.label || r.url}</a><button onClick={() => delResource(i)} className="text-nv-text-faint hover:text-red-400"><X size={12} /></button></div>
         ))}
         <div className="flex gap-1.5">
           <input className={`${inp} w-24`} placeholder="Libellé" value={resLabel} onChange={e => setResLabel(e.target.value)} />
@@ -478,20 +461,11 @@ function LeadModal({ lead, commercials, statuses, onClose, onPatch, onDelete, on
         </div>
       </div>
 
-      {/* Annotations */}
       <div className="rounded-xl border border-nv-border p-3 space-y-2">
         <p className="text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold flex items-center gap-1.5"><MessageSquarePlus size={11} /> Annotations</p>
-        <div className="flex gap-1.5">
-          <input className={`${inp} flex-1`} placeholder="Ajouter une note…" value={noteText} onChange={e => setNoteText(e.target.value)} onKeyDown={e => e.key === 'Enter' && addNote()} />
-          <button onClick={addNote} className="px-2 rounded-lg bg-primary text-nv-black"><Plus size={14} /></button>
-        </div>
+        <div className="flex gap-1.5"><input className={`${inp} flex-1`} placeholder="Ajouter une note…" value={noteText} onChange={e => setNoteText(e.target.value)} onKeyDown={e => e.key === 'Enter' && addNote()} /><button onClick={addNote} className="px-2 rounded-lg bg-primary text-nv-black"><Plus size={14} /></button></div>
         <div className="space-y-1.5 max-h-32 overflow-y-auto">
-          {notes.map(n => (
-            <div key={n.id} className="text-xs bg-nv-card border border-nv-border/50 rounded-lg px-2.5 py-1.5">
-              <p className="text-nv-text">{n.content}</p>
-              <p className="text-[10px] text-nv-text-faint mt-0.5">{n.authorName ?? ''} · {new Date(n.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}</p>
-            </div>
-          ))}
+          {notes.map(n => (<div key={n.id} className="text-xs bg-nv-card border border-nv-border/50 rounded-lg px-2.5 py-1.5"><p className="text-nv-text">{n.content}</p><p className="text-[10px] text-nv-text-faint mt-0.5">{n.authorName ?? ''} · {new Date(n.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}</p></div>))}
         </div>
       </div>
 
@@ -500,7 +474,6 @@ function LeadModal({ lead, commercials, statuses, onClose, onPatch, onDelete, on
   )
 }
 
-// ── Popup closing : montant + infos + ressources + tag admins → notif + fiche client ──
 function CloseModal({ lead, admins, commercials, onClose, onDone }: { lead: Lead; admins: Admin[]; commercials: Commercial[]; onClose: () => void; onDone: () => void }) {
   const [commercialId, setCommercialId] = useState(lead.commercialId ?? (commercials[0]?.id ?? ''))
   const [amount, setAmount] = useState(lead.saleMonthlyAmount != null ? String(lead.saleMonthlyAmount) : '')
@@ -509,63 +482,36 @@ function CloseModal({ lead, admins, commercials, onClose, onDone }: { lead: Lead
   const [resLabel, setResLabel] = useState(''); const [resUrl, setResUrl] = useState('')
   const [tagged, setTagged] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
-
   const toggleTag = (id: string) => setTagged(t => t.includes(id) ? t.filter(x => x !== id) : [...t, id])
   const addRes = () => { if (!resUrl.trim()) return; setResources([...resources, { label: resLabel.trim() || undefined, url: resUrl.trim() }]); setResLabel(''); setResUrl('') }
-
   const save = async () => {
     setSaving(true)
     try {
-      const res = await fetch(`/api/leads/${lead.id}/close`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ saleMonthlyAmount: amount, message, resources, taggedAdminIds: tagged, commercialId: commercialId || undefined }),
-      })
+      const res = await fetch(`/api/leads/${lead.id}/close`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ saleMonthlyAmount: amount, message, resources, taggedAdminIds: tagged, commercialId: commercialId || undefined }) })
       if (!res.ok) throw new Error()
       const j = await res.json()
       toast.success(`Signé ✓${j.notified ? ` · ${j.notified} admin(s) notifié(s)` : ''}`)
       onDone(); onClose()
     } catch { toast.error('Erreur') } finally { setSaving(false) }
   }
-
   return (
     <Overlay onClose={onClose}>
       <div className="flex items-center justify-between"><h3 className="text-base font-semibold text-white flex items-center gap-2"><PartyPopper size={17} className="text-emerald-400" /> Closing — {lead.name}</h3><button onClick={onClose}><X size={16} className="text-nv-text-muted" /></button></div>
       <p className="text-xs text-nv-text-muted">Transmets les infos du closing à l&apos;équipe pour l&apos;onboarding.</p>
-
       <div><label className="text-[11px] text-nv-text-muted block mb-1">Commercial (pour la commission)</label>
-        <select className={inp} value={commercialId} onChange={e => setCommercialId(e.target.value)}>
-          <option value="">— Aucun —</option>
-          {commercials.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        <select className={inp} value={commercialId} onChange={e => setCommercialId(e.target.value)}><option value="">— Aucun —</option>{commercials.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
       </div>
-
       <div><label className="text-[11px] text-nv-text-muted block mb-1">Mensualité NETTE signée (€) — base de la commission</label><input className={inp} type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="ex 1000" /><p className="text-[10px] text-nv-text-faint mt-0.5">Le % du commercial se calcule sur ce montant mensuel net, pas sur le total du contrat.</p></div>
-
-      <div><label className="text-[11px] text-nv-text-muted block mb-1">Infos à transmettre</label>
-        <textarea className={inp} rows={3} placeholder="Contexte du client, attentes, deadlines, accès…" value={message} onChange={e => setMessage(e.target.value)} />
-      </div>
-
-      {/* Ressources */}
+      <div><label className="text-[11px] text-nv-text-muted block mb-1">Infos à transmettre</label><textarea className={inp} rows={3} placeholder="Contexte client, attentes, deadlines, accès…" value={message} onChange={e => setMessage(e.target.value)} /></div>
       <div className="space-y-1.5">
         <label className="text-[11px] text-nv-text-muted flex items-center gap-1.5"><Link2 size={11} /> Ressources / liens</label>
         {resources.map((r, i) => <div key={i} className="text-xs text-primary truncate">{r.label || r.url}</div>)}
-        <div className="flex gap-1.5">
-          <input className={`${inp} w-24`} placeholder="Libellé" value={resLabel} onChange={e => setResLabel(e.target.value)} />
-          <input className={`${inp} flex-1`} placeholder="https://…" value={resUrl} onChange={e => setResUrl(e.target.value)} />
-          <button onClick={addRes} className="px-2 rounded-lg bg-nv-card border border-nv-border text-nv-text-muted hover:text-white"><Plus size={14} /></button>
-        </div>
+        <div className="flex gap-1.5"><input className={`${inp} w-24`} placeholder="Libellé" value={resLabel} onChange={e => setResLabel(e.target.value)} /><input className={`${inp} flex-1`} placeholder="https://…" value={resUrl} onChange={e => setResUrl(e.target.value)} /><button onClick={addRes} className="px-2 rounded-lg bg-nv-card border border-nv-border text-nv-text-muted hover:text-white"><Plus size={14} /></button></div>
       </div>
-
-      {/* Tag admins */}
       <div>
-        <label className="text-[11px] text-nv-text-muted flex items-center gap-1.5 mb-1.5"><AtSign size={11} /> Taguer un admin (reçoit une notif + accès fiche)</label>
-        <div className="flex flex-wrap gap-1.5">
-          {admins.map(a => (
-            <button key={a.id} onClick={() => toggleTag(a.id)} className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${tagged.includes(a.id) ? 'border-primary bg-primary/15 text-primary' : 'border-nv-border text-nv-text-muted'}`}>@{a.name}</button>
-          ))}
-        </div>
+        <label className="text-[11px] text-nv-text-muted flex items-center gap-1.5 mb-1.5"><AtSign size={11} /> Taguer un admin (notif + accès fiche)</label>
+        <div className="flex flex-wrap gap-1.5">{admins.map(a => <button key={a.id} onClick={() => toggleTag(a.id)} className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${tagged.includes(a.id) ? 'border-primary bg-primary/15 text-primary' : 'border-nv-border text-nv-text-muted'}`}>@{a.name}</button>)}</div>
       </div>
-
       <button onClick={save} disabled={saving} className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-emerald-500 text-white rounded-lg font-medium disabled:opacity-60">{saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Valider le closing{tagged.length ? ` & notifier ${tagged.length}` : ''}</button>
     </Overlay>
   )
