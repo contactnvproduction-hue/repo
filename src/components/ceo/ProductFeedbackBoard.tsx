@@ -1,16 +1,20 @@
 'use client'
 
 import { useState } from 'react'
-import { MessageSquarePlus, Plus, X, Check, Loader2, Trash2, AtSign, Lightbulb } from 'lucide-react'
+import Link from 'next/link'
+import { MessageSquarePlus, Plus, X, Check, Loader2, Trash2, AtSign, Lightbulb, Building2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 type Member = { id: string; name: string }
+type ClientLite = { id: string; name: string }
 type Feedback = {
   id: string
   title: string
   content: string | null
   category: string | null
   status: 'OPEN' | 'IN_PROGRESS' | 'DONE'
+  clientId: string | null
+  clientName: string | null
   authorName: string | null
   assignedTo: string[]
   createdAt: string
@@ -28,14 +32,14 @@ const STATUS: { key: Feedback['status']; label: string; color: string }[] = [
 
 const inp = 'w-full bg-nv-black border border-nv-border rounded-lg px-3 py-2 text-sm text-nv-text placeholder-nv-text-faint focus:outline-none focus:border-primary/60 transition-colors'
 
-export function ProductFeedbackBoard({ initialFeedback, teamMembers, currentUserId }: {
-  initialFeedback: Feedback[]; teamMembers: Member[]; currentUserId: string
+export function ProductFeedbackBoard({ initialFeedback, teamMembers, clients, currentUserId }: {
+  initialFeedback: Feedback[]; teamMembers: Member[]; clients: ClientLite[]; currentUserId: string
 }) {
   const [items, setItems] = useState<Feedback[]>(initialFeedback)
   const [showForm, setShowForm] = useState(false)
   const [filter, setFilter] = useState<'ALL' | Feedback['status']>('ALL')
   const [saving, setSaving] = useState(false)
-  const [f, setF] = useState<{ title: string; category: string; content: string; assignedTo: string[] }>({ title: '', category: '', content: '', assignedTo: [] })
+  const [f, setF] = useState<{ title: string; category: string; content: string; clientId: string; assignedTo: string[] }>({ title: '', category: '', content: '', clientId: '', assignedTo: [] })
 
   const nameOf = (id: string) => teamMembers.find(m => m.id === id)?.name ?? '?'
   const toggleTag = (id: string) => setF(s => ({ ...s, assignedTo: s.assignedTo.includes(id) ? s.assignedTo.filter(x => x !== id) : [...s.assignedTo, id] }))
@@ -48,7 +52,7 @@ export function ProductFeedbackBoard({ initialFeedback, teamMembers, currentUser
       if (!res.ok) throw new Error()
       const item = await res.json()
       setItems(x => [item, ...x])
-      setF({ title: '', category: '', content: '', assignedTo: [] })
+      setF({ title: '', category: '', content: '', clientId: '', assignedTo: [] })
       setShowForm(false)
       toast.success(f.assignedTo.length ? 'Feedback ajouté + notifié' : 'Feedback ajouté')
     } catch { toast.error('Erreur') } finally { setSaving(false) }
@@ -99,6 +103,13 @@ export function ProductFeedbackBoard({ initialFeedback, teamMembers, currentUser
           </div>
           <textarea className={`${inp} resize-none`} rows={3} placeholder="Détail, contexte, ce qu'on pourrait améliorer…" value={f.content} onChange={e => setF({ ...f, content: e.target.value })} />
           <div>
+            <label className="text-xs text-nv-text-muted flex items-center gap-1.5 mb-1.5"><Building2 size={12} /> Client concerné (d&apos;où vient le feedback)</label>
+            <select className={inp} value={f.clientId} onChange={e => setF({ ...f, clientId: e.target.value })}>
+              <option value="">— Aucun / interne —</option>
+              {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+          <div>
             <label className="text-xs text-nv-text-muted flex items-center gap-1.5 mb-1.5"><AtSign size={12} /> Taguer un membre (il reçoit une notif)</label>
             <div className="flex flex-wrap gap-1.5">
               {teamMembers.filter(m => m.id !== currentUserId).map(m => (
@@ -146,6 +157,19 @@ export function ProductFeedbackBoard({ initialFeedback, teamMembers, currentUser
                       <p className={`text-sm font-medium ${item.status === 'DONE' ? 'text-nv-text-muted line-through' : 'text-white'}`}>{item.title}</p>
                     </div>
                     {item.content && <p className="text-xs text-nv-text-muted mt-1 whitespace-pre-wrap">{item.content}</p>}
+                    {(item.clientId || item.clientName) && (
+                      <div className="mt-1.5">
+                        {item.clientId ? (
+                          <Link href={`/clients/${item.clientId}`} className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-300 border border-blue-500/25 hover:bg-blue-500/25 transition-colors">
+                            <Building2 size={11} /> {item.clientName ?? 'Client'}
+                          </Link>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-300 border border-blue-500/20">
+                            <Building2 size={11} /> {item.clientName}
+                          </span>
+                        )}
+                      </div>
+                    )}
                     <div className="flex items-center gap-2 mt-1.5 flex-wrap text-[10px] text-nv-text-faint">
                       {item.authorName && <span>{item.authorName}</span>}
                       <span>· {new Date(item.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</span>

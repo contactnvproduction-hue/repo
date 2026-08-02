@@ -1127,6 +1127,8 @@ model ProductFeedback {
   content    String?
   category   String?  // axe : Produit, UX, Delivery, Process, Bug…
   status     String   @default("OPEN") // OPEN | IN_PROGRESS | DONE
+  clientId   String?  // client concerné (fiche client) → d'où vient le feedback
+  clientName String?  // nom du client mémorisé pour l'affichage
   authorId   String?
   authorName String?
   assignedTo String[] // userIds taggés

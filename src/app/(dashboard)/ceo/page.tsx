@@ -2,14 +2,13 @@ import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { Briefcase, TrendingUp, CheckCircle2, Calendar, ExternalLink, MessageSquare, LayoutDashboard } from 'lucide-react'
 import { CeoManager } from '@/components/ceo/CeoManager'
-import { RecurringCallsAgenda } from '@/components/ceo/RecurringCallsAgenda'
 import { ProductFeedbackBoard } from '@/components/ceo/ProductFeedbackBoard'
 
 export default async function CeoPage() {
   const session = await auth()
   if (!session?.user) return null
 
-  const [meetings, teamMembers, availableTasks, recurringCalls] = await Promise.all([
+  const [meetings, teamMembers, availableTasks, clients] = await Promise.all([
     prisma.ceoMeeting.findMany({
       include: {
         topics: { orderBy: { order: 'asc' } },
@@ -24,10 +23,7 @@ export default async function CeoPage() {
       orderBy: { createdAt: 'desc' },
       take: 50,
     }),
-    (async () => { try { return await (prisma as any).recurringCall.findMany({
-      include: { notes: true },
-      orderBy: [{ dayOfWeek: 'asc' }, { time: 'asc' }],
-    }) } catch { return [] } })(),
+    prisma.client.findMany({ where: { status: { not: 'ARCHIVÉ' } }, select: { id: true, name: true }, orderBy: { name: 'asc' } }).catch(() => []),
   ])
 
   const feedback = await (async () => { try { return await (prisma as any).productFeedback.findMany({ orderBy: { createdAt: 'desc' } }) } catch { return [] } })()
@@ -88,6 +84,25 @@ export default async function CeoPage() {
         </div>
       </div>
 
+      {/* Feedback interne — remarques & axes d'amélioration produit (en premier) */}
+      <ProductFeedbackBoard
+        initialFeedback={(feedback ?? []).map((x: any) => ({
+          id: x.id,
+          title: x.title,
+          content: x.content,
+          category: x.category,
+          status: x.status,
+          clientId: x.clientId ?? null,
+          clientName: x.clientName ?? null,
+          authorName: x.authorName,
+          assignedTo: x.assignedTo ?? [],
+          createdAt: x.createdAt.toISOString(),
+        }))}
+        teamMembers={teamMembers}
+        clients={clients}
+        currentUserId={session.user.id}
+      />
+
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-nv-card border border-nv-border rounded-xl p-4">
@@ -107,37 +122,6 @@ export default async function CeoPage() {
           <p className="text-xl font-bold text-emerald-400">{doneSteps}<span className="text-nv-text-muted text-sm font-normal">/{allSteps.length}</span></p>
         </div>
       </div>
-
-      {/* Manager */}
-      {/* Calls récurrents hebdo — agenda prévisionnel */}
-      <RecurringCallsAgenda
-        initialCalls={(recurringCalls ?? []).map((c: any) => ({
-          id: c.id,
-          title: c.title,
-          dayOfWeek: c.dayOfWeek,
-          time: c.time,
-          withWho: c.withWho,
-          color: c.color,
-          active: c.active,
-          notes: (c.notes ?? []).map((n: any) => ({ id: n.id, date: n.date, content: n.content, done: n.done })),
-        }))}
-      />
-
-      {/* Feedback interne — remarques & axes d'amélioration produit */}
-      <ProductFeedbackBoard
-        initialFeedback={(feedback ?? []).map((x: any) => ({
-          id: x.id,
-          title: x.title,
-          content: x.content,
-          category: x.category,
-          status: x.status,
-          authorName: x.authorName,
-          assignedTo: x.assignedTo ?? [],
-          createdAt: x.createdAt.toISOString(),
-        }))}
-        teamMembers={teamMembers}
-        currentUserId={session.user.id}
-      />
 
       <CeoManager initialMeetings={serialized} teamMembers={teamMembers} availableTasks={availableTasks} />
     </div>

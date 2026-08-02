@@ -10,6 +10,7 @@ const createSchema = z.object({
   content: z.string().optional().nullable(),
   category: z.string().optional().nullable(),
   status: z.enum(['OPEN', 'IN_PROGRESS', 'DONE']).optional(),
+  clientId: z.string().optional().nullable(),
   assignedTo: z.array(z.string()).default([]),
 })
 
@@ -19,8 +20,16 @@ const patchSchema = z.object({
   content: z.string().optional().nullable(),
   category: z.string().optional().nullable(),
   status: z.enum(['OPEN', 'IN_PROGRESS', 'DONE']).optional(),
+  clientId: z.string().optional().nullable(),
   assignedTo: z.array(z.string()).optional(),
 })
+
+// Récupère le nom du client lié (ou null) pour le mémoriser à l'affichage
+async function clientNameOf(clientId: string | null | undefined) {
+  if (!clientId) return null
+  const c = await prisma.client.findUnique({ where: { id: clientId }, select: { name: true } }).catch(() => null)
+  return c?.name ?? null
+}
 
 // Notifie les personnes taguées (hors auteur) qu'on leur a assigné un feedback.
 async function notify(userIds: string[], authorId: string, authorName: string, title: string) {
@@ -57,6 +66,8 @@ export async function POST(req: NextRequest) {
       content: parsed.data.content || null,
       category: parsed.data.category || null,
       status: parsed.data.status ?? 'OPEN',
+      clientId: parsed.data.clientId || null,
+      clientName: await clientNameOf(parsed.data.clientId),
       assignedTo: parsed.data.assignedTo,
       authorId: session.user.id,
       authorName: session.user.name ?? null,
@@ -71,11 +82,12 @@ export async function PATCH(req: NextRequest) {
   if (!session?.user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   const parsed = patchSchema.safeParse(await req.json())
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
-  const { id, assignedTo, ...rest } = parsed.data
+  const { id, assignedTo, clientId, ...rest } = parsed.data
 
   const before = await db.productFeedback.findUnique({ where: { id } }).catch(() => null)
   const data: Record<string, unknown> = { ...rest }
   if (assignedTo !== undefined) data.assignedTo = assignedTo
+  if (clientId !== undefined) { data.clientId = clientId || null; data.clientName = await clientNameOf(clientId) }
   const item = await db.productFeedback.update({ where: { id }, data })
 
   // Notifier uniquement les personnes NOUVELLEMENT taguées
