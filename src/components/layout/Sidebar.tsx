@@ -8,7 +8,7 @@ import {
   LayoutDashboard, Users, FolderKanban, Receipt, BarChart3,
   CheckSquare, Target, Calendar, Users2, Settings,
   LogOut, X, ChevronRight, Database, Crosshair, Briefcase,
-  ClipboardCheck, Wallet, Clapperboard,
+  ClipboardCheck, Wallet,
 } from 'lucide-react'
 
 const navItems = [
@@ -32,7 +32,6 @@ const navItems = [
       { href: '/invoices', label: 'Factures' },
     ],
   },
-  { href: '/contenu', icon: Clapperboard, label: 'Contenu' },
   { href: '/clients', icon: Users, label: 'Clients' },
   { href: '/onboardings', icon: ClipboardCheck, label: 'Onboarding' },
   { href: '/projects', icon: FolderKanban, label: 'Projets' },
