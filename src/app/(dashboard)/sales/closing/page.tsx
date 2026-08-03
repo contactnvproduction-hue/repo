@@ -2,7 +2,6 @@ import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { Target } from 'lucide-react'
 import { CallPipeline } from '@/components/sales/CallPipeline'
-import { CallAgenda } from '@/components/sales/CallAgenda'
 
 export const dynamic = 'force-dynamic'
 
@@ -62,9 +61,8 @@ export default async function ClosingPage() {
     <div className="space-y-6 animate-fade-in">
       <div>
         <h1 className="text-2xl font-bold text-white flex items-center gap-3"><Target size={24} className="text-primary" /> Pipeline closing</h1>
-        <p className="text-sm text-nv-text-muted mt-1">Calls, taux de closing mois par mois et agenda des rendez-vous.</p>
+        <p className="text-sm text-nv-text-muted mt-1">Calls et taux de closing mois par mois.</p>
       </div>
-      <CallAgenda leads={pipelineLeads.map(l => ({ id: l.id, name: l.name, company: l.company, calls: l.calls.map(c => ({ id: c.id, date: c.date, showedUp: c.showedUp, qualified: c.qualified })) }))} />
       <CallPipeline initialLeads={pipelineLeads} statuses={pipelineStatuses} clients={pipelineClients} closingsThisMonth={closingsThisMonth} closings6m={closings6m} initialScriptUrl={closingScriptUrl} />
     </div>
   )
