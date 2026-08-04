@@ -3,7 +3,13 @@
 import { useState } from 'react'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
+import { MessageDock } from '@/components/messages/MessageDock'
 import type { UserRole } from '@prisma/client'
+
+type MessageLite = {
+  id: string; senderId: string | null; senderName: string | null; recipientId: string
+  subject: string | null; content: string; label: string; read: boolean; createdAt: string
+}
 
 interface DashboardShellProps {
   user: {
@@ -14,10 +20,12 @@ interface DashboardShellProps {
     avatar?: string | null
   }
   notifCount: number
+  messageRecipients: { id: string; name: string }[]
+  initialMessages: MessageLite[]
   children: React.ReactNode
 }
 
-export function DashboardShell({ user, notifCount, children }: DashboardShellProps) {
+export function DashboardShell({ user, notifCount, messageRecipients, initialMessages, children }: DashboardShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (
@@ -40,6 +48,7 @@ export function DashboardShell({ user, notifCount, children }: DashboardShellPro
           </div>
         </main>
       </div>
+      <MessageDock currentUserId={user.id} recipients={messageRecipients} initialReceived={initialMessages} />
     </div>
   )
 }

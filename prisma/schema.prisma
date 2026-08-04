@@ -616,6 +616,23 @@ model Notification {
   @@map("notifications")
 }
 
+// Canal d'info interne : message ponctuel envoyé à un membre ayant accès au
+// dashboard (pas de fil de discussion). Génère une notification chez le destinataire.
+model InternalMessage {
+  id          String   @id @default(cuid())
+  senderId    String?
+  senderName  String?
+  recipientId String
+  subject     String?  // titre optionnel du message
+  content     String
+  label       String   @default("Info") // Info | Important | Urgent | À faire | Idée
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([recipientId])
+  @@map("internal_messages")
+}
+
 // ─── PARAMÈTRES AGENCE ────────────────────────────────────────────────────────
 
 model AgencySetting {
