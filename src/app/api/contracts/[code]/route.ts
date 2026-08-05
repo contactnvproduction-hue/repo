@@ -1,11 +1,12 @@
 import { prisma } from '@/lib/db'
+import { auth } from '@/lib/auth'
 import { findMatchingClient } from '@/lib/client-matching'
 import { NextResponse } from 'next/server'
 
 function corsHeaders() {
   return {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, X-NV-Key',
   }
 }
@@ -314,4 +315,30 @@ export async function PATCH(
     console.error('[contracts PATCH]', e)
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500, headers: corsHeaders() })
   }
+}
+
+// ── DELETE: authentifié — annule un contrat EN ATTENTE uniquement ─────────────
+// Un contrat déjà signé ne peut pas être annulé ici (il a créé client/projet/
+// factures) : on renvoie 409.
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ code: string }> }
+) {
+  const session = await auth()
+  if (!session?.user) {
+    return NextResponse.json({ error: 'Non autorisé' }, { status: 401, headers: corsHeaders() })
+  }
+  const { code } = await params
+  const contract = await prisma.signedContract.findUnique({ where: { shortCode: code } })
+  if (!contract) {
+    return NextResponse.json({ error: 'Contrat introuvable' }, { status: 404, headers: corsHeaders() })
+  }
+  if (contract.status !== 'PENDING') {
+    return NextResponse.json(
+      { error: 'Un contrat signé ne peut pas être annulé' },
+      { status: 409, headers: corsHeaders() }
+    )
+  }
+  await prisma.signedContract.delete({ where: { shortCode: code } })
+  return NextResponse.json({ ok: true }, { headers: corsHeaders() })
 }

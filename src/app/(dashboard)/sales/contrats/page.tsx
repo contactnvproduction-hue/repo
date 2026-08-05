@@ -2,6 +2,7 @@ import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import Link from 'next/link'
 import { FileSignature, ExternalLink, CheckCircle2, Clock, ArrowRight } from 'lucide-react'
+import { CancelContractButton } from '@/components/sales/CancelContractButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -61,6 +62,7 @@ export default async function ContratsPage() {
                         <Link href={`/clients/${c.clientId}`} title="Fiche client" className="p-1.5 text-nv-text-muted hover:text-primary transition-colors"><ArrowRight size={12} /></Link>
                       )}
                       <a href={contractUrl(c.shortCode)} target="_blank" rel="noopener noreferrer" title="Voir le contrat signé" className="p-1.5 text-nv-text-muted hover:text-primary transition-colors"><ExternalLink size={12} /></a>
+                      {c.status === 'PENDING' && <CancelContractButton shortCode={c.shortCode} clientName={c.clientName} />}
                     </div>
                   </div>
                 </div>
