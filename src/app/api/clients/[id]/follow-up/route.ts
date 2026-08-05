@@ -4,8 +4,8 @@ import { prisma } from '@/lib/db'
 
 const db = prisma as any
 
-// Enregistre une relance client (« Client relancé ? » → oui) avec
-// éventuellement un call de follow-up planifié. Le prompt revient dans 3 jours.
+// Valide la prise de call MENSUELLE d'un client (« booké ce mois-ci ? » → oui).
+// Met lastFollowUpAt à maintenant → la pastille se reset pour le mois prochain.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
