@@ -23,6 +23,7 @@ import { ClientChargesSection } from '@/components/clients/ClientChargesSection'
 import { ClientDocumentsSection } from '@/components/clients/ClientDocumentsSection'
 import { ClientOnboardingFormSection } from '@/components/clients/ClientOnboardingFormSection'
 import { ClientProductsSection } from '@/components/clients/ClientProductsSection'
+import { ClientProgrammingSection } from '@/components/clients/ClientProgrammingSection'
 
 const statusBadge: Record<string, 'success' | 'info' | 'warning' | 'muted'> = {
   ACTIF: 'success', PROSPECT: 'info', EN_PAUSE: 'warning', ARCHIVÉ: 'muted',
@@ -129,6 +130,11 @@ export default async function ClientDetailPage({ params }: PageProps) {
     (async () => { try { return await (prisma as any).product.findMany({ orderBy: [{ order: 'asc' }, { createdAt: 'asc' }] }) } catch { return [] } })(),
     (async () => { try { return await (prisma as any).clientProduct.findMany({ where: { clientId: id }, include: { product: true }, orderBy: { createdAt: 'desc' } }) } catch { return [] } })(),
     (async () => { try { return await (prisma as any).signedContract.findMany({ where: { clientId: id }, orderBy: { createdAt: 'desc' }, select: { id: true, shortCode: true, status: true, missionType: true, monthlyAmount: true, totalAmount: true, signedAt: true } }) } catch { return [] } })(),
+  ])
+
+  const [clientProgramming, clientVideos] = await Promise.all([
+    (async () => { try { return await (prisma as any).clientProgramming.findUnique({ where: { clientId: id } }) } catch { return null } })(),
+    (async () => { try { return await (prisma as any).clientVideo.findMany({ where: { clientId: id }, orderBy: [{ scheduledAt: 'asc' }, { createdAt: 'desc' }] }) } catch { return [] } })(),
   ])
 
   if (!client) notFound()
@@ -556,6 +562,23 @@ export default async function ClientDetailPage({ params }: PageProps) {
               </CardContent>
             </Card>
           )}
+
+          {/* Programmation de contenu (renseignée par le client) */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText size={16} className="text-primary" />
+                Programmation de contenu
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ClientProgrammingSection
+                clientId={client.id}
+                programming={clientProgramming as any}
+                videos={(clientVideos ?? []) as any}
+              />
+            </CardContent>
+          </Card>
 
           {/* Notes internes */}
           <Card>

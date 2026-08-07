@@ -616,6 +616,44 @@ model Notification {
   @@map("notifications")
 }
 
+// Tracker de programmation personnalisé par client : paramètres par défaut
+// (1 par client) — logins des canaux d'acquisition, bio, descriptions, mentions.
+model ClientProgramming {
+  id              String   @id @default(cuid())
+  clientId        String   @unique
+  channelLogins   Json     @default("[]") // [{ channel, login, notes }]
+  bio             String?  // bio réutilisée par défaut sur chaque vidéo
+  bioPerVideo     Boolean  @default(false) // bio différenciante fournie à chaque vidéo
+  instaDescription String? // description Instagram par défaut
+  defaultMentions String?  // mentions YT par défaut (fiches, écrans de fin…)
+  notes           String?
+  updatedAt       DateTime @updatedAt
+  createdAt       DateTime @default(now())
+
+  @@map("client_programming")
+}
+
+// Une vidéo à programmer, remplie par le client à chaque sortie. Rien d'obligatoire.
+model ClientVideo {
+  id                String   @id @default(cuid())
+  clientId          String
+  platform          String   @default("YOUTUBE") // YOUTUBE | INSTAGRAM | AUTRE
+  title             String?
+  titleVariants     String[] // variantes A/B de titre
+  thumbnailUrl      String?  // miniature (data URL ou lien)
+  thumbnailVariants String[] // variantes A/B de miniature
+  description       String?
+  bio               String?  // bio spécifique si bio différenciante
+  scheduledAt       DateTime? // date + heure de programmation souhaitée
+  mentions          String?  // fiches, écrans de fin, mentions spécifiques
+  status            String   @default("PLANNED") // PLANNED | PUBLISHED
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([clientId])
+  @@map("client_videos")
+}
+
 // Canal d'info interne : message ponctuel envoyé à un membre ayant accès au
 // dashboard (pas de fil de discussion). Génère une notification chez le destinataire.
 model InternalMessage {
