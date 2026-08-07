@@ -616,6 +616,19 @@ model Notification {
   @@map("notifications")
 }
 
+// Vrai stockage de fichiers (persistant, contrairement au disque Render éphémère).
+// Le binaire vit ici ; les enregistrements ne référencent qu'une URL /api/files/<id>.
+model StoredFile {
+  id        String   @id @default(cuid())
+  name      String?
+  mime      String   @default("image/webp")
+  data      Bytes
+  size      Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@map("stored_files")
+}
+
 // Tracker de programmation personnalisé par client : paramètres par défaut
 // (1 par client) — logins des canaux d'acquisition, bio, descriptions, mentions.
 model ClientProgramming {

@@ -58,7 +58,7 @@ export function ClientProgrammingSection({ programming, videos, clientId }: {
             <div><p className="text-[11px] uppercase tracking-wider text-nv-text-faint font-semibold mb-1">Description Insta</p><p className="text-xs text-nv-text whitespace-pre-wrap">{programming.instaDescription}</p></div>
           )}
           {programming?.defaultMentions && (
-            <div><p className="text-[11px] uppercase tracking-wider text-nv-text-faint font-semibold mb-1 flex items-center gap-1"><Info size={10} /> Mentions par défaut</p><p className="text-xs text-nv-text">{programming.defaultMentions}</p></div>
+            <div><p className="text-[11px] uppercase tracking-wider text-nv-text-faint font-semibold mb-1 flex items-center gap-1"><Info size={10} /> Écrans de fin & fiches par défaut</p><p className="text-xs text-nv-text">{programming.defaultMentions}</p></div>
           )}
         </div>
       </div>
