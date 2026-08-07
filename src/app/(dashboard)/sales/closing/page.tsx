@@ -41,6 +41,8 @@ export default async function ClosingPage() {
   }))
   const pipelineStatuses = statuses.map(s => ({ id: s.id, name: s.name, color: s.color, isClosed: s.isClosed, order: s.order }))
   const pipelineClients = await prisma.client.findMany({ where: { status: { not: 'ARCHIVÉ' } }, select: { id: true, name: true, company: true }, orderBy: { name: 'asc' } })
+  const commercials = (await prisma.user.findMany({ where: { role: 'COMMERCIAL' }, select: { id: true, name: true }, orderBy: { name: 'asc' } }).catch(() => []))
+    .map(u => ({ id: u.id, name: u.name }))
 
   const nowDate = new Date()
   const nowMonthStart = new Date(nowDate.getFullYear(), nowDate.getMonth(), 1)
@@ -65,7 +67,7 @@ export default async function ClosingPage() {
         <p className="text-sm text-nv-text-muted mt-1">Calls, taux de closing mois par mois et agenda des rendez-vous.</p>
       </div>
       <CallAgenda leads={pipelineLeads.map(l => ({ id: l.id, name: l.name, company: l.company, calls: l.calls.map(c => ({ id: c.id, date: c.date, showedUp: c.showedUp, qualified: c.qualified })) }))} />
-      <CallPipeline initialLeads={pipelineLeads} statuses={pipelineStatuses} clients={pipelineClients} closingsThisMonth={closingsThisMonth} closings6m={closings6m} initialScriptUrl={closingScriptUrl} />
+      <CallPipeline initialLeads={pipelineLeads} statuses={pipelineStatuses} clients={pipelineClients} commercials={commercials} closingsThisMonth={closingsThisMonth} closings6m={closings6m} initialScriptUrl={closingScriptUrl} />
     </div>
   )
 }

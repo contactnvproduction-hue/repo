@@ -29,6 +29,7 @@ type Lead = {
   calls: Call[]; createdAt: string
 }
 type ClientLite = { id: string; name: string; company: string | null }
+type Commercial = { id: string; name: string }
 type MonthClosing = { year: number; month: number; count: number; amount: number; isCurrent: boolean }
 
 const eur = (n: number) => `${Math.round(n).toLocaleString('fr-FR')} €`
@@ -75,9 +76,9 @@ function Ring({ pct, color, label, sub }: { pct: number; color: string; label: s
 }
 
 export function CallPipeline({
-  initialLeads, statuses, clients, closingsThisMonth, closings6m = [], initialScriptUrl,
+  initialLeads, statuses, clients, commercials = [], closingsThisMonth, closings6m = [], initialScriptUrl,
 }: {
-  initialLeads: Lead[]; statuses: LeadStatus[]; clients: ClientLite[]
+  initialLeads: Lead[]; statuses: LeadStatus[]; clients: ClientLite[]; commercials?: Commercial[]
   closingsThisMonth: { count: number; amount: number }; closings6m?: MonthClosing[]; initialScriptUrl?: string | null
 }) {
   const router = useRouter()
@@ -297,7 +298,7 @@ export function CallPipeline({
 
       {/* Modales */}
       {openLead && typeof document !== 'undefined' && createPortal(
-        <LeadDetail lead={openLead} statuses={sortedStatuses} onClose={() => setOpenLeadId(null)}
+        <LeadDetail lead={openLead} statuses={sortedStatuses} commercials={commercials} onClose={() => setOpenLeadId(null)}
           onAddCall={(dateISO) => addCall(openLead.id, dateISO)} onPatchCall={patchCall} onDeleteCall={deleteCall}
           onSetStatus={(sid) => setStatus(openLead.id, sid)} closedStatusId={closedStatusId} onSigned={() => router.refresh()} />, document.body)}
       {showNewLead && typeof document !== 'undefined' && createPortal(<NewLeadModal onClose={() => setShowNewLead(false)} onCreated={() => router.refresh()} />, document.body)}
@@ -335,17 +336,29 @@ function CallRow({ c, onPatch, onDelete }: { c: Call; onPatch: (id: string, p: P
 }
 
 // ── Fiche lead ──
-function LeadDetail({ lead, statuses, onClose, onAddCall, onPatchCall, onDeleteCall, onSetStatus, closedStatusId, onSigned }: {
-  lead: Lead; statuses: LeadStatus[]; onClose: () => void; onAddCall: (dateISO: string) => void
+function LeadDetail({ lead, statuses, commercials, onClose, onAddCall, onPatchCall, onDeleteCall, onSetStatus, closedStatusId, onSigned }: {
+  lead: Lead; statuses: LeadStatus[]; commercials: Commercial[]; onClose: () => void; onAddCall: (dateISO: string) => void
   onPatchCall: (id: string, p: Partial<Call>) => void; onDeleteCall: (id: string) => void
   onSetStatus: (sid: string) => void; closedStatusId?: string; onSigned: () => void
 }) {
   const [signing, setSigning] = useState(false)
+  const [closerId, setCloserId] = useState('')
+  const [monthlyAmount, setMonthlyAmount] = useState('')
   const markSigned = async () => {
     setSigning(true)
     try {
       if (closedStatusId) onSetStatus(closedStatusId)
-      await fetch('/api/closings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leadId: lead.id, clientName: lead.name, type: 'NEW' }) })
+      // Attribue le close au commercial + montant → alimente le récap commercial
+      // (wonAt + commercialId + saleMonthlyAmount lus par le dashboard commercial).
+      await fetch(`/api/leads/${lead.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          wonAt: new Date().toISOString(),
+          ...(closerId && { commercialId: closerId }),
+          ...(monthlyAmount && { saleMonthlyAmount: Number(monthlyAmount) }),
+        }),
+      }).catch(() => {})
+      await fetch('/api/closings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leadId: lead.id, clientName: lead.name, type: 'NEW', commercialId: closerId || null, amount: monthlyAmount || null, missionType: 'MRR' }) })
       toast.success(`${lead.name} signé — closing enregistré 🎉`); onSigned(); onClose()
     } catch { toast.error('Erreur') } finally { setSigning(false) }
   }
@@ -382,9 +395,20 @@ function LeadDetail({ lead, statuses, onClose, onAddCall, onPatchCall, onDeleteC
             </div>
           </div>
           {!(lead.status?.isClosed || lead.convertedClientId) && (
-            <button onClick={markSigned} disabled={signing} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 font-semibold hover:bg-emerald-500/25 transition-colors disabled:opacity-60">
-              {signing ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />} Marquer comme signé
-            </button>
+            <div className="space-y-2 rounded-xl border border-emerald-500/25 p-3">
+              <p className="text-[11px] uppercase tracking-wider text-nv-text-faint font-semibold">Closing — attribution</p>
+              <div className="grid grid-cols-2 gap-2">
+                <select value={closerId} onChange={e => setCloserId(e.target.value)} className="w-full bg-nv-black border border-nv-border rounded-lg px-2.5 py-2 text-sm text-white focus:outline-none focus:border-primary/60">
+                  <option value="">— Commercial —</option>
+                  {commercials.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+                <input type="number" value={monthlyAmount} onChange={e => setMonthlyAmount(e.target.value)} placeholder="Mensualité € (net)" className="w-full bg-nv-black border border-nv-border rounded-lg px-2.5 py-2 text-sm text-white placeholder-nv-text-faint focus:outline-none focus:border-primary/60" />
+              </div>
+              <p className="text-[10px] text-nv-text-faint">Le commercial choisi voit ce close comptabilisé dans son taux de conversion.</p>
+              <button onClick={markSigned} disabled={signing} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 font-semibold hover:bg-emerald-500/25 transition-colors disabled:opacity-60">
+                {signing ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />} Marquer comme signé
+              </button>
+            </div>
           )}
         </div>
       </div>

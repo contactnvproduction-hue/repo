@@ -897,16 +897,17 @@ model LeadCall {
 // Closings (signatures) — inclut les nouveaux clients ET les re-closes de
 // clients existants (upsell, nouvel engagement, renouvellement). Alimente les KPIs.
 model ClosingEvent {
-  id          String   @id @default(cuid())
-  leadId      String?
-  clientId    String?
-  clientName  String
-  type        String   @default("NEW") // NEW | UPSELL | RENEWAL
-  missionType String?  // MRR | PONCTUEL
-  amount      Float?   // montant mensuel (MRR) ou total (ponctuel)
-  notes       String?
-  date        DateTime @default(now())
-  createdAt   DateTime @default(now())
+  id           String   @id @default(cuid())
+  leadId       String?
+  clientId     String?
+  clientName   String
+  type         String   @default("NEW") // NEW | UPSELL | RENEWAL
+  missionType  String?  // MRR | PONCTUEL
+  amount       Float?   // montant mensuel (MRR) ou total (ponctuel)
+  commercialId String?  // commercial qui a réalisé le close (attribution + conversion)
+  notes        String?
+  date         DateTime @default(now())
+  createdAt    DateTime @default(now())
 
   @@map("closing_events")
 }
