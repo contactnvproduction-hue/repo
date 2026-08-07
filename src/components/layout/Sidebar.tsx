@@ -5,41 +5,64 @@ import Link from 'next/link'
 import { signOut } from 'next-auth/react'
 import { cn } from '@/lib/utils'
 import {
-  LayoutDashboard, Users, FolderKanban, Receipt, BarChart3,
+  LayoutDashboard, Users, FolderKanban,
   CheckSquare, Target, Users2, Settings,
   LogOut, X, ChevronRight, Database, Crosshair, Briefcase,
-  ClipboardCheck, Wallet,
+  ClipboardCheck, Wallet, type LucideIcon,
 } from 'lucide-react'
 
-const navItems = [
-  { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { href: '/ceo', icon: Briefcase, label: 'Espace CEO' },
+type NavLink = { href: string; icon: LucideIcon; label: string }
+type NavGroup = { label: string; icon: LucideIcon; children: { href: string; label: string }[] }
+type NavItem = NavLink | NavGroup
+type NavSection = { section: string; items: NavItem[] }
+
+const ventesGroup: NavGroup = {
+  label: 'Ventes',
+  icon: Crosshair,
+  children: [
+    { href: '/sales/prospection', label: 'Dashboard commercial' },
+    { href: '/sales/closing', label: 'Pipeline closing' },
+    { href: '/sales/contrats', label: 'Contrats' },
+    { href: '/sales/produits', label: 'Répartition CA' },
+  ],
+}
+const comptaGroup: NavGroup = {
+  label: 'Compta',
+  icon: Wallet,
+  children: [
+    { href: '/compta', label: 'Prévisionnel & tréso' },
+    { href: '/invoices', label: 'Factures' },
+  ],
+}
+
+// Navigation regroupée par pôle → sidebar plus lisible, rien retiré.
+const navSections: NavSection[] = [
   {
-    label: 'Ventes',
-    icon: Crosshair,
-    children: [
-      { href: '/sales/prospection', label: 'Dashboard commercial' },
-      { href: '/sales/closing', label: 'Pipeline closing' },
-      { href: '/sales/contrats', label: 'Contrats' },
-      { href: '/sales/produits', label: 'Répartition CA' },
+    section: 'Pilotage',
+    items: [
+      { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+      { href: '/ceo', icon: Briefcase, label: 'Espace CEO' },
+    ],
+  },
+  { section: 'Business', items: [ventesGroup, comptaGroup] },
+  {
+    section: 'Production',
+    items: [
+      { href: '/clients', icon: Users, label: 'Clients' },
+      { href: '/onboardings', icon: ClipboardCheck, label: 'Onboarding' },
+      { href: '/projects', icon: FolderKanban, label: 'Projets' },
+      { href: '/tasks', icon: CheckSquare, label: 'Tâches' },
+      { href: '/objectives', icon: Target, label: 'Objectifs' },
     ],
   },
   {
-    label: 'Compta',
-    icon: Wallet,
-    children: [
-      { href: '/compta', label: 'Prévisionnel & tréso' },
-      { href: '/invoices', label: 'Factures' },
+    section: 'Agence',
+    items: [
+      { href: '/team', icon: Users2, label: 'Équipe' },
+      { href: '/donnees', icon: Database, label: 'Données' },
+      { href: '/settings', icon: Settings, label: 'Paramètres' },
     ],
   },
-  { href: '/clients', icon: Users, label: 'Clients' },
-  { href: '/onboardings', icon: ClipboardCheck, label: 'Onboarding' },
-  { href: '/projects', icon: FolderKanban, label: 'Projets' },
-  { href: '/tasks', icon: CheckSquare, label: 'Tâches' },
-  { href: '/objectives', icon: Target, label: 'Objectifs' },
-  { href: '/team', icon: Users2, label: 'Équipe' },
-  { href: '/donnees', icon: Database, label: 'Données' },
-  { href: '/settings', icon: Settings, label: 'Paramètres' },
 ]
 
 interface SidebarProps {
@@ -56,9 +79,9 @@ export function Sidebar({ isOpen, onClose, userName, userRole, userAvatar }: Sid
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/')
 
   // Le rôle COMMERCIAL ne voit QUE son espace Ventes (dashboard commercial + closing)
-  const items = userRole === 'COMMERCIAL'
-    ? navItems.filter(i => i.label === 'Ventes')
-    : navItems
+  const sections: NavSection[] = userRole === 'COMMERCIAL'
+    ? [{ section: 'Ventes', items: [ventesGroup] }]
+    : navSections
 
   const roleLabel: Record<string, string> = {
     ADMIN: 'Administrateur',
@@ -105,59 +128,64 @@ export function Sidebar({ isOpen, onClose, userName, userRole, userAvatar }: Sid
           </button>
         </div>
 
-        {/* Navigation */}
+        {/* Navigation — regroupée par pôle */}
         <nav className="flex-1 overflow-y-auto py-3 px-3">
-          {items.map((item) => {
-            if ('children' in item && item.children) {
-              const anyActive = item.children.some((c) => isActive(c.href))
-              return (
-                <div key={item.label} className="mb-0.5">
-                  <div className={cn(
-                    'flex items-center gap-3 px-3 py-2 rounded-lg text-sm',
-                    anyActive ? 'text-white' : 'text-nv-text-muted'
-                  )}>
-                    <item.icon size={17} />
-                    <span className="font-medium">{item.label}</span>
-                  </div>
-                  <div className="ml-4 pl-3 border-l border-nv-border space-y-0.5 mt-0.5">
-                    {item.children.map((child) => (
-                      <Link
-                        key={child.href}
-                        href={child.href}
-                        onClick={onClose}
-                        className={cn(
-                          'flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors',
-                          isActive(child.href)
-                            ? 'bg-primary/10 text-primary font-medium'
-                            : 'text-nv-text-muted hover:text-white hover:bg-white/5'
-                        )}
-                      >
-                        <ChevronRight size={13} />
-                        {child.label}
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              )
-            }
+          {sections.map((sec, si) => (
+            <div key={sec.section} className={si === 0 ? '' : 'mt-5'}>
+              <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-nv-text-faint/70">{sec.section}</p>
+              {sec.items.map((item) => {
+                if ('children' in item) {
+                  const anyActive = item.children.some((c) => isActive(c.href))
+                  return (
+                    <div key={item.label} className="mb-0.5">
+                      <div className={cn(
+                        'flex items-center gap-3 px-3 py-2 rounded-lg text-sm',
+                        anyActive ? 'text-white' : 'text-nv-text-muted'
+                      )}>
+                        <item.icon size={17} />
+                        <span className="font-medium">{item.label}</span>
+                      </div>
+                      <div className="ml-4 pl-3 border-l border-nv-border space-y-0.5 mt-0.5">
+                        {item.children.map((child) => (
+                          <Link
+                            key={child.href}
+                            href={child.href}
+                            onClick={onClose}
+                            className={cn(
+                              'flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors',
+                              isActive(child.href)
+                                ? 'bg-primary/10 text-primary font-medium'
+                                : 'text-nv-text-muted hover:text-white hover:bg-white/5'
+                            )}
+                          >
+                            <ChevronRight size={13} />
+                            {child.label}
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                }
 
-            return (
-              <Link
-                key={item.href}
-                href={item.href!}
-                onClick={onClose}
-                className={cn(
-                  'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors mb-0.5',
-                  isActive(item.href!)
-                    ? 'bg-primary/10 text-primary font-medium border border-primary/20'
-                    : 'text-nv-text-muted hover:text-white hover:bg-white/5'
-                )}
-              >
-                <item.icon size={17} />
-                {item.label}
-              </Link>
-            )
-          })}
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href!}
+                    onClick={onClose}
+                    className={cn(
+                      'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors mb-0.5',
+                      isActive(item.href!)
+                        ? 'bg-primary/10 text-primary font-medium border border-primary/20'
+                        : 'text-nv-text-muted hover:text-white hover:bg-white/5'
+                    )}
+                  >
+                    <item.icon size={17} />
+                    {item.label}
+                  </Link>
+                )
+              })}
+            </div>
+          ))}
         </nav>
 
         {/* Profil utilisateur */}
