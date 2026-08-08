@@ -23,7 +23,10 @@ const STATUS_COLOR: Record<string, string> = {
 }
 
 interface ClientActionsProps {
-  client: { id: string; name: string; status: string; avatar?: string | null; relanceDate?: Date | string | null }
+  client: {
+    id: string; name: string; status: string; avatar?: string | null; relanceDate?: Date | string | null
+    email?: string | null; phone?: string | null; company?: string | null; siret?: string | null; address?: string | null
+  }
 }
 
 export function ClientActions({ client }: ClientActionsProps) {
@@ -39,6 +42,11 @@ export function ClientActions({ client }: ClientActionsProps) {
     client.relanceDate ? new Date(client.relanceDate).toISOString().split('T')[0] : ''
   )
   const [editName, setEditName] = useState(client.name)
+  const [editCompany, setEditCompany] = useState(client.company ?? '')
+  const [editEmail, setEditEmail] = useState(client.email ?? '')
+  const [editPhone, setEditPhone] = useState(client.phone ?? '')
+  const [editAddress, setEditAddress] = useState(client.address ?? '')
+  const [editSiret, setEditSiret] = useState(client.siret ?? '')
   const [loading, setLoading] = useState(false)
   const [statusLoading, setStatusLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -114,6 +122,11 @@ export function ClientActions({ client }: ClientActionsProps) {
         name: editName.trim() || client.name,
         avatar: avatarUrl || null,
         status: editStatus,
+        company: editCompany.trim(),
+        email: editEmail.trim(),
+        phone: editPhone.trim(),
+        address: editAddress.trim(),
+        siret: editSiret.trim(),
       }
       // Relance date : seulement si prospect
       if (editStatus === 'PROSPECT') {
@@ -225,6 +238,35 @@ export function ClientActions({ client }: ClientActionsProps) {
               required
               className="w-full px-3 py-2 bg-nv-dark border border-nv-border rounded-lg text-white text-sm outline-none focus:border-primary"
             />
+          </div>
+
+          {/* Coordonnées */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-nv-text-muted mb-1.5">Email</label>
+              <input type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)} placeholder="contact@…"
+                className="w-full px-3 py-2 bg-nv-dark border border-nv-border rounded-lg text-white text-sm outline-none focus:border-primary" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-nv-text-muted mb-1.5">Téléphone</label>
+              <input type="tel" value={editPhone} onChange={e => setEditPhone(e.target.value)} placeholder="06 XX XX XX XX"
+                className="w-full px-3 py-2 bg-nv-dark border border-nv-border rounded-lg text-white text-sm outline-none focus:border-primary" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-nv-text-muted mb-1.5">Entreprise</label>
+            <input type="text" value={editCompany} onChange={e => setEditCompany(e.target.value)} placeholder="Nom de la société"
+              className="w-full px-3 py-2 bg-nv-dark border border-nv-border rounded-lg text-white text-sm outline-none focus:border-primary" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-nv-text-muted mb-1.5">Adresse</label>
+            <input type="text" value={editAddress} onChange={e => setEditAddress(e.target.value)} placeholder="Adresse postale"
+              className="w-full px-3 py-2 bg-nv-dark border border-nv-border rounded-lg text-white text-sm outline-none focus:border-primary" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-nv-text-muted mb-1.5">SIRET</label>
+            <input type="text" value={editSiret} onChange={e => setEditSiret(e.target.value)} placeholder="N° SIRET"
+              className="w-full px-3 py-2 bg-nv-dark border border-nv-border rounded-lg text-white text-sm outline-none focus:border-primary" />
           </div>
 
           {/* Photo */}

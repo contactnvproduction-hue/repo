@@ -204,7 +204,7 @@ export default async function ClientDetailPage({ params }: PageProps) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <ClientActions client={{ id: client.id, name: client.name, status: client.status, avatar: client.avatar, relanceDate: client.relanceDate }} />
+          <ClientActions client={{ id: client.id, name: client.name, status: client.status, avatar: client.avatar, relanceDate: client.relanceDate, email: client.email, phone: client.phone, company: client.company, siret: client.siret, address: client.address }} />
           <DeleteButton
             endpoint={`/api/clients/${client.id}`}
             confirmMessage={`Supprimer le client "${client.name}" ? Cette action est irréversible.`}
