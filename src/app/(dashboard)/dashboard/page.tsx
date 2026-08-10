@@ -207,7 +207,9 @@ async function getDashboardData(userId: string) {
   const closingRate = qualified > 0 ? Math.round((converted / qualified) * 100) : 0
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const todayEnd = new Date(todayStart.getTime() + 86_400_000)
-  const currentMRR = allRetainers.reduce((sum, r) => {
+  // MRR retainers signés (part engagement). Le MRR des clients mensualisés sans
+  // engagement est ajouté plus bas (currentMRR), une fois les candidats connus.
+  const retainerMRR = allRetainers.reduce((sum, r) => {
     const end = new Date(r.startDate); end.setMonth(end.getMonth() + r.durationMonths)
     return end > now ? sum + r.monthlyAmount : sum
   }, 0)
@@ -251,6 +253,11 @@ async function getDashboardData(userId: string) {
     select: { id: true, name: true, company: true, mensualiteAmount: true, mensualiteFrequency: true },
   }).catch(() => [])
   const candidates = mensualiseClients.filter(c => (c.mensualiteAmount ?? 0) > 0 && !activeRetainerClientIds.has(c.id))
+  // MRR total = retainers actifs + clients mensualisés (équivalent mensuel :
+  // un trimestriel de 2000€ compte pour ~667€/mois).
+  const mensualiseMRR = candidates.reduce((s, c) =>
+    s + (c.mensualiteFrequency === 'TRIMESTRIEL' ? (c.mensualiteAmount ?? 0) / 3 : (c.mensualiteAmount ?? 0)), 0)
+  const currentMRR = retainerMRR + mensualiseMRR
   // Dernier encaissement par client candidat (pour savoir si déjà payé ce mois/trimestre)
   const qStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1)
   const lastPayByClient = new Map<string, Date>()

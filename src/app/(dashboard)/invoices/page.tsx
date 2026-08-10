@@ -33,9 +33,14 @@ export default async function InvoicesPage() {
     orderBy: { createdAt: 'desc' },
   })
 
+  // Encaissé réel = somme des montants effectivement reçus : on prend le montant
+  // payé (paiements partiels inclus) et, pour les factures marquées PAYÉE sans
+  // amountPaid renseigné (legacy), on retombe sur le TTC. Exclut les annulées.
   const stats = {
     total: invoices.length,
-    payées: invoices.filter((i) => i.status === 'PAYÉE').reduce((s, i) => s + i.totalTTC, 0),
+    payées: invoices
+      .filter((i) => i.status !== 'ANNULÉE')
+      .reduce((s, i) => s + Math.max(i.amountPaid || 0, i.status === 'PAYÉE' ? i.totalTTC : 0), 0),
     enAttente: invoices.filter((i) => i.status !== 'PAYÉE' && i.status !== 'ANNULÉE').reduce((s, i) => s + (i.totalTTC - i.amountPaid), 0),
     enRetard: invoices.filter((i) => i.status === 'EN_RETARD').length,
   }
