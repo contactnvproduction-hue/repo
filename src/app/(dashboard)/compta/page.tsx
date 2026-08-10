@@ -21,7 +21,7 @@ export default async function ComptaPage() {
         <p className="text-sm text-nv-text-muted mt-1">Synthèse, CA annuel, charges, prévisionnel et trésorerie.</p>
       </div>
       <FinanceSection
-        forecastNetByMonth={Object.fromEntries(forecast.months.map(m => [m.key, m.profit]))}
+        forecastByMonth={Object.fromEntries(forecast.months.map(m => [m.key, { label: m.label, ca: m.caTotal, charges: m.chargesTotal, net: m.profit, mrr: m.mrrTotal, invoices: m.invoicesTotal, manual: m.manualTotal }]))}
         previsionnel={
           <div className="space-y-5">
             <AverageTicket />

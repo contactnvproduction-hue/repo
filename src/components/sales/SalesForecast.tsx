@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
-  RefreshCw, Loader2, AlertTriangle, Receipt, Repeat, Wallet,
+  Receipt, Repeat, Wallet,
   TrendingUp, TrendingDown, Building2, ArrowRight, X,
 } from 'lucide-react'
 import {
@@ -17,15 +17,13 @@ const eur = (n: number) => `${Math.round(n).toLocaleString('fr-FR')} €`
 
 export function SalesForecast({
   months: initialMonths,
-  suggestions,
 }: {
   months: ForecastMonth[]
-  suggestions: RenewalSuggestion[]
+  suggestions?: RenewalSuggestion[]
 }) {
   const router = useRouter()
   const [months, setMonths] = useState(initialMonths)
   const [selectedKey, setSelectedKey] = useState(initialMonths[0]?.key)
-  const [renewing, setRenewing] = useState<string | null>(null)
   const [toggling, setToggling] = useState<string | null>(null)
 
   const selected = months.find(m => m.key === selectedKey) ?? months[0]
@@ -114,24 +112,6 @@ export function SalesForecast({
     catch { toast.error('Erreur'); router.refresh() } finally { setToggling(null) }
   }
 
-  const renew = async (s: RenewalSuggestion, addMonths: number) => {
-    setRenewing(`${s.retainerId}_${addMonths}`)
-    try {
-      const res = await fetch('/api/retainers/renew', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ retainerId: s.retainerId, months: addMonths }),
-      })
-      if (!res.ok) throw new Error()
-      toast.success(`${s.clientName} renouvelé ${addMonths} mois`)
-      router.refresh()
-    } catch {
-      toast.error('Erreur lors du renouvellement')
-    } finally {
-      setRenewing(null)
-    }
-  }
-
   const chartData = useMemo(() => months.map(m => ({
     name: m.shortLabel,
     key: m.key,
@@ -146,37 +126,6 @@ export function SalesForecast({
 
   return (
     <div className="space-y-5">
-      {/* Suggestions de renouvellement */}
-      {suggestions.length > 0 && (
-        <div className="bg-amber-500/5 border border-amber-500/25 rounded-xl p-4">
-          <h3 className="text-sm font-semibold text-amber-300 flex items-center gap-2 mb-3">
-            <AlertTriangle className="w-4 h-4" />
-            Retainers à renouveler
-          </h3>
-          <div className="space-y-2">
-            {suggestions.map(s => (
-              <div key={s.retainerId} className="flex items-center gap-3 flex-wrap bg-nv-card border border-nv-border rounded-lg px-3 py-2">
-                <div className="flex-1 min-w-0">
-                  <Link href={`/clients/${s.clientId}`} className="text-sm font-medium text-nv-text hover:text-primary transition-colors">{s.clientName}</Link>
-                  <span className="text-xs text-nv-text-muted ml-2">{eur(s.amount)}/mois · dernier mois : {s.lastMonthLabel}</span>
-                </div>
-                <div className="flex gap-1.5 shrink-0">
-                  {[1, 3, 6].map(n => (
-                    <button
-                      key={n} type="button" onClick={() => renew(s, n)} disabled={renewing !== null}
-                      className="flex items-center gap-1 px-2.5 py-1 text-xs bg-primary/10 border border-primary/30 text-primary rounded-lg hover:bg-primary/20 transition-colors disabled:opacity-50"
-                    >
-                      {renewing === `${s.retainerId}_${n}` ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-                      +{n}m
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Graphique CA / Charges / Profit */}
       <div className="bg-nv-card border border-nv-border rounded-xl p-5">
         <h3 className="text-sm font-semibold text-white flex items-center gap-2 mb-4">
@@ -232,24 +181,22 @@ export function SalesForecast({
           {selected.isCurrent && <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/15 text-primary">Mois en cours</span>}
         </div>
 
-        {/* 3 chiffres clés du mois */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="bg-nv-dark border border-nv-border rounded-xl p-4">
-            <p className="text-xs text-nv-text-muted flex items-center gap-1.5 mb-1"><TrendingUp size={13} className="text-primary" />CA prévu</p>
-            <p className="text-2xl font-bold text-white">{eur(selected.caTotal)}</p>
-            <p className="text-[11px] text-nv-text-faint mt-0.5">{eur(selected.mrrTotal)} MRR + {eur(selected.invoicesTotal)} factures</p>
+        {/* 3 chiffres clés du mois (compacts) */}
+        <div className="grid grid-cols-3 gap-2">
+          <div className="bg-nv-dark border border-nv-border rounded-xl p-2.5">
+            <p className="text-[10px] text-nv-text-muted flex items-center gap-1"><TrendingUp size={11} className="text-primary" />CA prévu</p>
+            <p className="text-lg font-bold text-white tabular-nums leading-tight">{eur(selected.caTotal)}</p>
+            <p className="text-[10px] text-nv-text-faint">{eur(selected.mrrTotal)} MRR + {eur(selected.invoicesTotal)} fact.</p>
           </div>
-          <div className="bg-nv-dark border border-nv-border rounded-xl p-4">
-            <p className="text-xs text-nv-text-muted flex items-center gap-1.5 mb-1"><TrendingDown size={13} className="text-red-400" />Charges prévues</p>
-            <p className="text-2xl font-bold text-white">{eur(selected.chargesTotal)}</p>
-            <p className="text-[11px] text-nv-text-faint mt-0.5">{selected.chargesMonthsUsed > 0 ? `moyenne des ${selected.chargesMonthsUsed} derniers mois` : 'aucune charge saisie'}</p>
+          <div className="bg-nv-dark border border-nv-border rounded-xl p-2.5">
+            <p className="text-[10px] text-nv-text-muted flex items-center gap-1"><TrendingDown size={11} className="text-red-400" />Charges</p>
+            <p className="text-lg font-bold text-white tabular-nums leading-tight">{eur(selected.chargesTotal)}</p>
+            <p className="text-[10px] text-nv-text-faint">{selected.chargesMonthsUsed > 0 ? `moy. ${selected.chargesMonthsUsed} mois` : '—'}</p>
           </div>
-          <div className={`rounded-xl p-4 border ${selected.profit >= 0 ? 'bg-emerald-500/5 border-emerald-500/25' : 'bg-red-500/5 border-red-500/25'}`}>
-            <p className="text-xs text-nv-text-muted flex items-center gap-1.5 mb-1"><Wallet size={13} className={selected.profit >= 0 ? 'text-emerald-400' : 'text-red-400'} />Profit net prévu</p>
-            <p className={`text-2xl font-bold ${selected.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-              {selected.profit >= 0 ? '+' : ''}{eur(selected.profit)}
-            </p>
-            <p className="text-[11px] text-nv-text-faint mt-0.5">Marge {margin}%</p>
+          <div className={`rounded-xl p-2.5 border ${selected.profit >= 0 ? 'bg-emerald-500/5 border-emerald-500/25' : 'bg-red-500/5 border-red-500/25'}`}>
+            <p className="text-[10px] text-nv-text-muted flex items-center gap-1"><Wallet size={11} className={selected.profit >= 0 ? 'text-emerald-400' : 'text-red-400'} />Net prévu</p>
+            <p className={`text-lg font-bold tabular-nums leading-tight ${selected.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{selected.profit >= 0 ? '+' : ''}{eur(selected.profit)}</p>
+            <p className="text-[10px] text-nv-text-faint">Marge {margin}%</p>
           </div>
         </div>
 
@@ -262,7 +209,7 @@ export function SalesForecast({
               {selected.retainers.map(r => (
                 <label
                   key={r.retainerId}
-                  className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border text-sm cursor-pointer transition-opacity ${
+                  className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg border text-sm cursor-pointer transition-opacity ${
                     !r.included ? 'bg-nv-dark border-nv-border opacity-45'
                     : r.isLastMonth ? 'bg-amber-500/5 border-amber-500/25'
                     : 'bg-nv-dark border-nv-border'
@@ -289,7 +236,7 @@ export function SalesForecast({
               {selected.invoices.map(inv => (
                 <div
                   key={inv.invoiceId}
-                  className="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-nv-border bg-nv-dark text-sm"
+                  className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg border border-nv-border bg-nv-dark text-sm"
                 >
                   <Receipt className="w-3.5 h-3.5 text-blue-400 shrink-0" />
                   <div className="flex-1 min-w-0">
@@ -306,7 +253,7 @@ export function SalesForecast({
 
               {/* Prestations manuelles */}
               {(selected.manual ?? []).map(e => (
-                <div key={e.id} className="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-blue-500/25 bg-blue-500/[0.04] text-sm">
+                <div key={e.id} className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg border border-blue-500/25 bg-blue-500/[0.04] text-sm">
                   <Building2 className="w-3.5 h-3.5 text-blue-400 shrink-0" />
                   <div className="flex-1 min-w-0"><span className="text-nv-text truncate block">{e.clientName}</span><span className="text-[10px] text-nv-text-faint">Prestation manuelle</span></div>
                   <span className="font-semibold text-nv-text shrink-0">{eur(e.amount)}</span>
@@ -334,7 +281,7 @@ export function SalesForecast({
           <div>
             <h4 className="text-xs font-semibold text-nv-text-faint uppercase tracking-wider mb-2">Ce qui sort</h4>
             <div className="space-y-1.5">
-              <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-nv-border bg-nv-dark text-sm">
+              <div className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg border border-nv-border bg-nv-dark text-sm">
                 <Building2 className="w-3.5 h-3.5 text-nv-text-muted shrink-0" />
                 <div className="flex-1 min-w-0">
                   <span className="text-nv-text">Charges (estimation)</span>
