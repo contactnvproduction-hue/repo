@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   RefreshCw, Loader2, AlertTriangle, Receipt, Repeat, Wallet,
-  TrendingUp, TrendingDown, Building2,
+  TrendingUp, TrendingDown, Building2, ArrowRight, X,
 } from 'lucide-react'
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, Legend,
@@ -89,29 +89,29 @@ export function SalesForecast({
   }
 
   // Inclure / exclure une facture du prévisionnel (persisté en base)
-  const toggleInvoice = async (invoiceId: string, included: boolean) => {
+  // Reporter une facture au mois suivant du prévisionnel (décochage → mois +1).
+  const deferInvoice = async (monthKey: string, invoiceId: string) => {
     setToggling(invoiceId)
-    // Optimiste : la facture peut apparaître sur plusieurs mois (retards) → maj partout
-    setMonths(ms => ms.map(m => recompute({
-      ...m,
-      invoices: m.invoices.map(i => i.invoiceId === invoiceId ? { ...i, included } : i),
-    })))
-    try {
-      const res = await fetch(`/api/invoices/${invoiceId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ forecastIncluded: included }),
+    setMonths(ms => {
+      const idx = ms.findIndex(m => m.key === monthKey)
+      const inv = ms[idx]?.invoices.find(i => i.invoiceId === invoiceId)
+      if (idx < 0 || !inv || idx + 1 >= ms.length) { toast('Dernier mois affiché — report non visible'); return ms }
+      return ms.map((m, i) => {
+        if (i === idx) return recompute({ ...m, invoices: m.invoices.filter(x => x.invoiceId !== invoiceId) })
+        if (i === idx + 1) return recompute({ ...m, invoices: [...m.invoices, inv] })
+        return m
       })
-      if (!res.ok) throw new Error()
-    } catch {
-      toast.error('Erreur de sauvegarde')
-      setMonths(ms => ms.map(m => recompute({
-        ...m,
-        invoices: m.invoices.map(i => i.invoiceId === invoiceId ? { ...i, included: !included } : i),
-      })))
-    } finally {
-      setToggling(null)
-    }
+    })
+    try { await fetch(`/api/invoices/${invoiceId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ forecastDefer: { increment: 1 } }) }) }
+    catch { toast.error('Erreur'); router.refresh() } finally { setToggling(null) }
+  }
+
+  // Retirer une facture du prévisionnel (n'affecte PAS la facture réelle).
+  const dismissInvoice = async (invoiceId: string) => {
+    setToggling(invoiceId)
+    setMonths(ms => ms.map(m => recompute({ ...m, invoices: m.invoices.filter(i => i.invoiceId !== invoiceId) })))
+    try { await fetch(`/api/invoices/${invoiceId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ forecastDismissed: true }) }) }
+    catch { toast.error('Erreur'); router.refresh() } finally { setToggling(null) }
   }
 
   const renew = async (s: RenewalSuggestion, addMonths: number) => {
@@ -287,17 +287,10 @@ export function SalesForecast({
               ))}
 
               {selected.invoices.map(inv => (
-                <label
+                <div
                   key={inv.invoiceId}
-                  className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border text-sm cursor-pointer transition-opacity ${inv.included ? 'bg-nv-dark border-nv-border' : 'bg-nv-dark border-nv-border opacity-45'}`}
+                  className="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-nv-border bg-nv-dark text-sm"
                 >
-                  <input
-                    type="checkbox"
-                    checked={inv.included}
-                    disabled={toggling === inv.invoiceId}
-                    onChange={e => toggleInvoice(inv.invoiceId, e.target.checked)}
-                    className="w-3.5 h-3.5 accent-[#e8b84b] shrink-0"
-                  />
                   <Receipt className="w-3.5 h-3.5 text-blue-400 shrink-0" />
                   <div className="flex-1 min-w-0">
                     <span className="text-nv-text truncate block">{inv.clientName}</span>
@@ -306,7 +299,9 @@ export function SalesForecast({
                     </span>
                   </div>
                   <span className="font-semibold text-nv-text shrink-0">{eur(inv.amount)}</span>
-                </label>
+                  <button onClick={() => deferInvoice(selected.key, inv.invoiceId)} disabled={toggling === inv.invoiceId} title="Reporter au mois suivant" className="p-1 text-nv-text-faint hover:text-primary transition-colors shrink-0"><ArrowRight size={13} /></button>
+                  <button onClick={() => dismissInvoice(inv.invoiceId)} disabled={toggling === inv.invoiceId} title="Retirer du prévisionnel (ne touche pas la facture)" className="p-1 text-nv-text-faint hover:text-red-400 transition-colors shrink-0"><X size={13} /></button>
+                </div>
               ))}
 
               {/* Prestations manuelles */}
@@ -331,7 +326,7 @@ export function SalesForecast({
               <button onClick={addManual} className="px-2.5 rounded-lg bg-primary text-nv-black text-xs font-medium">Ajouter</button>
             </div>
             {(selected.invoices.length > 0 || selected.retainers.length > 0) && (
-              <p className="text-[10px] text-nv-text-faint mt-1.5">Décochez un retainer ou une facture pour le sortir du prévisionnel. Ajoutez une prestation ponctuelle ci-dessus (en plus du MRR).</p>
+              <p className="text-[10px] text-nv-text-faint mt-1.5">Retainers : décochez pour exclure. Factures : <ArrowRight size={9} className="inline" /> reporte au mois suivant, <X size={9} className="inline" /> retire du prévisionnel (sans toucher la facture réelle).</p>
             )}
           </div>
 

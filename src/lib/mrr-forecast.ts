@@ -148,10 +148,13 @@ export async function computeSalesForecast(db: any, monthsAhead = 6): Promise<{
       // Les mensualités de retainer sont représentées par le MRR — on les
       // exclut du bloc factures pour ne pas compter deux fois le même argent
       .filter((inv: any) => !(inv.notes ?? '').includes('Mensualité'))
+      // Retirées manuellement du prévisionnel (la facture réelle n'est pas touchée)
+      .filter((inv: any) => !inv.forecastDismissed)
       .filter((inv: any) => {
-        if (!inv.dueDate) return i === 0
-        const dueIdx = monthIndex(new Date(inv.dueDate))
-        if (dueIdx < currentIdx) return i === 0
+        const defer = inv.forecastDefer ?? 0
+        if (!inv.dueDate) return i === defer // sans échéance → mois courant + report
+        const dueIdx = monthIndex(new Date(inv.dueDate)) + defer
+        if (dueIdx < currentIdx) return i === 0 // en retard → ramené au mois courant
         return dueIdx === mIdx
       })
       .map((inv: any) => {

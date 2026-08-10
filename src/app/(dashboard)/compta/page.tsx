@@ -1,7 +1,6 @@
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { AverageTicket } from '@/components/sales/AverageTicket'
-import { TreasuryForecast } from '@/components/finance/TreasuryForecast'
 import { SalesForecast } from '@/components/sales/SalesForecast'
 import { FinanceSection } from '@/components/finance/FinanceSection'
 import { computeSalesForecast } from '@/lib/mrr-forecast'
@@ -21,13 +20,15 @@ export default async function ComptaPage() {
         <h1 className="text-2xl font-bold text-white flex items-center gap-3"><Wallet size={24} className="text-primary" /> Compta & prévisionnel</h1>
         <p className="text-sm text-nv-text-muted mt-1">Synthèse, CA annuel, charges, prévisionnel et trésorerie.</p>
       </div>
-      <FinanceSection previsionnel={
-        <div className="space-y-5">
-          <AverageTicket />
-          <TreasuryForecast />
-          <SalesForecast months={forecast.months} suggestions={forecast.suggestions} />
-        </div>
-      } />
+      <FinanceSection
+        forecastNetByMonth={Object.fromEntries(forecast.months.map(m => [m.key, m.profit]))}
+        previsionnel={
+          <div className="space-y-5">
+            <AverageTicket />
+            <SalesForecast months={forecast.months} suggestions={forecast.suggestions} />
+          </div>
+        }
+      />
     </div>
   )
 }

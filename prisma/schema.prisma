@@ -443,6 +443,8 @@ model Invoice {
   cgv        String?
   pdfUrl     String?
   forecastIncluded Boolean  @default(true) // compter cette facture dans le prévisionnel Sales
+  forecastDefer    Int      @default(0)    // nb de mois de report dans le prévisionnel (décochage → mois suivant)
+  forecastDismissed Boolean @default(false) // retirée du prévisionnel (sans toucher la facture réelle)
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
 

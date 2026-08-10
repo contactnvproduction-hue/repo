@@ -4,7 +4,7 @@ import { computeIS } from '@/lib/tax'
 import { FinanceHub } from './FinanceHub'
 
 // Calcule toutes les données finance de la SAS et alimente le hub à sous-onglets.
-export async function FinanceSection({ previsionnel }: { previsionnel: React.ReactNode }) {
+export async function FinanceSection({ previsionnel, forecastNetByMonth = {} }: { previsionnel: React.ReactNode; forecastNetByMonth?: Record<string, number> }) {
   const now = new Date()
   const year = now.getFullYear()
   const startOfYear = new Date(year, 0, 1)
@@ -109,6 +109,7 @@ export async function FinanceSection({ previsionnel }: { previsionnel: React.Rea
       }}
       investments={(investments as any[]).map(i => ({ id: i.id, month: i.month, label: i.label, pole: i.pole, amount: i.amount, done: i.done, notes: i.notes }))}
       resultNetYear={resultNet}
+      forecastNetByMonth={forecastNetByMonth}
       mileage={{ year, members: teamUsers.map(u => ({ id: u.id, name: u.name })), entries: (mileageEntries as any[]).map(e => ({ id: e.id, userId: e.userId, userName: e.userName, year: e.year, month: e.month, vehicle: e.vehicle, vehicleType: e.vehicleType ?? 'VOITURE', cv: e.cv, electric: e.electric, km: e.km, paid: e.paid ?? false })) }}
     />
   )

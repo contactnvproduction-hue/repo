@@ -41,9 +41,9 @@ const TABS = [
 ] as const
 
 export function FinanceHub({
-  synthese, ca, charges, investments, previsionnel, resultNetYear, mileage,
+  synthese, ca, charges, investments, previsionnel, resultNetYear, mileage, forecastNetByMonth = {},
 }: {
-  synthese: Synthese; ca: CaData; charges: ChargesData; investments: Investment[]; previsionnel: React.ReactNode; resultNetYear: number; mileage: MileageData
+  synthese: Synthese; ca: CaData; charges: ChargesData; investments: Investment[]; previsionnel: React.ReactNode; resultNetYear: number; mileage: MileageData; forecastNetByMonth?: Record<string, number>
 }) {
   const [tab, setTab] = useState<typeof TABS[number]['id']>('synthese')
   return (
@@ -65,7 +65,7 @@ export function FinanceHub({
         <div className="space-y-6">
           {previsionnel}
           <div className="pt-2 border-t border-nv-border">
-            <InvestmentPlanner initial={investments} poles={charges.poles} resultNetYear={resultNetYear} monthlyNet={synthese.monthly.map(m => m.profit)} />
+            <InvestmentPlanner initial={investments} poles={charges.poles} resultNetYear={resultNetYear} monthlyNet={synthese.monthly.map(m => m.profit)} forecastNetByMonth={forecastNetByMonth} />
           </div>
         </div>
       </div>

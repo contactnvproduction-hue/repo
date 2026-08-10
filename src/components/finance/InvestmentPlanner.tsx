@@ -12,9 +12,10 @@ const ALLOC_KEY = 'nv_invest_alloc'
 
 type Investment = { id: string; month: string; label: string; pole: string | null; amount: number; done: boolean; notes: string | null }
 
-export function InvestmentPlanner({ initial, poles, resultNetYear, monthlyNet = [] }: { initial: Investment[]; poles: ExpensePole[]; resultNetYear: number; monthlyNet?: number[] }) {
+export function InvestmentPlanner({ initial, poles, resultNetYear, monthlyNet = [], forecastNetByMonth = {} }: { initial: Investment[]; poles: ExpensePole[]; resultNetYear: number; monthlyNet?: number[]; forecastNetByMonth?: Record<string, number> }) {
   const [items, setItems] = useState<Investment[]>(initial)
   const [showAdd, setShowAdd] = useState<string | null>(null) // month key or null
+  const [adjustMonth, setAdjustMonth] = useState<string | null>(null) // frise : mois dont on ajuste la répartition
 
   const now = new Date()
   // 6 mois à venir
@@ -32,15 +33,22 @@ export function InvestmentPlanner({ initial, poles, resultNetYear, monthlyNet = 
     return Math.max(0, last3.reduce((s, v) => s + v, 0) / last3.length)
   }, [monthlyNet, resultNetYear]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Part du net réinvestie (%) + répartition par pôle (persistées localement)
+  // % réinvesti + répartition par pôle par défaut + surcharges par mois (frise),
+  // persistés localement.
   const [envelopePct, setEnvelopePct] = useState(30)
   const [alloc, setAlloc] = useState<Record<string, number>>({})
+  const [monthAlloc, setMonthAlloc] = useState<Record<string, Record<string, number>>>({})
   useEffect(() => {
-    try { const raw = JSON.parse(localStorage.getItem(ALLOC_KEY) || '{}'); if (raw.envelopePct != null) setEnvelopePct(raw.envelopePct); if (raw.alloc) setAlloc(raw.alloc) } catch {}
+    try { const raw = JSON.parse(localStorage.getItem(ALLOC_KEY) || '{}'); if (raw.envelopePct != null) setEnvelopePct(raw.envelopePct); if (raw.alloc) setAlloc(raw.alloc); if (raw.byMonth) setMonthAlloc(raw.byMonth) } catch {}
   }, [])
-  const persist = (pct: number, a: Record<string, number>) => { try { localStorage.setItem(ALLOC_KEY, JSON.stringify({ envelopePct: pct, alloc: a })) } catch {} }
-  const setPolePct = (pole: string, v: number) => { const a = { ...alloc, [pole]: v }; setAlloc(a); persist(envelopePct, a) }
+  const persist = (pct: number, a: Record<string, number>, bm: Record<string, Record<string, number>>) => { try { localStorage.setItem(ALLOC_KEY, JSON.stringify({ envelopePct: pct, alloc: a, byMonth: bm })) } catch {} }
+  const setPolePct = (pole: string, v: number) => { const a = { ...alloc, [pole]: v }; setAlloc(a); persist(envelopePct, a, monthAlloc) }
+  const setMonthPolePct = (key: string, pole: string, v: number) => { const bm = { ...monthAlloc, [key]: { ...(monthAlloc[key] ?? alloc), [pole]: v } }; setMonthAlloc(bm); persist(envelopePct, alloc, bm) }
+  const allocFor = (key: string) => monthAlloc[key] ?? alloc
   const monthlyEnvelope = estMonthlyNet * (envelopePct / 100)
+  // Enveloppe d'un mois donné = net PRÉVISIONNEL de ce mois (lien direct) × %,
+  // avec repli sur le net mensuel estimé si pas de prévisionnel pour ce mois.
+  const envelopeOf = (key: string) => Math.max(0, forecastNetByMonth[key] ?? estMonthlyNet) * (envelopePct / 100)
 
   const byMonth = (key: string) => items.filter(i => i.month === key)
   const totalPlanned = items.filter(i => monthKeys.includes(i.month)).reduce((s, i) => s + i.amount, 0)
@@ -92,10 +100,10 @@ export function InvestmentPlanner({ initial, poles, resultNetYear, monthlyNet = 
         </div>
         <div className="flex items-center gap-3 mb-3">
           <label className="text-xs text-nv-text-muted">% du net réinvesti</label>
-          <input type="range" min={0} max={100} step={5} value={envelopePct} onChange={e => { const v = Number(e.target.value); setEnvelopePct(v); persist(v, alloc) }} className="flex-1 accent-[#e8b84b]" />
+          <input type="range" min={0} max={100} step={5} value={envelopePct} onChange={e => { const v = Number(e.target.value); setEnvelopePct(v); persist(v, alloc, monthAlloc) }} className="flex-1 accent-[#e8b84b]" />
           <span className="text-sm font-bold text-primary tabular-nums w-24 text-right">{envelopePct}% · {eur(monthlyEnvelope)}</span>
         </div>
-        <p className="text-[11px] uppercase tracking-wider text-nv-text-faint font-semibold mb-2">Répartition de l&apos;enveloppe par pôle</p>
+        <p className="text-[11px] uppercase tracking-wider text-nv-text-faint font-semibold mb-2">Répartition par défaut par pôle <span className="font-normal normal-case text-nv-text-faint">(ajustable mois par mois sur la frise ci-dessous)</span></p>
         <div className="space-y-2">
           {poles.map(p => {
             const pct = alloc[p.name] ?? 0
@@ -121,16 +129,44 @@ export function InvestmentPlanner({ initial, poles, resultNetYear, monthlyNet = 
         {monthKeys.map((key, i) => {
           const list = byMonth(key)
           const total = list.reduce((s, x) => s + x.amount, 0)
+          const env = envelopeOf(key)
+          const a = allocFor(key)
+          const isAdjusting = adjustMonth === key
           return (
             <div key={key} className={`rounded-2xl border p-4 ${i === 0 ? 'border-primary/30 bg-primary/[0.03]' : 'border-nv-border bg-nv-card'}`}>
               <div className="flex items-center justify-between mb-1">
                 <p className={`text-xs font-semibold capitalize ${i === 0 ? 'text-primary' : 'text-nv-text-muted'}`}>{monthLabel(key)}</p>
                 <span className="text-sm font-bold text-white tabular-nums">{total > 0 ? eur(total) : '—'}</span>
               </div>
-              {monthlyEnvelope > 0 && (
+              {env > 0 && (
                 <div className="mb-2">
-                  <div className="h-1.5 rounded-full bg-nv-dark overflow-hidden"><div className={`h-full rounded-full ${total > monthlyEnvelope ? 'bg-red-400' : 'bg-emerald-500'}`} style={{ width: `${Math.min(100, (total / monthlyEnvelope) * 100)}%` }} /></div>
-                  <p className="text-[9px] text-nv-text-faint mt-0.5">sur {eur(monthlyEnvelope)} d&apos;enveloppe</p>
+                  <div className="h-1.5 rounded-full bg-nv-dark overflow-hidden"><div className={`h-full rounded-full ${total > env ? 'bg-red-400' : 'bg-emerald-500'}`} style={{ width: `${Math.min(100, (total / env) * 100)}%` }} /></div>
+                  <p className="text-[9px] text-nv-text-faint mt-0.5">sur {eur(env)} d&apos;enveloppe (net prév. × {envelopePct}%)</p>
+                </div>
+              )}
+              {/* Répartition idéale par pôle pour ce mois */}
+              {env > 0 && poles.some(p => (a[p.name] ?? 0) > 0) && (
+                <div className="mb-2 space-y-0.5">
+                  {poles.filter(p => (a[p.name] ?? 0) > 0).map(p => (
+                    <div key={p.name} className="flex items-center gap-1.5 text-[10px]">
+                      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
+                      <span className="text-nv-text-muted flex-1 truncate">{p.name}</span>
+                      <span className="text-nv-text-faint">{a[p.name]}%</span>
+                      <span className="text-nv-text tabular-nums">{eur(env * (a[p.name] ?? 0) / 100)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <button onClick={() => setAdjustMonth(isAdjusting ? null : key)} className="text-[10px] text-nv-text-faint hover:text-primary mb-2">{isAdjusting ? 'Fermer' : 'Ajuster la répartition de ce mois'}</button>
+              {isAdjusting && (
+                <div className="space-y-1.5 mb-2 p-2 rounded-lg bg-nv-dark border border-nv-border">
+                  {poles.map(p => (
+                    <div key={p.name} className="flex items-center gap-2">
+                      <span className="text-[10px] text-nv-text w-16 truncate">{p.name}</span>
+                      <input type="range" min={0} max={100} step={5} value={a[p.name] ?? 0} onChange={e => setMonthPolePct(key, p.name, Number(e.target.value))} className="flex-1 accent-[#e8b84b]" />
+                      <span className="text-[10px] text-nv-text-muted w-8 text-right">{a[p.name] ?? 0}%</span>
+                    </div>
+                  ))}
                 </div>
               )}
               <div className="space-y-1.5 mb-2">
