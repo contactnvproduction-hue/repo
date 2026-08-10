@@ -1,17 +1,18 @@
 'use client'
 
-import { useState, useMemo } from 'react'
-import { Plus, X, Check, Loader2, Trash2, Rocket, Target } from 'lucide-react'
+import { useState, useMemo, useEffect } from 'react'
+import { Plus, X, Check, Loader2, Trash2, Rocket, Target, PieChart } from 'lucide-react'
 import toast from 'react-hot-toast'
 import type { ExpensePole } from '@/lib/expense-poles'
 
 const eur = (n: number) => `${Math.round(n).toLocaleString('fr-FR')} €`
 const MONTHS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
 const monthLabel = (key: string) => { const [y, m] = key.split('-').map(Number); return `${MONTHS[m - 1]} ${y}` }
+const ALLOC_KEY = 'nv_invest_alloc'
 
 type Investment = { id: string; month: string; label: string; pole: string | null; amount: number; done: boolean; notes: string | null }
 
-export function InvestmentPlanner({ initial, poles, resultNetYear }: { initial: Investment[]; poles: ExpensePole[]; resultNetYear: number }) {
+export function InvestmentPlanner({ initial, poles, resultNetYear, monthlyNet = [] }: { initial: Investment[]; poles: ExpensePole[]; resultNetYear: number; monthlyNet?: number[] }) {
   const [items, setItems] = useState<Investment[]>(initial)
   const [showAdd, setShowAdd] = useState<string | null>(null) // month key or null
 
@@ -21,6 +22,25 @@ export function InvestmentPlanner({ initial, poles, resultNetYear }: { initial: 
     const d = new Date(now.getFullYear(), now.getMonth() + i, 1)
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
   }), [])
+
+  // Résultat net mensuel estimé = moyenne des 3 derniers mois COMPLETS (charges
+  // déduites). Sert de base à l'enveloppe d'investissement mensuelle.
+  const estMonthlyNet = useMemo(() => {
+    const cur = now.getMonth()
+    const last3 = [cur - 1, cur - 2, cur - 3].filter(m => m >= 0).map(m => monthlyNet[m] ?? 0)
+    if (last3.length === 0) return Math.max(0, resultNetYear / 12)
+    return Math.max(0, last3.reduce((s, v) => s + v, 0) / last3.length)
+  }, [monthlyNet, resultNetYear]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Part du net réinvestie (%) + répartition par pôle (persistées localement)
+  const [envelopePct, setEnvelopePct] = useState(30)
+  const [alloc, setAlloc] = useState<Record<string, number>>({})
+  useEffect(() => {
+    try { const raw = JSON.parse(localStorage.getItem(ALLOC_KEY) || '{}'); if (raw.envelopePct != null) setEnvelopePct(raw.envelopePct); if (raw.alloc) setAlloc(raw.alloc) } catch {}
+  }, [])
+  const persist = (pct: number, a: Record<string, number>) => { try { localStorage.setItem(ALLOC_KEY, JSON.stringify({ envelopePct: pct, alloc: a })) } catch {} }
+  const setPolePct = (pole: string, v: number) => { const a = { ...alloc, [pole]: v }; setAlloc(a); persist(envelopePct, a) }
+  const monthlyEnvelope = estMonthlyNet * (envelopePct / 100)
 
   const byMonth = (key: string) => items.filter(i => i.month === key)
   const totalPlanned = items.filter(i => monthKeys.includes(i.month)).reduce((s, i) => s + i.amount, 0)
@@ -62,6 +82,40 @@ export function InvestmentPlanner({ initial, poles, resultNetYear }: { initial: 
         </p>
       </div>
 
+      {/* Enveloppe mensuelle d'investissement + répartition par pôle */}
+      <div className="bg-nv-card border border-nv-border rounded-2xl p-5">
+        <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
+          <h3 className="text-sm font-semibold text-white flex items-center gap-2"><PieChart size={15} className="text-primary" /> Enveloppe mensuelle</h3>
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-nv-text-muted">Net mensuel estimé (3 derniers mois) : <span className="font-bold text-nv-text tabular-nums">{eur(estMonthlyNet)}</span></span>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 mb-3">
+          <label className="text-xs text-nv-text-muted">% du net réinvesti</label>
+          <input type="range" min={0} max={100} step={5} value={envelopePct} onChange={e => { const v = Number(e.target.value); setEnvelopePct(v); persist(v, alloc) }} className="flex-1 accent-[#e8b84b]" />
+          <span className="text-sm font-bold text-primary tabular-nums w-24 text-right">{envelopePct}% · {eur(monthlyEnvelope)}</span>
+        </div>
+        <p className="text-[11px] uppercase tracking-wider text-nv-text-faint font-semibold mb-2">Répartition de l&apos;enveloppe par pôle</p>
+        <div className="space-y-2">
+          {poles.map(p => {
+            const pct = alloc[p.name] ?? 0
+            return (
+              <div key={p.name} className="flex items-center gap-3">
+                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
+                <span className="text-sm text-nv-text w-28 truncate">{p.name}</span>
+                <input type="range" min={0} max={100} step={5} value={pct} onChange={e => setPolePct(p.name, Number(e.target.value))} className="flex-1 accent-[#e8b84b]" />
+                <span className="text-xs text-nv-text-muted tabular-nums w-10 text-right">{pct}%</span>
+                <span className="text-sm font-medium text-white tabular-nums w-20 text-right">{eur(monthlyEnvelope * pct / 100)}</span>
+              </div>
+            )
+          })}
+        </div>
+        {(() => {
+          const totalPct = poles.reduce((s, p) => s + (alloc[p.name] ?? 0), 0)
+          return <p className={`text-[11px] mt-2 ${totalPct > 100 ? 'text-red-400' : 'text-nv-text-faint'}`}>Total réparti : {totalPct}%{totalPct > 100 ? ' — dépasse 100% de l\'enveloppe' : totalPct < 100 ? ` (${100 - totalPct}% non affectés)` : ''}</p>
+        })()}
+      </div>
+
       {/* Frise mensuelle */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
         {monthKeys.map((key, i) => {
@@ -69,10 +123,16 @@ export function InvestmentPlanner({ initial, poles, resultNetYear }: { initial: 
           const total = list.reduce((s, x) => s + x.amount, 0)
           return (
             <div key={key} className={`rounded-2xl border p-4 ${i === 0 ? 'border-primary/30 bg-primary/[0.03]' : 'border-nv-border bg-nv-card'}`}>
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center justify-between mb-1">
                 <p className={`text-xs font-semibold capitalize ${i === 0 ? 'text-primary' : 'text-nv-text-muted'}`}>{monthLabel(key)}</p>
                 <span className="text-sm font-bold text-white tabular-nums">{total > 0 ? eur(total) : '—'}</span>
               </div>
+              {monthlyEnvelope > 0 && (
+                <div className="mb-2">
+                  <div className="h-1.5 rounded-full bg-nv-dark overflow-hidden"><div className={`h-full rounded-full ${total > monthlyEnvelope ? 'bg-red-400' : 'bg-emerald-500'}`} style={{ width: `${Math.min(100, (total / monthlyEnvelope) * 100)}%` }} /></div>
+                  <p className="text-[9px] text-nv-text-faint mt-0.5">sur {eur(monthlyEnvelope)} d&apos;enveloppe</p>
+                </div>
+              )}
               <div className="space-y-1.5 mb-2">
                 {list.map(inv => (
                   <div key={inv.id} className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs ${inv.done ? 'border-emerald-500/25 bg-emerald-500/5' : 'border-nv-border bg-nv-dark'}`}>

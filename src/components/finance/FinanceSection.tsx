@@ -12,13 +12,15 @@ export async function FinanceSection({ previsionnel }: { previsionnel: React.Rea
   const endLastYear = new Date(year - 1, 11, 31, 23, 59, 59)
   const db = prisma as any
 
-  const [payments, lastYearAgg, expenses, settings, investments, recurringExpenses] = await Promise.all([
+  const [payments, lastYearAgg, expenses, settings, investments, recurringExpenses, teamUsers, mileageEntries] = await Promise.all([
     prisma.payment.findMany({ where: { confirmed: true, date: { gte: startOfYear } }, select: { amount: true, date: true, invoiceId: true, invoice: { select: { clientId: true, client: { select: { name: true } } } } } }),
     prisma.payment.aggregate({ where: { confirmed: true, date: { gte: startLastYear, lte: endLastYear } }, _sum: { amount: true } }),
     prisma.expense.findMany({ where: { date: { gte: startOfYear } }, orderBy: { date: 'desc' } }),
     prisma.agencySetting.findFirst(),
     (async () => { try { return await db.investmentPlan.findMany({ orderBy: [{ month: 'asc' }, { createdAt: 'asc' }] }) } catch { return [] } })(),
     prisma.expense.findMany({ where: { isRecurring: true }, orderBy: { amount: 'desc' } }),
+    prisma.user.findMany({ select: { id: true, name: true }, orderBy: { name: 'asc' } }),
+    (async () => { try { return await db.mileageEntry.findMany({ where: { year }, orderBy: [{ userId: 'asc' }, { month: 'asc' }] }) } catch { return [] } })(),
   ])
 
   // CA mensuel encaissé = tous les virements confirmés, dédoublonnés par
@@ -107,6 +109,7 @@ export async function FinanceSection({ previsionnel }: { previsionnel: React.Rea
       }}
       investments={(investments as any[]).map(i => ({ id: i.id, month: i.month, label: i.label, pole: i.pole, amount: i.amount, done: i.done, notes: i.notes }))}
       resultNetYear={resultNet}
+      mileage={{ year, members: teamUsers.map(u => ({ id: u.id, name: u.name })), entries: (mileageEntries as any[]).map(e => ({ id: e.id, userId: e.userId, userName: e.userName, year: e.year, month: e.month, vehicle: e.vehicle, cv: e.cv, electric: e.electric, km: e.km })) }}
     />
   )
 }

@@ -616,6 +616,27 @@ model Notification {
   @@map("notifications")
 }
 
+// Indemnités kilométriques : KM renseignés par un membre pour un mois + véhicule.
+// Le montant se calcule via le barème officiel (lib/mileage). Cumul YTD par
+// membre+véhicule pour appliquer la bonne tranche.
+model MileageEntry {
+  id        String   @id @default(cuid())
+  userId    String
+  userName  String?
+  year      Int
+  month     Int      // 0-11
+  vehicle   String   @default("Véhicule")
+  cv        Int      @default(5)   // puissance fiscale
+  electric  Boolean  @default(false)
+  km        Float    @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, vehicle, year, month])
+  @@index([year])
+  @@map("mileage_entries")
+}
+
 // Vrai stockage de fichiers (persistant, contrairement au disque Render éphémère).
 // Le binaire vit ici ; les enregistrements ne référencent qu'une URL /api/files/<id>.
 model StoredFile {

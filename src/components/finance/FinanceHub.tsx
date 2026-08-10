@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
-  BarChart3, TrendingUp, TrendingDown, Wallet, Layers, Rocket, Landmark, Loader2, Check, Gauge,
+  BarChart3, TrendingUp, Wallet, Layers, Landmark, Loader2, Check, Gauge, Car,
 } from 'lucide-react'
 import {
   ComposedChart, Bar, Line, BarChart, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell,
@@ -12,6 +12,7 @@ import {
 import toast from 'react-hot-toast'
 import { ChargesManager } from './ChargesManager'
 import { InvestmentPlanner } from './InvestmentPlanner'
+import { MileageSection } from './MileageSection'
 import type { ExpensePole } from '@/lib/expense-poles'
 
 const eur = (n: number) => `${Math.round(n).toLocaleString('fr-FR')} €`
@@ -28,19 +29,21 @@ type Synthese = {
 type CaData = { year: number; caYear: number; caLastYear: number; monthlyCa: number[]; topClients: { id: string; name: string; total: number }[] }
 type ChargesData = { poles: ExpensePole[]; currentMonthKey: string; allExpenses: any[]; salariesByMonth: Record<string, number>; salariesYear: number; expensesYear: number; recurring: { id: string; amount: number; description: string; pole: string | null }[] }
 type Investment = { id: string; month: string; label: string; pole: string | null; amount: number; done: boolean; notes: string | null }
+type MileageEntry = { id: string; userId: string; userName: string | null; year: number; month: number; vehicle: string; cv: number; electric: boolean; km: number }
+type MileageData = { year: number; members: { id: string; name: string }[]; entries: MileageEntry[] }
 
 const TABS = [
   { id: 'synthese', label: 'Synthèse', icon: BarChart3 },
   { id: 'ca', label: 'CA annuel', icon: TrendingUp },
   { id: 'charges', label: 'Charges', icon: Layers },
-  { id: 'previsionnel', label: 'Prévisionnel', icon: Wallet },
-  { id: 'investissements', label: 'Investissements', icon: Rocket },
+  { id: 'previsionnel', label: 'Prévisionnel & invest', icon: Wallet },
+  { id: 'mileage', label: 'Indemnités KM', icon: Car },
 ] as const
 
 export function FinanceHub({
-  synthese, ca, charges, investments, previsionnel, resultNetYear,
+  synthese, ca, charges, investments, previsionnel, resultNetYear, mileage,
 }: {
-  synthese: Synthese; ca: CaData; charges: ChargesData; investments: Investment[]; previsionnel: React.ReactNode; resultNetYear: number
+  synthese: Synthese; ca: CaData; charges: ChargesData; investments: Investment[]; previsionnel: React.ReactNode; resultNetYear: number; mileage: MileageData
 }) {
   const [tab, setTab] = useState<typeof TABS[number]['id']>('synthese')
   return (
@@ -58,8 +61,15 @@ export function FinanceHub({
       <div className={tab === 'synthese' ? '' : 'hidden'}><Synthese data={synthese} /></div>
       <div className={tab === 'ca' ? '' : 'hidden'}><CaAnnuel data={ca} /></div>
       <div className={tab === 'charges' ? '' : 'hidden'}><ChargesManager data={charges} /></div>
-      <div className={tab === 'previsionnel' ? '' : 'hidden'}>{previsionnel}</div>
-      <div className={tab === 'investissements' ? '' : 'hidden'}><InvestmentPlanner initial={investments} poles={charges.poles} resultNetYear={resultNetYear} /></div>
+      <div className={tab === 'previsionnel' ? '' : 'hidden'}>
+        <div className="space-y-6">
+          {previsionnel}
+          <div className="pt-2 border-t border-nv-border">
+            <InvestmentPlanner initial={investments} poles={charges.poles} resultNetYear={resultNetYear} monthlyNet={synthese.monthly.map(m => m.profit)} />
+          </div>
+        </div>
+      </div>
+      <div className={tab === 'mileage' ? '' : 'hidden'}><MileageSection initialEntries={mileage.entries} members={mileage.members} year={mileage.year} /></div>
     </div>
   )
 }
