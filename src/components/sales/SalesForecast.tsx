@@ -47,10 +47,12 @@ export function SalesForecast({
     const entry = await res.json()
     setMonths(ms => ms.map(m => m.key === selected.key ? recompute({ ...m, manual: [...(m.manual ?? []), { id: entry.id, clientName: entry.clientName, amount: entry.amount }] }) : m))
     setMName(''); setMAmount(''); toast.success('Prestation ajoutée')
+    router.refresh() // recalcule le net serveur → met à jour l'enveloppe d'invest
   }
   const removeManual = async (id: string) => {
     setMonths(ms => ms.map(m => recompute({ ...m, manual: (m.manual ?? []).filter(e => e.id !== id) })))
     await fetch(`/api/forecast-entries?id=${id}`, { method: 'DELETE' })
+    router.refresh()
   }
 
   // Inclure / exclure un retainer du prévisionnel (persisté — tous les mois concernés).
@@ -75,6 +77,7 @@ export function SalesForecast({
             body: JSON.stringify({ forecastIncluded: included }),
           })
       if (!res.ok) throw new Error()
+      router.refresh()
     } catch {
       toast.error('Erreur de sauvegarde')
       setMonths(ms => ms.map(m => recompute({
@@ -100,7 +103,7 @@ export function SalesForecast({
         return m
       })
     })
-    try { await fetch(`/api/invoices/${invoiceId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ forecastDefer: { increment: 1 } }) }) }
+    try { await fetch(`/api/invoices/${invoiceId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ forecastDefer: { increment: 1 } }) }); router.refresh() }
     catch { toast.error('Erreur'); router.refresh() } finally { setToggling(null) }
   }
 
@@ -108,7 +111,7 @@ export function SalesForecast({
   const dismissInvoice = async (invoiceId: string) => {
     setToggling(invoiceId)
     setMonths(ms => ms.map(m => recompute({ ...m, invoices: m.invoices.filter(i => i.invoiceId !== invoiceId) })))
-    try { await fetch(`/api/invoices/${invoiceId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ forecastDismissed: true }) }) }
+    try { await fetch(`/api/invoices/${invoiceId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ forecastDismissed: true }) }); router.refresh() }
     catch { toast.error('Erreur'); router.refresh() } finally { setToggling(null) }
   }
 

@@ -179,13 +179,22 @@ function MonthModal({ row, fc, poles, alloc, invests, envelopePct, onClose, onAd
             </div>
           </div>
 
-          {/* Enveloppe + épargne */}
-          <div className="bg-nv-card border border-nv-border rounded-xl p-3 grid grid-cols-3 gap-2 text-center">
-            <div><p className="text-[10px] text-nv-text-faint">Enveloppe ({envelopePct}%)</p><p className="text-sm font-bold text-primary tabular-nums">{eur(row.envelope)}</p></div>
-            <div><p className="text-[10px] text-nv-text-faint">+ épargne reportée</p><p className="text-sm font-bold text-white tabular-nums">{eur(row.carriedIn)}</p></div>
-            <div><p className="text-[10px] text-nv-text-faint flex items-center justify-center gap-0.5"><PiggyBank size={9} className="text-emerald-400" />Épargne fin de mois</p><p className={`text-sm font-bold tabular-nums ${row.over ? 'text-red-400' : 'text-emerald-400'}`}>{eur(row.savings)}</p></div>
+          {/* Enveloppe & épargne — flux clair du stacking / de la consommation */}
+          <div className="bg-nv-card border border-nv-border rounded-xl p-3.5">
+            <div className="flex items-center gap-1.5 mb-2"><PiggyBank size={13} className="text-emerald-400" /><p className="text-[11px] uppercase tracking-wider text-nv-text-faint font-semibold">Enveloppe & épargne</p></div>
+            <div className="space-y-1.5 text-sm">
+              <div className="flex items-center justify-between"><span className="text-nv-text-muted">Enveloppe du mois <span className="text-nv-text-faint">(net × {envelopePct}%)</span></span><span className="text-nv-text tabular-nums">+ {eur(row.envelope)}</span></div>
+              <div className="flex items-center justify-between"><span className="text-nv-text-muted">Épargne reportée des mois précédents</span><span className="text-nv-text tabular-nums">+ {eur(row.carriedIn)}</span></div>
+              <div className="flex items-center justify-between border-t border-nv-border pt-1.5"><span className="font-medium text-white">Disponible ce mois</span><span className="font-bold text-primary tabular-nums">{eur(row.available)}</span></div>
+              <div className="flex items-center justify-between"><span className="text-nv-text-muted">Investi ce mois</span><span className={`tabular-nums ${row.planned > 0 ? 'text-nv-text' : 'text-nv-text-faint'}`}>− {eur(row.planned)}</span></div>
+              <div className="flex items-center justify-between border-t border-nv-border pt-1.5"><span className="font-medium text-white flex items-center gap-1"><PiggyBank size={12} className="text-emerald-400" />Épargne reportée au mois suivant</span><span className={`font-bold tabular-nums ${row.over ? 'text-red-400' : 'text-emerald-400'}`}>{eur(row.savings)}</span></div>
+            </div>
+            <p className="text-[11px] text-nv-text-faint mt-2.5 pt-2 border-t border-nv-border/50">
+              {row.over
+                ? 'Les investissements dépassent le disponible : ils puisent au-delà de l\'épargne accumulée.'
+                : 'Ce qui n\'est pas investi s\'ajoute à l\'épargne et se reporte automatiquement. Un mois chargé peut ainsi investir plus que son enveloppe en puisant dans l\'épargne cumulée.'}
+            </p>
           </div>
-          {row.over && <p className="text-[11px] text-red-400 -mt-2">Les investissements dépassent l&apos;enveloppe + l&apos;épargne disponible de ce mois.</p>}
 
           {/* Investissements du mois */}
           <div>
