@@ -1,6 +1,6 @@
 // Prévisionnel Sales — généré depuis le CONTRACTÉ réel, mois par mois :
 // CA (retainers signés + factures en attente sélectionnables)
-// − Charges (moyenne des 4 derniers mois de charges réelles)
+// − Charges (moyenne des 3 derniers mois de charges réelles)
 // = Profit net prévisionnel. Aucune saisie manuelle.
 import { computeAvgMonthlyCharges } from './charges'
 
@@ -26,6 +26,12 @@ export type ForecastInvoice = {
   included: boolean // sélectionnée dans le prévisionnel (toggle)
 }
 
+export type ForecastManual = {
+  id: string
+  clientName: string
+  amount: number
+}
+
 export type ForecastMonth = {
   key: string
   label: string
@@ -35,6 +41,8 @@ export type ForecastMonth = {
   mrrTotal: number
   invoices: ForecastInvoice[]
   invoicesTotal: number // uniquement les incluses
+  manual: ForecastManual[]
+  manualTotal: number
   caTotal: number
   chargesTotal: number     // estimation = moyenne des N derniers mois de charges
   chargesMonthsUsed: number // nb de mois utilisés dans la moyenne
@@ -58,7 +66,7 @@ export async function computeSalesForecast(db: any, monthsAhead = 6): Promise<{
   const now = new Date()
   const currentIdx = monthIndex(now)
 
-  const [retainers, pendingInvoices, avgCharges, monthlyClients] = await Promise.all([
+  const [retainers, pendingInvoices, avgCharges, monthlyClients, manualEntries] = await Promise.all([
     db.clientRetainer.findMany({
       include: { client: { select: { id: true, name: true } } },
     }),
@@ -69,8 +77,8 @@ export async function computeSalesForecast(db: any, monthsAhead = 6): Promise<{
         payments: { select: { amount: true, confirmed: true } },
       },
     }),
-    // Charges estimées = moyenne des 4 derniers mois complets (tous pôles, salaires inclus)
-    computeAvgMonthlyCharges(db, 4),
+    // Charges estimées = moyenne des 3 derniers mois complets (tous pôles, salaires inclus)
+    computeAvgMonthlyCharges(db, 3),
     // Clients mensualisés SANS engagement (case cochée sur la fiche client)
     (async () => {
       try {
@@ -80,6 +88,7 @@ export async function computeSalesForecast(db: any, monthsAhead = 6): Promise<{
         })
       } catch { return [] }
     })(),
+    (async () => { try { return await db.forecastEntry.findMany() } catch { return [] } })(),
   ])
 
   const chargesEstimate = avgCharges.avg
@@ -162,9 +171,15 @@ export async function computeSalesForecast(db: any, monthsAhead = 6): Promise<{
       .filter((o: ForecastInvoice) => o.amount > 0)
       .sort((a: ForecastInvoice, b: ForecastInvoice) => b.amount - a.amount)
 
+    // Prestations manuelles renseignées pour ce mois
+    const monthManual: ForecastManual[] = (manualEntries as any[])
+      .filter(e => e.month === key)
+      .map(e => ({ id: e.id, clientName: e.clientName, amount: e.amount }))
+    const manualTotal = monthManual.reduce((s, e) => s + e.amount, 0)
+
     const mrrTotal = monthRetainers.filter(r => r.included).reduce((s, r) => s + r.amount, 0)
     const invoicesTotal = monthInvoices.filter(o => o.included).reduce((s, o) => s + o.amount, 0)
-    const caTotal = mrrTotal + invoicesTotal
+    const caTotal = mrrTotal + invoicesTotal + manualTotal
 
     // Charges estimées = moyenne des 4 derniers mois de charges réelles
     const chargesTotal = chargesEstimate
@@ -178,6 +193,8 @@ export async function computeSalesForecast(db: any, monthsAhead = 6): Promise<{
       mrrTotal,
       invoices: monthInvoices,
       invoicesTotal,
+      manual: monthManual,
+      manualTotal,
       caTotal,
       chargesTotal,
       chargesMonthsUsed,

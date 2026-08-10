@@ -616,6 +616,19 @@ model Notification {
   @@map("notifications")
 }
 
+// Prévisionnel manuel : prestation ponctuelle renseignée à la main pour un mois
+// (client + montant), en plus du MRR (retainers + mensualisés) et des factures.
+model ForecastEntry {
+  id         String   @id @default(cuid())
+  month      String   // "YYYY-MM"
+  clientName String
+  amount     Float    @default(0)
+  createdAt  DateTime @default(now())
+
+  @@index([month])
+  @@map("forecast_entries")
+}
+
 // Indemnités kilométriques : KM renseignés par un membre pour un mois + véhicule.
 // Le montant se calcule via le barème officiel (lib/mileage). Cumul YTD par
 // membre+véhicule pour appliquer la bonne tranche.

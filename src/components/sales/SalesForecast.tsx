@@ -34,8 +34,25 @@ export function SalesForecast({
   const recompute = (m: ForecastMonth): ForecastMonth => {
     const mrrTotal = m.retainers.filter(r => r.included).reduce((s, r) => s + r.amount, 0)
     const invoicesTotal = m.invoices.filter(i => i.included).reduce((s, i) => s + i.amount, 0)
-    const caTotal = mrrTotal + invoicesTotal
-    return { ...m, mrrTotal, invoicesTotal, caTotal, profit: caTotal - m.chargesTotal }
+    const manualTotal = (m.manual ?? []).reduce((s, e) => s + e.amount, 0)
+    const caTotal = mrrTotal + invoicesTotal + manualTotal
+    return { ...m, mrrTotal, invoicesTotal, manualTotal, caTotal, profit: caTotal - m.chargesTotal }
+  }
+
+  // Prestations manuelles (client + montant) pour le mois sélectionné
+  const [mName, setMName] = useState('')
+  const [mAmount, setMAmount] = useState('')
+  const addManual = async () => {
+    if (!selected || !mName.trim() || !mAmount) { toast.error('Client et montant requis'); return }
+    const res = await fetch('/api/forecast-entries', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ month: selected.key, clientName: mName.trim(), amount: Number(mAmount) }) })
+    if (!res.ok) { toast.error('Erreur'); return }
+    const entry = await res.json()
+    setMonths(ms => ms.map(m => m.key === selected.key ? recompute({ ...m, manual: [...(m.manual ?? []), { id: entry.id, clientName: entry.clientName, amount: entry.amount }] }) : m))
+    setMName(''); setMAmount(''); toast.success('Prestation ajoutée')
+  }
+  const removeManual = async (id: string) => {
+    setMonths(ms => ms.map(m => recompute({ ...m, manual: (m.manual ?? []).filter(e => e.id !== id) })))
+    await fetch(`/api/forecast-entries?id=${id}`, { method: 'DELETE' })
   }
 
   // Inclure / exclure un retainer du prévisionnel (persisté — tous les mois concernés).
@@ -292,12 +309,29 @@ export function SalesForecast({
                 </label>
               ))}
 
-              {selected.retainers.length === 0 && selected.invoices.length === 0 && (
+              {/* Prestations manuelles */}
+              {(selected.manual ?? []).map(e => (
+                <div key={e.id} className="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-blue-500/25 bg-blue-500/[0.04] text-sm">
+                  <Building2 className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                  <div className="flex-1 min-w-0"><span className="text-nv-text truncate block">{e.clientName}</span><span className="text-[10px] text-nv-text-faint">Prestation manuelle</span></div>
+                  <span className="font-semibold text-nv-text shrink-0">{eur(e.amount)}</span>
+                  <button onClick={() => removeManual(e.id)} className="p-0.5 text-nv-text-faint hover:text-red-400 shrink-0"><TrendingDown className="w-3 h-3 rotate-45" /></button>
+                </div>
+              ))}
+
+              {selected.retainers.length === 0 && selected.invoices.length === 0 && (selected.manual ?? []).length === 0 && (
                 <p className="text-xs text-nv-text-faint italic py-3 text-center border border-dashed border-nv-border rounded-lg">Rien de contracté ce mois-ci.</p>
               )}
             </div>
+
+            {/* Ajout d'une prestation manuelle */}
+            <div className="flex gap-1.5 mt-2">
+              <input value={mName} onChange={e => setMName(e.target.value)} placeholder="Client / prestation" className="flex-1 bg-nv-black border border-nv-border rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-nv-text-faint focus:outline-none focus:border-primary/50" />
+              <input value={mAmount} onChange={e => setMAmount(e.target.value)} type="number" placeholder="€" className="w-20 bg-nv-black border border-nv-border rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-nv-text-faint focus:outline-none focus:border-primary/50" />
+              <button onClick={addManual} className="px-2.5 rounded-lg bg-primary text-nv-black text-xs font-medium">Ajouter</button>
+            </div>
             {(selected.invoices.length > 0 || selected.retainers.length > 0) && (
-              <p className="text-[10px] text-nv-text-faint mt-1.5">Décochez un retainer ou une facture pour le sortir du prévisionnel (choix mémorisé, appliqué à tous les mois).</p>
+              <p className="text-[10px] text-nv-text-faint mt-1.5">Décochez un retainer ou une facture pour le sortir du prévisionnel. Ajoutez une prestation ponctuelle ci-dessus (en plus du MRR).</p>
             )}
           </div>
 
@@ -310,7 +344,7 @@ export function SalesForecast({
                 <div className="flex-1 min-w-0">
                   <span className="text-nv-text">Charges (estimation)</span>
                   <span className="text-[10px] text-nv-text-faint block">
-                    {selected.chargesMonthsUsed > 0 ? `Moyenne des ${selected.chargesMonthsUsed} derniers mois — tous pôles, salaires inclus (Finance → Charges)` : 'Aucune charge saisie sur les 4 derniers mois'}
+                    {selected.chargesMonthsUsed > 0 ? `Moyenne des ${selected.chargesMonthsUsed} derniers mois — tous pôles, salaires inclus (Finance → Charges)` : 'Aucune charge saisie sur les 3 derniers mois'}
                   </span>
                 </div>
                 <span className="font-semibold text-nv-text shrink-0">{eur(selected.chargesTotal)}</span>
