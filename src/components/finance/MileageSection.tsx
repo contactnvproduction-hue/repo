@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react'
 import { Car, Plus, X, Check, Loader2, Trash2, Users, Zap } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { CV_OPTIONS, annualIndemnity, monthlyIndemnity } from '@/lib/mileage'
+import { VEHICLE_TYPES, cvOptions, annualIndemnity, monthlyIndemnity, type VehicleType } from '@/lib/mileage'
 
 const eur = (n: number) => `${(Math.round(n * 100) / 100).toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €`
 const eur2 = (n: number) => `${(Math.round(n * 100) / 100).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
@@ -11,7 +11,8 @@ const MONTHS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet'
 const MONTHS_SHORT = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc']
 
 type Member = { id: string; name: string }
-type Entry = { id: string; userId: string; userName: string | null; year: number; month: number; vehicle: string; cv: number; electric: boolean; km: number }
+type Entry = { id: string; userId: string; userName: string | null; year: number; month: number; vehicle: string; vehicleType: string; cv: number; electric: boolean; km: number; paid: boolean }
+const typeLabel: Record<string, string> = { VOITURE: 'Voiture', MOTO: 'Moto', CYCLOMOTEUR: 'Cyclo' }
 
 const inp = 'w-full bg-nv-black border border-nv-border rounded-lg px-3 py-2 text-sm text-white placeholder-nv-text-faint focus:outline-none focus:border-primary/60'
 
@@ -34,7 +35,7 @@ export function MileageSection({ initialEntries, members, year: initialYear }: {
       const sorted = [...list].sort((a, b) => a.month - b.month)
       let cum = 0
       for (const e of sorted) {
-        byId.set(e.id, monthlyIndemnity(e.cv, e.electric, cum, e.km))
+        byId.set(e.id, monthlyIndemnity((e.vehicleType as VehicleType) || 'VOITURE', e.cv, e.electric, cum, e.km))
         cum += e.km
       }
     }
@@ -58,7 +59,7 @@ export function MileageSection({ initialEntries, members, year: initialYear }: {
   const yearTotal = entries.reduce((s, e) => s + indemOf(e), 0)
   const perAssociate = monthTotal / 2
 
-  const save = async (data: { userId: string; month: number; vehicle: string; cv: number; electric: boolean; km: number }) => {
+  const save = async (data: { userId: string; month: number; vehicle: string; vehicleType: VehicleType; cv: number; electric: boolean; km: number }) => {
     const res = await fetch('/api/finance/mileage', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...data, year, userName: nameOf(data.userId) }),
@@ -67,6 +68,10 @@ export function MileageSection({ initialEntries, members, year: initialYear }: {
     const entry = await res.json()
     setEntries(list => [...list.filter(e => e.id !== entry.id && !(e.userId === entry.userId && e.vehicle === entry.vehicle && e.month === entry.month)), entry])
     setShowForm(false); toast.success('KM enregistrés')
+  }
+  const togglePaid = async (e: Entry) => {
+    setEntries(list => list.map(x => x.id === e.id ? { ...x, paid: !x.paid } : x))
+    await fetch('/api/finance/mileage', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: e.id, paid: !e.paid }) })
   }
   const remove = async (id: string) => {
     setEntries(list => list.filter(e => e.id !== id))
@@ -121,9 +126,13 @@ export function MileageSection({ initialEntries, members, year: initialYear }: {
                 {mb.list.map(e => (
                   <div key={e.id} className="flex items-center gap-2 py-1.5 text-xs">
                     <span className="w-12 text-nv-text-muted">{MONTHS_SHORT[e.month]}</span>
-                    <span className="flex-1 min-w-0 truncate text-nv-text flex items-center gap-1.5">{e.vehicle} <span className="text-nv-text-faint">· {e.cv} CV</span>{e.electric && <Zap size={10} className="text-emerald-400" />}</span>
+                    <span className="flex-1 min-w-0 truncate text-nv-text flex items-center gap-1.5">{e.vehicle} <span className="text-nv-text-faint">· {typeLabel[e.vehicleType] ?? 'Voiture'}{e.vehicleType !== 'CYCLOMOTEUR' ? ` ${e.cv} CV` : ''}</span>{e.electric && <Zap size={10} className="text-emerald-400" />}</span>
                     <span className="text-nv-text-muted tabular-nums w-20 text-right">{e.km.toLocaleString('fr-FR')} km</span>
                     <span className="text-white font-medium tabular-nums w-20 text-right">{eur2(indemOf(e))}</span>
+                    <button onClick={() => togglePaid(e)} title={e.paid ? 'Versée' : 'Marquer comme versée'}
+                      className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[10px] font-medium transition-colors ${e.paid ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-nv-border text-nv-text-faint hover:text-nv-text'}`}>
+                      <Check size={9} />{e.paid ? 'Versée' : 'À verser'}
+                    </button>
                     <button onClick={() => remove(e.id)} className="p-0.5 text-nv-text-faint hover:text-red-400"><Trash2 size={12} /></button>
                   </div>
                 ))}
@@ -138,25 +147,29 @@ export function MileageSection({ initialEntries, members, year: initialYear }: {
 
 function MileageForm({ members, year, onClose, onSave }: {
   members: Member[]; year: number; onClose: () => void
-  onSave: (d: { userId: string; month: number; vehicle: string; cv: number; electric: boolean; km: number }) => void
+  onSave: (d: { userId: string; month: number; vehicle: string; vehicleType: VehicleType; cv: number; electric: boolean; km: number }) => void
 }) {
   const [userId, setUserId] = useState(members[0]?.id ?? '')
   const [month, setMonth] = useState(new Date().getMonth())
   const [vehicle, setVehicle] = useState('')
+  const [vType, setVType] = useState<VehicleType>('VOITURE')
   const [cv, setCv] = useState(5)
   const [electric, setElectric] = useState(false)
   const [km, setKm] = useState('')
   const [saving, setSaving] = useState(false)
+
+  const cvChoices = cvOptions(vType)
+  const changeType = (t: VehicleType) => { setVType(t); const opts = cvOptions(t); if (opts.length && !opts.some(o => o.value === cv)) setCv(opts[0].value) }
 
   const submit = async () => {
     if (!userId) { toast.error('Choisis un membre'); return }
     const kmN = parseFloat(km)
     if (!kmN || kmN <= 0) { toast.error('Kilométrage requis'); return }
     setSaving(true)
-    await onSave({ userId, month, vehicle: vehicle.trim() || 'Véhicule', cv, electric, km: kmN })
+    await onSave({ userId, month, vehicle: vehicle.trim() || 'Véhicule', vehicleType: vType, cv, electric, km: kmN })
     setSaving(false)
   }
-  const preview = km ? annualIndemnity(cv, parseFloat(km) || 0, electric) : 0
+  const preview = km ? annualIndemnity(vType, cv, parseFloat(km) || 0, electric) : 0
 
   return (
     <div className="bg-nv-card border border-primary/30 rounded-2xl p-4 space-y-3">
@@ -180,11 +193,19 @@ function MileageForm({ members, year, onClose, onSave }: {
           <input className={inp} placeholder="Ex : Peugeot 208" value={vehicle} onChange={e => setVehicle(e.target.value)} />
         </div>
         <div>
-          <label className="text-[11px] text-nv-text-muted block mb-1">Puissance fiscale</label>
-          <select className={inp} value={cv} onChange={e => setCv(Number(e.target.value))}>
-            {CV_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          <label className="text-[11px] text-nv-text-muted block mb-1">Type de véhicule</label>
+          <select className={inp} value={vType} onChange={e => changeType(e.target.value as VehicleType)}>
+            {VEHICLE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
           </select>
         </div>
+        {cvChoices.length > 0 && (
+          <div>
+            <label className="text-[11px] text-nv-text-muted block mb-1">Puissance fiscale</label>
+            <select className={inp} value={cv} onChange={e => setCv(Number(e.target.value))}>
+              {cvChoices.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+        )}
         <div>
           <label className="text-[11px] text-nv-text-muted block mb-1">Kilomètres du mois</label>
           <input className={inp} type="number" placeholder="ex : 850" value={km} onChange={e => setKm(e.target.value)} />

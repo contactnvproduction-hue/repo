@@ -12,7 +12,8 @@ const schema = z.object({
   year: z.number().int(),
   month: z.number().int().min(0).max(11),
   vehicle: z.string().optional(),
-  cv: z.number().int().min(3).max(7),
+  vehicleType: z.enum(['VOITURE', 'MOTO', 'CYCLOMOTEUR']).optional(),
+  cv: z.number().int().min(1).max(7),
   electric: z.boolean().optional(),
   km: z.number().min(0),
 })
@@ -34,12 +35,23 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
   const d = parsed.data
   const vehicle = d.vehicle?.trim() || 'Véhicule'
+  const vehicleType = d.vehicleType ?? 'VOITURE'
   const entry = await db.mileageEntry.upsert({
     where: { userId_vehicle_year_month: { userId: d.userId, vehicle, year: d.year, month: d.month } },
-    update: { cv: d.cv, electric: !!d.electric, km: d.km, userName: d.userName ?? null },
-    create: { userId: d.userId, userName: d.userName ?? null, year: d.year, month: d.month, vehicle, cv: d.cv, electric: !!d.electric, km: d.km },
+    update: { vehicleType, cv: d.cv, electric: !!d.electric, km: d.km, userName: d.userName ?? null },
+    create: { userId: d.userId, userName: d.userName ?? null, year: d.year, month: d.month, vehicle, vehicleType, cv: d.cv, electric: !!d.electric, km: d.km },
   })
   return NextResponse.json(entry, { status: 201 })
+}
+
+// Toggle « versée » (ou autre champ ponctuel)
+export async function PATCH(req: NextRequest) {
+  const session = await auth()
+  if (!session?.user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  const b = await req.json().catch(() => ({}))
+  if (!b.id) return NextResponse.json({ error: 'id requis' }, { status: 400 })
+  const entry = await db.mileageEntry.update({ where: { id: b.id }, data: { ...(b.paid !== undefined && { paid: !!b.paid }) } })
+  return NextResponse.json(entry)
 }
 
 export async function DELETE(req: NextRequest) {

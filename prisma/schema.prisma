@@ -638,10 +638,12 @@ model MileageEntry {
   userName  String?
   year      Int
   month     Int      // 0-11
-  vehicle   String   @default("Véhicule")
-  cv        Int      @default(5)   // puissance fiscale
-  electric  Boolean  @default(false)
-  km        Float    @default(0)
+  vehicle     String   @default("Véhicule")
+  vehicleType String   @default("VOITURE") // VOITURE | MOTO | CYCLOMOTEUR
+  cv          Int      @default(5)   // puissance fiscale (ignoré pour cyclomoteur)
+  electric    Boolean  @default(false)
+  km          Float    @default(0)
+  paid        Boolean  @default(false) // indemnité mensuelle effectivement versée
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
