@@ -1,17 +1,23 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
-import { Play, Square, Clock, X, Check, Loader2, Trash2, PieChart } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { Play, Square, Clock, X, Check, Loader2, Trash2, PieChart, Tag, Plus } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 type Person = { id: string; name: string }
 type Entry = { id: string; userId: string; userName: string | null; startAt: string; endAt: string | null; durationSec: number; pole: string | null; task: string | null }
 
-// Pôles de travail de l'agence (cartographie du temps). Ajustables au besoin.
-const POLES = ['Montage', 'Tournage', 'Production', 'Commercial', 'Gestion / Admin', 'Contenu & stratégie', 'Relation client', 'Autre']
-const POLE_COLOR: Record<string, string> = {
+// Liste par défaut si aucune catégorie n'est encore configurée (éditable).
+export const DEFAULT_TIME_POLES = ['Montage', 'Tournage', 'Production', 'Commercial', 'Gestion / Admin', 'Contenu & stratégie', 'Relation client', 'Autre']
+const KNOWN_COLOR: Record<string, string> = {
   Montage: '#8b5cf6', Tournage: '#3b82f6', Production: '#e8b84b', Commercial: '#10b981',
   'Gestion / Admin': '#94a3b8', 'Contenu & stratégie': '#ec4899', 'Relation client': '#06b6d4', Autre: '#64748b',
+}
+const PALETTE = ['#8b5cf6', '#3b82f6', '#e8b84b', '#10b981', '#ec4899', '#06b6d4', '#ef4444', '#f59e0b', '#a855f7', '#14b8a6']
+const colorOf = (name: string) => {
+  if (KNOWN_COLOR[name]) return KNOWN_COLOR[name]
+  let h = 0; for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0
+  return PALETTE[h % PALETTE.length]
 }
 const PERIODS = [{ k: 'day', label: 'Jour' }, { k: 'week', label: 'Semaine' }, { k: 'month', label: 'Mois' }, { k: 'year', label: 'Année' }] as const
 type PeriodKey = typeof PERIODS[number]['k']
@@ -34,20 +40,23 @@ function periodStart(k: PeriodKey): number {
   return new Date(now.getFullYear(), 0, 1).getTime()
 }
 
-export function TimeTracker({ people, initialEntries }: { people: Person[]; initialEntries: Entry[] }) {
+export function TimeTracker({ people, initialEntries, initialPoles }: { people: Person[]; initialEntries: Entry[]; initialPoles: string[] }) {
   const [entries, setEntries] = useState<Entry[]>(initialEntries)
+  const [poles, setPoles] = useState<string[]>(initialPoles.length ? initialPoles : DEFAULT_TIME_POLES)
   const [selfId, setSelfId] = useState(people[0]?.id ?? '')
   const [period, setPeriod] = useState<PeriodKey>('week')
   const [tick, setTick] = useState(Date.now())
   const [stopFor, setStopFor] = useState<Entry | null>(null)
+  const [showPoles, setShowPoles] = useState(false)
   const [busy, setBusy] = useState(false)
+
+  const savePoles = async (next: string[]) => {
+    setPoles(next)
+    await fetch('/api/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ timePoles: next }) }).catch(() => {})
+  }
 
   // Tick chaque seconde pour le chrono en cours
   useEffect(() => { const t = setInterval(() => setTick(Date.now()), 1000); return () => clearInterval(t) }, [])
-
-  const refresh = useCallback(async () => {
-    const res = await fetch('/api/ceo/time'); if (res.ok) setEntries(await res.json())
-  }, [])
 
   const nameOf = (id: string) => people.find(p => p.id === id)?.name ?? 'Membre'
   const runningOf = (id: string) => entries.find(e => e.userId === id && !e.endAt) ?? null
@@ -99,6 +108,7 @@ export function TimeTracker({ people, initialEntries }: { people: Person[]; init
       <div className="px-4 py-3 border-b border-nv-border bg-nv-dark/40 flex items-center gap-2">
         <Clock size={15} className="text-primary" />
         <h2 className="text-sm font-semibold text-white">Pointage — temps de travail</h2>
+        <button onClick={() => setShowPoles(true)} className="ml-auto text-xs px-2.5 py-1 rounded-lg border border-nv-border text-nv-text-muted hover:text-white transition-colors flex items-center gap-1.5"><Tag size={12} /> Catégories</button>
       </div>
 
       <div className="p-4 space-y-4">
@@ -151,9 +161,9 @@ export function TimeTracker({ people, initialEntries }: { people: Person[]; init
             <div className="space-y-1.5">
               {byPole.map(([pole, sec]) => (
                 <div key={pole} className="flex items-center gap-2.5">
-                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: POLE_COLOR[pole] ?? '#64748b' }} />
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: colorOf(pole) }} />
                   <span className="text-xs text-nv-text w-32 truncate">{pole}</span>
-                  <div className="flex-1 h-2 rounded-full bg-nv-dark overflow-hidden"><div className="h-full rounded-full" style={{ width: `${totalSec > 0 ? (sec / totalSec) * 100 : 0}%`, backgroundColor: POLE_COLOR[pole] ?? '#64748b' }} /></div>
+                  <div className="flex-1 h-2 rounded-full bg-nv-dark overflow-hidden"><div className="h-full rounded-full" style={{ width: `${totalSec > 0 ? (sec / totalSec) * 100 : 0}%`, backgroundColor: colorOf(pole) }} /></div>
                   <span className="text-[11px] text-nv-text-muted tabular-nums w-16 text-right">{fmtDur(sec)}</span>
                 </div>
               ))}
@@ -177,7 +187,7 @@ export function TimeTracker({ people, initialEntries }: { people: Person[]; init
               {scoped.slice(0, 20).map(e => (
                 <div key={e.id} className="flex items-center gap-2 py-1 border-b border-nv-border/40">
                   <span className="text-nv-text-faint w-24 shrink-0">{new Date(e.startAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })} {new Date(e.startAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>
-                  {e.pole && <span className="px-1.5 py-0.5 rounded-full text-[10px] shrink-0" style={{ color: POLE_COLOR[e.pole] ?? '#94a3b8', backgroundColor: `${POLE_COLOR[e.pole] ?? '#94a3b8'}1f` }}>{e.pole}</span>}
+                  {e.pole && <span className="px-1.5 py-0.5 rounded-full text-[10px] shrink-0" style={{ color: colorOf(e.pole), backgroundColor: `${colorOf(e.pole)}1f` }}>{e.pole}</span>}
                   <span className="text-nv-text flex-1 min-w-0 truncate">{e.task || '—'}</span>
                   <span className="text-nv-text-muted tabular-nums shrink-0">{fmtDur(e.durationSec)}</span>
                   <button onClick={() => remove(e.id)} className="p-0.5 text-nv-text-faint hover:text-red-400 shrink-0"><Trash2 size={11} /></button>
@@ -188,12 +198,13 @@ export function TimeTracker({ people, initialEntries }: { people: Person[]; init
         )}
       </div>
 
-      {stopFor && <StopModal onClose={() => setStopFor(null)} onConfirm={confirmStop} busy={busy} elapsed={Math.max(0, Math.floor((Date.now() - new Date(stopFor.startAt).getTime()) / 1000))} />}
+      {stopFor && <StopModal poles={poles} onClose={() => setStopFor(null)} onConfirm={confirmStop} busy={busy} elapsed={Math.max(0, Math.floor((Date.now() - new Date(stopFor.startAt).getTime()) / 1000))} />}
+      {showPoles && <PolesManager poles={poles} onClose={() => setShowPoles(false)} onSave={savePoles} />}
     </div>
   )
 }
 
-function StopModal({ onClose, onConfirm, busy, elapsed }: { onClose: () => void; onConfirm: (pole: string, task: string) => void; busy: boolean; elapsed: number }) {
+function StopModal({ poles, onClose, onConfirm, busy, elapsed }: { poles: string[]; onClose: () => void; onConfirm: (pole: string, task: string) => void; busy: boolean; elapsed: number }) {
   const [pole, setPole] = useState('')
   const [task, setTask] = useState('')
   const inp = 'w-full bg-nv-black border border-nv-border rounded-lg px-3 py-2 text-sm text-white placeholder-nv-text-faint focus:outline-none focus:border-primary/60'
@@ -207,9 +218,9 @@ function StopModal({ onClose, onConfirm, busy, elapsed }: { onClose: () => void;
         <div>
           <label className="text-[11px] text-nv-text-muted block mb-1.5">Sur quel pôle ?</label>
           <div className="flex flex-wrap gap-1.5">
-            {POLES.map(p => (
+            {poles.map(p => (
               <button key={p} onClick={() => setPole(p)} className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${pole === p ? 'text-nv-black font-medium' : 'border-nv-border text-nv-text-muted hover:text-nv-text'}`}
-                style={pole === p ? { backgroundColor: POLE_COLOR[p], borderColor: POLE_COLOR[p] } : {}}>{p}</button>
+                style={pole === p ? { backgroundColor: colorOf(p), borderColor: colorOf(p) } : {}}>{p}</button>
             ))}
           </div>
         </div>
@@ -220,6 +231,42 @@ function StopModal({ onClose, onConfirm, busy, elapsed }: { onClose: () => void;
         <button onClick={() => onConfirm(pole, task)} disabled={busy} className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-primary text-nv-black rounded-lg font-medium disabled:opacity-60">
           {busy ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Enregistrer le pointage
         </button>
+      </div>
+    </div>
+  )
+}
+
+// Gestion des catégories de pointage (ajout / renommage / suppression)
+function PolesManager({ poles, onClose, onSave }: { poles: string[]; onClose: () => void; onSave: (next: string[]) => void }) {
+  const [list, setList] = useState<string[]>(poles)
+  const [newPole, setNewPole] = useState('')
+  const inp = 'w-full bg-nv-black border border-nv-border rounded-lg px-3 py-2 text-sm text-white placeholder-nv-text-faint focus:outline-none focus:border-primary/60'
+  const add = () => { const v = newPole.trim(); if (!v || list.includes(v)) return; setList([...list, v]); setNewPole('') }
+  const rename = (i: number, v: string) => setList(l => l.map((x, idx) => idx === i ? v : x))
+  const del = (i: number) => setList(l => l.filter((_, idx) => idx !== i))
+  const save = () => { onSave(list.map(s => s.trim()).filter(Boolean)); onClose(); toast.success('Catégories mises à jour') }
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)' }} onClick={onClose}>
+      <div className="w-full max-w-sm bg-nv-dark border border-nv-border rounded-2xl p-5 space-y-3 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-semibold text-white flex items-center gap-2"><Tag size={16} className="text-primary" /> Catégories de pointage</h3>
+          <button onClick={onClose}><X size={16} className="text-nv-text-muted" /></button>
+        </div>
+        <div className="space-y-1.5">
+          {list.map((p, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: colorOf(p) }} />
+              <input className={`${inp} flex-1`} value={p} onChange={e => rename(i, e.target.value)} />
+              <button onClick={() => del(i)} className="p-1.5 text-nv-text-faint hover:text-red-400"><Trash2 size={14} /></button>
+            </div>
+          ))}
+          {list.length === 0 && <p className="text-xs text-nv-text-faint">Aucune catégorie.</p>}
+        </div>
+        <div className="flex gap-2">
+          <input className={`${inp} flex-1`} placeholder="Nouvelle catégorie…" value={newPole} onChange={e => setNewPole(e.target.value)} onKeyDown={e => e.key === 'Enter' && add()} />
+          <button onClick={add} className="px-3 rounded-lg bg-nv-card border border-nv-border text-nv-text-muted hover:text-white"><Plus size={15} /></button>
+        </div>
+        <button onClick={save} className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-primary text-nv-black rounded-lg font-medium"><Check size={15} /> Enregistrer</button>
       </div>
     </div>
   )

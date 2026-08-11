@@ -79,22 +79,24 @@ export function CallAgenda({ leads }: { leads: Lead[] }) {
         })}
       </div>
 
-      {/* Détail du jour sélectionné */}
+      {/* Détail du jour — popover flottant (n'agrandit pas la page, montre TOUS les calls) */}
       {selDay && (
-        <div className="border-t border-nv-border pt-3">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-semibold text-white capitalize">{new Date(selDay + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
-            <button onClick={() => setSelDay(null)} className="text-nv-text-faint hover:text-white"><X size={14} /></button>
-          </div>
-          <div className="space-y-1.5">
-            {selCalls.map(c => (
-              <div key={c.id} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-nv-dark border border-nv-border">
-                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: c.showedUp ? '#10b981' : '#f59e0b' }} />
-                <span className="text-sm text-white truncate flex-1">{c.leadName}{c.company ? ` · ${c.company}` : ''}</span>
-                <span className="text-[11px] text-nv-text-faint">{new Date(c.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>
-                {c.qualified && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400">qualifié</span>}
-              </div>
-            ))}
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }} onClick={() => setSelDay(null)}>
+          <div className="w-full max-w-sm bg-nv-dark border border-nv-border rounded-2xl shadow-2xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-nv-border shrink-0">
+              <p className="text-sm font-semibold text-white capitalize">{new Date(selDay + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}<span className="text-[11px] text-nv-text-faint font-normal ml-2">{selCalls.length} call{selCalls.length > 1 ? 's' : ''}</span></p>
+              <button onClick={() => setSelDay(null)} className="text-nv-text-faint hover:text-white"><X size={16} /></button>
+            </div>
+            <div className="p-3 space-y-1.5 overflow-y-auto">
+              {selCalls.map(c => (
+                <div key={c.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-nv-card border border-nv-border">
+                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: c.showedUp ? '#10b981' : '#f59e0b' }} />
+                  <span className="text-sm text-white truncate flex-1">{c.leadName}{c.company ? ` · ${c.company}` : ''}</span>
+                  <span className="text-[11px] text-nv-text-faint shrink-0">{new Date(c.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>
+                  {c.qualified && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 shrink-0">qualifié</span>}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}

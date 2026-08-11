@@ -38,6 +38,7 @@ export default async function CeoPage() {
   let trackPeople = teamMembers.filter(u => wanted.some(w => norm(u.name).includes(w)))
   if (trackPeople.length === 0) trackPeople = teamMembers
   const timeInitial = (timeEntries as any[]).map(e => ({ id: e.id, userId: e.userId, userName: e.userName, startAt: new Date(e.startAt).toISOString(), endAt: e.endAt ? new Date(e.endAt).toISOString() : null, durationSec: e.durationSec, pole: e.pole, task: e.task }))
+  const timePoles = await (async () => { try { const s = await (prisma as any).agencySetting.findFirst({ select: { timePoles: true } }); return (s?.timePoles ?? []) as string[] } catch { return [] } })()
   const totalMeetings = meetings.length
   const upcoming = meetings.filter(m => new Date(m.date) >= now).length
   const allSteps = meetings.flatMap(m => m.actionSteps)
@@ -72,7 +73,7 @@ export default async function CeoPage() {
       </div>
 
       {/* Pointage — temps de travail (Noah, Maël, Chloé) */}
-      <TimeTracker people={trackPeople.map(u => ({ id: u.id, name: u.name }))} initialEntries={timeInitial} />
+      <TimeTracker people={trackPeople.map(u => ({ id: u.id, name: u.name }))} initialEntries={timeInitial} initialPoles={timePoles} />
 
       {/* Feedback interne — remarques & axes d'amélioration produit */}
       <ProductFeedbackBoard
