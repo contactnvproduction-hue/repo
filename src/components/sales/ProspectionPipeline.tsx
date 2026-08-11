@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import {
   Plus, X, Check, Loader2, Percent, Euro, Trash2, Settings2, Coins, ChevronRight, Search,
-  LayoutList, CalendarRange, Tag, Link2, MessageSquarePlus, AtSign, PartyPopper,
+  LayoutList, CalendarRange, Tag, Link2, MessageSquarePlus, AtSign, PartyPopper, PhoneCall,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -428,6 +428,8 @@ function LeadModal({ lead, commercials, settingStatuses, closerStatuses, onClose
   const [resLabel, setResLabel] = useState(''); const [resUrl, setResUrl] = useState('')
   const [notes, setNotes] = useState<Note[]>(lead.annotations || [])
   const [resources, setResources] = useState<Resource[]>(lead.resources || [])
+  const [callPrompt, setCallPrompt] = useState<{ id: string; name: string } | null>(null)
+  const [callDate, setCallDate] = useState(new Date().toISOString().slice(0, 10))
   const nowIso = () => new Date().toISOString()
   const firstCloser = closerStatuses.find(s => !s.isClosed)?.id ?? closerStatuses[0]?.id ?? null
 
@@ -440,7 +442,19 @@ function LeadModal({ lead, commercials, settingStatuses, closerStatuses, onClose
   const delResource = (i: number) => { const next = resources.filter((_, idx) => idx !== i); setResources(next); onPatch(lead.id, { resources: next }) }
 
   const setSetting = (id: string) => onPatch(lead.id, { prospectStatusId: id || null }, { settingStatusId: id || null, settingStatus: settingStatuses.find(s => s.id === id) ?? null })
-  const setCloser = (id: string) => onPatch(lead.id, { statusId: id || null }, { closerStatusId: id || null, closerStatus: closerStatuses.find(s => s.id === id) ?? null })
+  const setCloser = (id: string) => {
+    const st = closerStatuses.find(s => s.id === id)
+    onPatch(lead.id, { statusId: id || null }, { closerStatusId: id || null, closerStatus: st ?? null })
+    // Passer un lead en statut « call » (R1/R2/R3) propose d'ajouter le call
+    // correspondant dans le pipeline closing (crée un LeadCall daté).
+    if (st && !st.isClosed && /^r\d/i.test(st.name.trim())) { setCallDate(new Date().toISOString().slice(0, 10)); setCallPrompt({ id, name: st.name }) }
+  }
+  const confirmCall = () => {
+    const iso = callDate ? new Date(callDate).toISOString() : nowIso()
+    onPatch(lead.id, { rdvBookedAt: nowIso(), rdvDate: iso }, { rdvBookedAt: nowIso(), rdvDate: iso })
+    toast.success(`Call ${callPrompt?.name} ajouté au closing`)
+    setCallPrompt(null)
+  }
 
   return (
     <Overlay onClose={onClose}>
@@ -461,6 +475,20 @@ function LeadModal({ lead, commercials, settingStatuses, closerStatuses, onClose
           <select className={inp} value={lead.closerStatusId ?? ''} onChange={e => setCloser(e.target.value)}><option value="">—</option>{closerStatuses.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
         </div>
       </div>
+
+      {callPrompt && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }} onClick={() => setCallPrompt(null)}>
+          <div className="w-full max-w-xs bg-nv-dark border border-nv-border rounded-2xl p-4 space-y-3" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2"><PhoneCall size={15} className="text-primary" /><h4 className="text-sm font-semibold text-white">Ajouter le call {callPrompt.name} au closing ?</h4></div>
+            <p className="text-[11px] text-nv-text-muted">Ce call apparaîtra dans le pipeline closing à la date choisie.</p>
+            <div><label className="text-[11px] text-nv-text-muted block mb-1">Date du call</label><input type="date" className={inp} value={callDate} onChange={e => setCallDate(e.target.value)} /></div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setCallPrompt(null)} className="px-3 py-2 text-xs border border-nv-border rounded-lg text-nv-text-muted hover:text-white">Plus tard</button>
+              <button onClick={confirmCall} className="px-3 py-2 text-xs bg-primary text-nv-black rounded-lg font-medium flex items-center gap-1"><Check size={13} /> Ajouter le call</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-nv-text bg-nv-black border border-nv-border rounded-lg px-3 py-2.5">
         <input type="checkbox" checked={lead.isExistingClient} onChange={e => onPatch(lead.id, { isExistingClient: e.target.checked })} className="w-4 h-4 accent-[#3b82f6]" />

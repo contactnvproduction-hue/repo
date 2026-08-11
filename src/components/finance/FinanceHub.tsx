@@ -28,7 +28,7 @@ type Synthese = {
 }
 type CaData = { year: number; caYear: number; caLastYear: number; monthlyCa: number[]; topClients: { id: string; name: string; total: number }[] }
 type ChargesData = { poles: ExpensePole[]; currentMonthKey: string; allExpenses: any[]; salariesByMonth: Record<string, number>; salariesYear: number; expensesYear: number; recurring: { id: string; amount: number; description: string; pole: string | null }[] }
-type Investment = { id: string; month: string; label: string; pole: string | null; amount: number; done: boolean; notes: string | null }
+type Investment = { id: string; month: string; label: string; pole: string | null; amount: number; done: boolean; recurring: boolean; notes: string | null }
 type MileageEntry = { id: string; userId: string; userName: string | null; year: number; month: number; vehicle: string; vehicleType: string; cv: number; electric: boolean; km: number; paid: boolean }
 type MileageData = { year: number; members: { id: string; name: string }[]; entries: MileageEntry[] }
 

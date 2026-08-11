@@ -12,7 +12,7 @@ export default async function ComptaPage() {
   const session = await auth()
   if (!session?.user) return null
 
-  const forecast = await computeSalesForecast(prisma as any, 6)
+  const forecast = await computeSalesForecast(prisma as any, 12)
 
   return (
     <div className="space-y-6 animate-fade-in">

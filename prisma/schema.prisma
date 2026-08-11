@@ -547,6 +547,7 @@ model InvestmentPlan {
   pole      String?  // pôle / catégorie
   amount    Float
   done      Boolean  @default(false) // investissement réalisé
+  recurring Boolean  @default(false) // récurrent (abonnement, location…) → chaque mois à partir de son mois de départ
   notes     String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

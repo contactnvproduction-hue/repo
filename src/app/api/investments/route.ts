@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
         month: String(b.month), label: b.label.trim(),
         pole: b.pole?.trim() || null,
         amount: Number(b.amount) || 0,
-        done: b.done === true, notes: b.notes?.trim() || null,
+        done: b.done === true, recurring: b.recurring === true, notes: b.notes?.trim() || null,
       },
     })
     return NextResponse.json(plan, { status: 201 })
