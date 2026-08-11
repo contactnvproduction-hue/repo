@@ -1,8 +1,9 @@
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
-import { Briefcase, TrendingUp, CheckCircle2, Calendar, ExternalLink, MessageSquare, LayoutDashboard } from 'lucide-react'
+import { Briefcase, TrendingUp, CheckCircle2, Calendar } from 'lucide-react'
 import { CeoManager } from '@/components/ceo/CeoManager'
 import { ProductFeedbackBoard } from '@/components/ceo/ProductFeedbackBoard'
+import { TimeTracker } from '@/components/ceo/TimeTracker'
 
 export default async function CeoPage() {
   const session = await auth()
@@ -29,6 +30,14 @@ export default async function CeoPage() {
   const feedback = await (async () => { try { return await (prisma as any).productFeedback.findMany({ orderBy: { createdAt: 'desc' } }) } catch { return [] } })()
 
   const now = new Date()
+
+  // Pointage : Noah, Maël, Chloé (repérés par leur nom ; sinon toute l'équipe)
+  const timeEntries = await (async () => { try { return await (prisma as any).timeEntry.findMany({ where: { OR: [{ startAt: { gte: new Date(now.getFullYear(), 0, 1) } }, { endAt: null }] }, orderBy: { startAt: 'desc' } }) } catch { return [] } })()
+  const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  const wanted = ['noah', 'mael', 'chloe']
+  let trackPeople = teamMembers.filter(u => wanted.some(w => norm(u.name).includes(w)))
+  if (trackPeople.length === 0) trackPeople = teamMembers
+  const timeInitial = (timeEntries as any[]).map(e => ({ id: e.id, userId: e.userId, userName: e.userName, startAt: new Date(e.startAt).toISOString(), endAt: e.endAt ? new Date(e.endAt).toISOString() : null, durationSec: e.durationSec, pole: e.pole, task: e.task }))
   const totalMeetings = meetings.length
   const upcoming = meetings.filter(m => new Date(m.date) >= now).length
   const allSteps = meetings.flatMap(m => m.actionSteps)
@@ -60,31 +69,12 @@ export default async function CeoPage() {
           </h1>
           <p className="text-sm text-nv-text-muted mt-1">Pilotage stratégique — réunions, sujets & actions</p>
         </div>
-        <div className="flex items-center gap-2">
-          <a
-            href="https://nvp-feedback.netlify.app"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 px-3 py-2 rounded-lg border border-nv-border bg-nv-card text-sm text-nv-text-muted hover:text-white hover:border-nv-border-light transition-colors"
-          >
-            <MessageSquare size={14} className="text-primary" />
-            Formulaire client
-            <ExternalLink size={11} className="opacity-50" />
-          </a>
-          <a
-            href="https://nvp-feedback.netlify.app/admin"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 px-3 py-2 rounded-lg border border-primary/30 bg-primary/10 text-sm text-primary hover:bg-primary/20 transition-colors"
-          >
-            <LayoutDashboard size={14} />
-            Dashboard feedbacks
-            <ExternalLink size={11} className="opacity-50" />
-          </a>
-        </div>
       </div>
 
-      {/* Feedback interne — remarques & axes d'amélioration produit (en premier) */}
+      {/* Pointage — temps de travail (Noah, Maël, Chloé) */}
+      <TimeTracker people={trackPeople.map(u => ({ id: u.id, name: u.name }))} initialEntries={timeInitial} />
+
+      {/* Feedback interne — remarques & axes d'amélioration produit */}
       <ProductFeedbackBoard
         initialFeedback={(feedback ?? []).map((x: any) => ({
           id: x.id,

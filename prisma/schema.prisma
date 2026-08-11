@@ -1227,6 +1227,25 @@ model RecurringCall {
   @@map("recurring_calls")
 }
 
+// Pointage / suivi du temps de travail (espace CEO). On lance un timer (startAt,
+// endAt null = en cours), on l'arrête en renseignant le pôle + la tâche. Les
+// durées se cumulent par personne / pôle / période.
+model TimeEntry {
+  id          String    @id @default(cuid())
+  userId      String
+  userName    String?
+  startAt     DateTime  @default(now())
+  endAt       DateTime?
+  durationSec Int       @default(0)
+  pole        String?
+  task        String?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+  @@index([startAt])
+  @@map("time_entries")
+}
+
 // Feedback interne sur le produit/l'agence : remarques & axes d'amélioration,
 // avec personnes taguées (→ notification) et statut de traitement.
 model ProductFeedback {

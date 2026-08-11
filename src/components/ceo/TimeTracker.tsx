@@ -1,0 +1,226 @@
+'use client'
+
+import { useState, useEffect, useMemo, useCallback } from 'react'
+import { Play, Square, Clock, X, Check, Loader2, Trash2, PieChart } from 'lucide-react'
+import toast from 'react-hot-toast'
+
+type Person = { id: string; name: string }
+type Entry = { id: string; userId: string; userName: string | null; startAt: string; endAt: string | null; durationSec: number; pole: string | null; task: string | null }
+
+// Pôles de travail de l'agence (cartographie du temps). Ajustables au besoin.
+const POLES = ['Montage', 'Tournage', 'Production', 'Commercial', 'Gestion / Admin', 'Contenu & stratégie', 'Relation client', 'Autre']
+const POLE_COLOR: Record<string, string> = {
+  Montage: '#8b5cf6', Tournage: '#3b82f6', Production: '#e8b84b', Commercial: '#10b981',
+  'Gestion / Admin': '#94a3b8', 'Contenu & stratégie': '#ec4899', 'Relation client': '#06b6d4', Autre: '#64748b',
+}
+const PERIODS = [{ k: 'day', label: 'Jour' }, { k: 'week', label: 'Semaine' }, { k: 'month', label: 'Mois' }, { k: 'year', label: 'Année' }] as const
+type PeriodKey = typeof PERIODS[number]['k']
+
+const fmtDur = (sec: number) => {
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60)
+  if (h === 0 && m === 0) return sec > 0 ? `${sec}s` : '0'
+  return `${h > 0 ? `${h}h ` : ''}${m}min`
+}
+const clock = (sec: number) => {
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+}
+
+function periodStart(k: PeriodKey): number {
+  const now = new Date()
+  if (k === 'day') return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  if (k === 'week') { const d = new Date(now.getFullYear(), now.getMonth(), now.getDate()); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d.getTime() }
+  if (k === 'month') return new Date(now.getFullYear(), now.getMonth(), 1).getTime()
+  return new Date(now.getFullYear(), 0, 1).getTime()
+}
+
+export function TimeTracker({ people, initialEntries }: { people: Person[]; initialEntries: Entry[] }) {
+  const [entries, setEntries] = useState<Entry[]>(initialEntries)
+  const [selfId, setSelfId] = useState(people[0]?.id ?? '')
+  const [period, setPeriod] = useState<PeriodKey>('week')
+  const [tick, setTick] = useState(Date.now())
+  const [stopFor, setStopFor] = useState<Entry | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  // Tick chaque seconde pour le chrono en cours
+  useEffect(() => { const t = setInterval(() => setTick(Date.now()), 1000); return () => clearInterval(t) }, [])
+
+  const refresh = useCallback(async () => {
+    const res = await fetch('/api/ceo/time'); if (res.ok) setEntries(await res.json())
+  }, [])
+
+  const nameOf = (id: string) => people.find(p => p.id === id)?.name ?? 'Membre'
+  const runningOf = (id: string) => entries.find(e => e.userId === id && !e.endAt) ?? null
+  const selfRunning = runningOf(selfId)
+  const elapsed = selfRunning ? Math.max(0, Math.floor((tick - new Date(selfRunning.startAt).getTime()) / 1000)) : 0
+
+  const start = async () => {
+    if (!selfId) { toast.error('Choisis qui pointe'); return }
+    setBusy(true)
+    try {
+      const res = await fetch('/api/ceo/time', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: selfId, userName: nameOf(selfId) }) })
+      if (!res.ok) throw new Error()
+      const e = await res.json()
+      setEntries(list => [e, ...list.filter(x => x.id !== e.id)])
+      toast.success('Timer lancé')
+    } catch { toast.error('Erreur') } finally { setBusy(false) }
+  }
+  const askStop = () => { if (selfRunning) setStopFor(selfRunning) }
+  const confirmStop = async (pole: string, task: string) => {
+    if (!stopFor) return
+    setBusy(true)
+    try {
+      const res = await fetch('/api/ceo/time', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: stopFor.id, pole, task }) })
+      if (!res.ok) throw new Error()
+      const e = await res.json()
+      setEntries(list => list.map(x => x.id === e.id ? e : x))
+      setStopFor(null); toast.success(`Pointage enregistré · ${fmtDur(e.durationSec)}`)
+    } catch { toast.error('Erreur') } finally { setBusy(false) }
+  }
+  const remove = async (id: string) => {
+    setEntries(list => list.filter(e => e.id !== id))
+    await fetch(`/api/ceo/time?id=${id}`, { method: 'DELETE' })
+  }
+
+  // Résumé de la personne sélectionnée pour la période
+  const from = periodStart(period)
+  const scoped = useMemo(() => entries.filter(e => e.endAt && e.userId === selfId && new Date(e.startAt).getTime() >= from), [entries, selfId, from])
+  const totalSec = scoped.reduce((s, e) => s + e.durationSec, 0)
+  const byPole = useMemo(() => {
+    const m: Record<string, number> = {}
+    for (const e of scoped) { const p = e.pole || 'Autre'; m[p] = (m[p] ?? 0) + e.durationSec }
+    return Object.entries(m).sort((a, b) => b[1] - a[1])
+  }, [scoped])
+  // Totaux par personne (période) — vue d'ensemble des 3
+  const perPerson = people.map(p => ({ p, sec: entries.filter(e => e.endAt && e.userId === p.id && new Date(e.startAt).getTime() >= from).reduce((s, e) => s + e.durationSec, 0) }))
+
+  return (
+    <div className="bg-nv-card border border-nv-border rounded-2xl overflow-hidden">
+      <div className="px-4 py-3 border-b border-nv-border bg-nv-dark/40 flex items-center gap-2">
+        <Clock size={15} className="text-primary" />
+        <h2 className="text-sm font-semibold text-white">Pointage — temps de travail</h2>
+      </div>
+
+      <div className="p-4 space-y-4">
+        {/* Qui pointe */}
+        <div className="flex gap-1.5 flex-wrap">
+          {people.map(p => {
+            const run = runningOf(p.id)
+            return (
+              <button key={p.id} onClick={() => setSelfId(p.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors flex items-center gap-1.5 ${selfId === p.id ? 'border-primary bg-primary/10 text-primary' : 'border-nv-border text-nv-text-muted hover:text-white'}`}>
+                {run && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
+                {p.name}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Chrono */}
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-nv-border bg-nv-dark p-4 flex-wrap">
+          <div>
+            <p className="text-[11px] uppercase tracking-wider text-nv-text-faint font-semibold">{nameOf(selfId)}{selfRunning ? ' · en cours' : ''}</p>
+            <p className={`text-3xl font-bold tabular-nums ${selfRunning ? 'text-emerald-400' : 'text-nv-text-faint'}`}>{clock(elapsed)}</p>
+          </div>
+          {selfRunning ? (
+            <button onClick={askStop} disabled={busy} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-red-500/15 border border-red-500/40 text-red-300 font-semibold hover:bg-red-500/25 transition-colors disabled:opacity-60">
+              <Square size={16} /> Arrêter
+            </button>
+          ) : (
+            <button onClick={start} disabled={busy} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 font-semibold hover:bg-emerald-500/25 transition-colors disabled:opacity-60">
+              {busy ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />} Lancer le timer
+            </button>
+          )}
+        </div>
+
+        {/* Résumé */}
+        <div>
+          <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+            <div className="flex gap-0.5 bg-nv-dark border border-nv-border rounded-lg p-0.5">
+              {PERIODS.map(p => (
+                <button key={p.k} onClick={() => setPeriod(p.k)} className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${period === p.k ? 'bg-primary text-nv-black' : 'text-nv-text-muted hover:text-nv-text'}`}>{p.label}</button>
+              ))}
+            </div>
+            <span className="text-sm font-bold text-white tabular-nums">{fmtDur(totalSec)}<span className="text-[11px] text-nv-text-faint font-normal"> · {nameOf(selfId)}</span></span>
+          </div>
+
+          {/* Cartographie par pôle */}
+          {byPole.length === 0 ? (
+            <p className="text-xs text-nv-text-faint text-center py-4 border border-dashed border-nv-border rounded-xl">Aucun temps pointé sur cette période.</p>
+          ) : (
+            <div className="space-y-1.5">
+              {byPole.map(([pole, sec]) => (
+                <div key={pole} className="flex items-center gap-2.5">
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: POLE_COLOR[pole] ?? '#64748b' }} />
+                  <span className="text-xs text-nv-text w-32 truncate">{pole}</span>
+                  <div className="flex-1 h-2 rounded-full bg-nv-dark overflow-hidden"><div className="h-full rounded-full" style={{ width: `${totalSec > 0 ? (sec / totalSec) * 100 : 0}%`, backgroundColor: POLE_COLOR[pole] ?? '#64748b' }} /></div>
+                  <span className="text-[11px] text-nv-text-muted tabular-nums w-16 text-right">{fmtDur(sec)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Vue d'ensemble par personne */}
+          <div className="flex items-center gap-3 mt-3 pt-3 border-t border-nv-border/60 flex-wrap">
+            <span className="text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold flex items-center gap-1"><PieChart size={11} /> {PERIODS.find(p => p.k === period)?.label}</span>
+            {perPerson.map(x => (
+              <span key={x.p.id} className="text-xs text-nv-text-muted">{x.p.name} <span className="text-white font-semibold tabular-nums">{fmtDur(x.sec)}</span></span>
+            ))}
+          </div>
+        </div>
+
+        {/* Derniers pointages de la personne */}
+        {scoped.length > 0 && (
+          <details className="text-xs">
+            <summary className="cursor-pointer text-nv-text-muted hover:text-white select-none">Détail des pointages ({scoped.length})</summary>
+            <div className="mt-2 space-y-1">
+              {scoped.slice(0, 20).map(e => (
+                <div key={e.id} className="flex items-center gap-2 py-1 border-b border-nv-border/40">
+                  <span className="text-nv-text-faint w-24 shrink-0">{new Date(e.startAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })} {new Date(e.startAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>
+                  {e.pole && <span className="px-1.5 py-0.5 rounded-full text-[10px] shrink-0" style={{ color: POLE_COLOR[e.pole] ?? '#94a3b8', backgroundColor: `${POLE_COLOR[e.pole] ?? '#94a3b8'}1f` }}>{e.pole}</span>}
+                  <span className="text-nv-text flex-1 min-w-0 truncate">{e.task || '—'}</span>
+                  <span className="text-nv-text-muted tabular-nums shrink-0">{fmtDur(e.durationSec)}</span>
+                  <button onClick={() => remove(e.id)} className="p-0.5 text-nv-text-faint hover:text-red-400 shrink-0"><Trash2 size={11} /></button>
+                </div>
+              ))}
+            </div>
+          </details>
+        )}
+      </div>
+
+      {stopFor && <StopModal onClose={() => setStopFor(null)} onConfirm={confirmStop} busy={busy} elapsed={Math.max(0, Math.floor((Date.now() - new Date(stopFor.startAt).getTime()) / 1000))} />}
+    </div>
+  )
+}
+
+function StopModal({ onClose, onConfirm, busy, elapsed }: { onClose: () => void; onConfirm: (pole: string, task: string) => void; busy: boolean; elapsed: number }) {
+  const [pole, setPole] = useState('')
+  const [task, setTask] = useState('')
+  const inp = 'w-full bg-nv-black border border-nv-border rounded-lg px-3 py-2 text-sm text-white placeholder-nv-text-faint focus:outline-none focus:border-primary/60'
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)' }} onClick={onClose}>
+      <div className="w-full max-w-sm bg-nv-dark border border-nv-border rounded-2xl p-5 space-y-3" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-semibold text-white">Fin de session · {fmtDur(elapsed)}</h3>
+          <button onClick={onClose}><X size={16} className="text-nv-text-muted" /></button>
+        </div>
+        <div>
+          <label className="text-[11px] text-nv-text-muted block mb-1.5">Sur quel pôle ?</label>
+          <div className="flex flex-wrap gap-1.5">
+            {POLES.map(p => (
+              <button key={p} onClick={() => setPole(p)} className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${pole === p ? 'text-nv-black font-medium' : 'border-nv-border text-nv-text-muted hover:text-nv-text'}`}
+                style={pole === p ? { backgroundColor: POLE_COLOR[p], borderColor: POLE_COLOR[p] } : {}}>{p}</button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <label className="text-[11px] text-nv-text-muted block mb-1">Quelle tâche as-tu réalisée ?</label>
+          <textarea className={`${inp} resize-none`} rows={2} placeholder="Ex : montage vidéo Yanis, prospection, réunion client…" value={task} onChange={e => setTask(e.target.value)} autoFocus />
+        </div>
+        <button onClick={() => onConfirm(pole, task)} disabled={busy} className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-primary text-nv-black rounded-lg font-medium disabled:opacity-60">
+          {busy ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Enregistrer le pointage
+        </button>
+      </div>
+    </div>
+  )
+}
