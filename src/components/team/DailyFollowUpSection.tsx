@@ -30,18 +30,26 @@ interface Props {
 }
 
 const TYPE_LABELS: Record<string, string> = {
+  // Options actuelles
+  montage: 'Montage projet',
+  relance_retours: 'Relance retours / éléments',
+  attente_demarrage: 'Attente infos de démarrage',
+  pas_de_projet: 'Aucun projet en cours',
+  // Anciennes (historique)
   relance_client: 'Relance client',
   avancement_livrable: 'Avancement livrables',
   avancement_projet: 'Avancement projet',
   relance_elements: 'Relance éléments',
-  pas_de_projet: 'Pas de projet en cours',
 }
 const TYPE_EMOJI: Record<string, string> = {
+  montage: '🎬',
+  relance_retours: '📩',
+  attente_demarrage: '⏳',
+  pas_de_projet: '🌙',
   relance_client: '📞',
   avancement_livrable: '🎬',
   avancement_projet: '📊',
   relance_elements: '📎',
-  pas_de_projet: '🌙',
 }
 
 function MemberHistoryModal({ member, onClose }: { member: Member; onClose: () => void }) {

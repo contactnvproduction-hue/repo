@@ -3,7 +3,12 @@ import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { z } from 'zod'
 
-const FOLLOW_UP_TYPES = ['relance_client', 'avancement_livrable', 'avancement_projet', 'relance_elements', 'pas_de_projet'] as const
+const FOLLOW_UP_TYPES = [
+  // Options actuelles
+  'montage', 'relance_retours', 'attente_demarrage', 'pas_de_projet',
+  // Anciennes options (compat. historique)
+  'relance_client', 'avancement_livrable', 'avancement_projet', 'relance_elements',
+] as const
 
 const createSchema = z.object({
   memberName: z.string().min(1),

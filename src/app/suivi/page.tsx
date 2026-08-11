@@ -5,10 +5,9 @@ import { CheckCircle2, Loader2, Plus, ChevronDown, X, Moon } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const FOLLOW_UP_TYPES = [
-  { id: 'relance_client', label: 'Relance / check-in client', emoji: '📞' },
-  { id: 'avancement_livrable', label: 'Update avancement livrables', emoji: '🎬' },
-  { id: 'avancement_projet', label: 'Update avancement projet', emoji: '📊' },
-  { id: 'relance_elements', label: 'Relance éléments en attente', emoji: '📎' },
+  { id: 'montage', label: 'Montage projet', emoji: '🎬', desc: 'Je travaille sur le montage / la production des livrables' },
+  { id: 'relance_retours', label: 'Relance obtention de retours / éléments projet', emoji: '📩', desc: 'Je relance le client pour obtenir ses retours ou des éléments manquants' },
+  { id: 'attente_demarrage', label: 'Attente informations de démarrage', emoji: '⏳', desc: 'En attente des infos nécessaires pour lancer le projet' },
 ]
 
 type Member = { id: string; name: string; role: string }
@@ -181,8 +180,8 @@ export default function SuiviPage() {
             {noProject && <CheckCircle2 size={12} color="#000" />}
           </div>
           <div className="flex-1">
-            <span className="text-sm flex items-center gap-1.5"><Moon size={13} /> Pas de projet en cours</span>
-            <span className="block text-[11px] text-white/35 mt-0.5">Je pointe quand même — aucun client à relancer aujourd&apos;hui</span>
+            <span className="text-sm flex items-center gap-1.5"><Moon size={13} /> Aucun projet en cours avec l&apos;agence</span>
+            <span className="block text-[11px] text-white/35 mt-0.5">Je pointe quand même — aucun projet actif à suivre aujourd&apos;hui</span>
           </div>
         </button>
 
@@ -237,20 +236,23 @@ export default function SuiviPage() {
                   key={t.id}
                   type="button"
                   onClick={() => toggleType(t.id)}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-left transition-all"
+                  className="w-full flex items-start gap-3 px-4 py-3 rounded-xl border text-left transition-all"
                   style={checked
                     ? { background: 'rgba(232,184,75,0.08)', borderColor: 'rgba(232,184,75,0.35)', color: '#fff' }
                     : { background: 'rgba(255,255,255,0.03)', borderColor: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.55)' }
                   }
                 >
-                  <div className="w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-all"
+                  <div className="w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-all mt-0.5"
                     style={checked
                       ? { background: '#e8b84b', borderColor: '#e8b84b' }
                       : { background: 'transparent', borderColor: 'rgba(255,255,255,0.2)' }
                     }>
                     {checked && <CheckCircle2 size={12} color="#000" />}
                   </div>
-                  <span className="text-sm">{t.emoji} {t.label}</span>
+                  <div className="flex-1">
+                    <span className="text-sm block">{t.emoji} {t.label}</span>
+                    <span className="block text-[11px] text-white/35 mt-0.5">{t.desc}</span>
+                  </div>
                 </button>
               )
             })}
