@@ -4,6 +4,7 @@ import { Briefcase, TrendingUp, CheckCircle2, Calendar } from 'lucide-react'
 import { CeoManager } from '@/components/ceo/CeoManager'
 import { ProductFeedbackBoard } from '@/components/ceo/ProductFeedbackBoard'
 import { TimeTracker } from '@/components/ceo/TimeTracker'
+import { CeoTabs } from '@/components/ceo/CeoTabs'
 
 export default async function CeoPage() {
   const session = await auth()
@@ -72,49 +73,45 @@ export default async function CeoPage() {
         </div>
       </div>
 
-      {/* Pointage — temps de travail (Noah, Maël, Chloé) */}
-      <TimeTracker people={trackPeople.map(u => ({ id: u.id, name: u.name }))} initialEntries={timeInitial} initialPoles={timePoles} />
-
-      {/* Feedback interne — remarques & axes d'amélioration produit */}
-      <ProductFeedbackBoard
-        initialFeedback={(feedback ?? []).map((x: any) => ({
-          id: x.id,
-          title: x.title,
-          content: x.content,
-          category: x.category,
-          status: x.status,
-          clientId: x.clientId ?? null,
-          clientName: x.clientName ?? null,
-          authorName: x.authorName,
-          assignedTo: x.assignedTo ?? [],
-          createdAt: x.createdAt.toISOString(),
-        }))}
-        teamMembers={teamMembers}
-        clients={clients}
-        currentUserId={session.user.id}
+      {/* Sous-onglets : Pointage · Feedback · Réunions (espace CEO compartimenté) */}
+      <CeoTabs
+        pointage={<TimeTracker people={trackPeople.map(u => ({ id: u.id, name: u.name }))} initialEntries={timeInitial} initialPoles={timePoles} />}
+        feedback={
+          <ProductFeedbackBoard
+            initialFeedback={(feedback ?? []).map((x: any) => ({
+              id: x.id, title: x.title, content: x.content, category: x.category, status: x.status,
+              clientId: x.clientId ?? null, clientName: x.clientName ?? null,
+              authorName: x.authorName, assignedTo: x.assignedTo ?? [], createdAt: x.createdAt.toISOString(),
+            }))}
+            teamMembers={teamMembers}
+            clients={clients}
+            currentUserId={session.user.id}
+          />
+        }
+        reunions={
+          <div className="space-y-5">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-nv-card border border-nv-border rounded-xl p-4">
+                <div className="flex items-center gap-2 text-nv-text-muted text-xs mb-2"><Calendar size={13} />Réunions à venir</div>
+                <p className="text-xl font-bold text-white">{upcoming}</p>
+              </div>
+              <div className="bg-nv-card border border-nv-border rounded-xl p-4">
+                <div className="flex items-center gap-2 text-nv-text-muted text-xs mb-2"><Briefcase size={13} />Total réunions</div>
+                <p className="text-xl font-bold text-white">{totalMeetings}</p>
+              </div>
+              <div className="bg-nv-card border border-nv-border rounded-xl p-4">
+                <div className="flex items-center gap-2 text-nv-text-muted text-xs mb-2"><TrendingUp size={13} />Sujets abordés</div>
+                <p className="text-xl font-bold text-white">{totalTopics}</p>
+              </div>
+              <div className="bg-nv-card border border-nv-border rounded-xl p-4">
+                <div className="flex items-center gap-2 text-nv-text-muted text-xs mb-2"><CheckCircle2 size={13} />Actions réalisées</div>
+                <p className="text-xl font-bold text-emerald-400">{doneSteps}<span className="text-nv-text-muted text-sm font-normal">/{allSteps.length}</span></p>
+              </div>
+            </div>
+            <CeoManager initialMeetings={serialized} teamMembers={teamMembers} availableTasks={availableTasks} />
+          </div>
+        }
       />
-
-      {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-nv-card border border-nv-border rounded-xl p-4">
-          <div className="flex items-center gap-2 text-nv-text-muted text-xs mb-2"><Calendar size={13} />Réunions à venir</div>
-          <p className="text-xl font-bold text-white">{upcoming}</p>
-        </div>
-        <div className="bg-nv-card border border-nv-border rounded-xl p-4">
-          <div className="flex items-center gap-2 text-nv-text-muted text-xs mb-2"><Briefcase size={13} />Total réunions</div>
-          <p className="text-xl font-bold text-white">{totalMeetings}</p>
-        </div>
-        <div className="bg-nv-card border border-nv-border rounded-xl p-4">
-          <div className="flex items-center gap-2 text-nv-text-muted text-xs mb-2"><TrendingUp size={13} />Sujets abordés</div>
-          <p className="text-xl font-bold text-white">{totalTopics}</p>
-        </div>
-        <div className="bg-nv-card border border-nv-border rounded-xl p-4">
-          <div className="flex items-center gap-2 text-nv-text-muted text-xs mb-2"><CheckCircle2 size={13} />Actions réalisées</div>
-          <p className="text-xl font-bold text-emerald-400">{doneSteps}<span className="text-nv-text-muted text-sm font-normal">/{allSteps.length}</span></p>
-        </div>
-      </div>
-
-      <CeoManager initialMeetings={serialized} teamMembers={teamMembers} availableTasks={availableTasks} />
     </div>
   )
 }

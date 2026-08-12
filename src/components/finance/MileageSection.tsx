@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { Car, Plus, X, Check, Loader2, Trash2, Users, Zap } from 'lucide-react'
+import { Car, Plus, X, Check, Loader2, Trash2, Users, Zap, Wallet } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { VEHICLE_TYPES, cvOptions, annualIndemnity, monthlyIndemnity, type VehicleType } from '@/lib/mileage'
 
@@ -58,6 +58,15 @@ export function MileageSection({ initialEntries, members, year: initialYear }: {
   const monthTotal = entries.filter(e => e.month === selMonth).reduce((s, e) => s + indemOf(e), 0)
   const yearTotal = entries.reduce((s, e) => s + indemOf(e), 0)
   const perAssociate = monthTotal / 2
+  // Cash out : indemnités déjà versées vs restant à verser
+  const paidTotal = entries.filter(e => e.paid).reduce((s, e) => s + indemOf(e), 0)
+  const unpaidTotal = Math.max(0, yearTotal - paidTotal)
+  // Sous-total par mois pour un membre (détail des trajets → total du mois)
+  const monthsOf = (list: Entry[]) => {
+    const m = new Map<number, Entry[]>()
+    for (const e of list) (m.get(e.month) ?? m.set(e.month, []).get(e.month)!).push(e)
+    return [...m.entries()].sort((a, b) => a[0] - b[0])
+  }
 
   const save = async (data: { userId: string; month: number; vehicle: string; vehicleType: VehicleType; cv: number; electric: boolean; km: number }) => {
     const res = await fetch('/api/finance/mileage', {
@@ -90,20 +99,23 @@ export function MileageSection({ initialEntries, members, year: initialYear }: {
           <div className="bg-nv-dark border border-nv-border rounded-xl p-3">
             <p className="text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold">Total société {year}</p>
             <p className="text-lg font-bold text-primary tabular-nums">{eur(yearTotal)}</p>
+            <p className="text-[10px] text-nv-text-faint mt-0.5">{eur(paidTotal)} versé</p>
+          </div>
+          <div className="bg-nv-dark border border-amber-500/25 rounded-xl p-3">
+            <p className="text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold flex items-center gap-1"><Wallet size={10} className="text-amber-400" /> Cash out à verser</p>
+            <p className="text-lg font-bold text-amber-400 tabular-nums">{eur2(unpaidTotal)}</p>
+            <p className="text-[10px] text-nv-text-faint mt-0.5">indemnités non versées</p>
           </div>
           <div className="bg-nv-dark border border-nv-border rounded-xl p-3">
-            <label className="text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold block mb-1">Mois</label>
+            <label className="text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold block mb-1">Mois — <span className="text-white">{eur2(monthTotal)}</span></label>
             <select value={selMonth} onChange={e => setSelMonth(Number(e.target.value))} className="w-full bg-nv-black border border-nv-border rounded-lg px-2 py-1 text-sm text-white focus:outline-none">
               {MONTHS.map((m, i) => <option key={i} value={i}>{m}</option>)}
             </select>
           </div>
           <div className="bg-nv-dark border border-nv-border rounded-xl p-3">
-            <p className="text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold">Indemnité {MONTHS_SHORT[selMonth]}.</p>
-            <p className="text-lg font-bold text-white tabular-nums">{eur2(monthTotal)}</p>
-          </div>
-          <div className="bg-nv-dark border border-nv-border rounded-xl p-3">
             <p className="text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold flex items-center gap-1"><Users size={10} /> À répartir (50/50)</p>
             <p className="text-lg font-bold text-emerald-400 tabular-nums">{eur2(perAssociate)}<span className="text-[11px] text-nv-text-faint font-normal"> /associé</span></p>
+            <p className="text-[10px] text-nv-text-faint mt-0.5">sur {MONTHS_SHORT[selMonth]}.</p>
           </div>
         </div>
         <p className="text-[11px] text-nv-text-faint mt-2">Barème officiel de l&apos;administration fiscale (voiture) — majoration +20% pour les véhicules électriques.</p>
@@ -122,20 +134,34 @@ export function MileageSection({ initialEntries, members, year: initialYear }: {
                 <p className="text-sm font-semibold text-white flex items-center gap-2"><span className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-[11px] font-bold text-primary">{nameOf(mb.userId).charAt(0)}</span>{nameOf(mb.userId)}</p>
                 <span className="text-sm font-bold text-primary tabular-nums">{eur2(mb.annual)}<span className="text-[11px] text-nv-text-faint font-normal"> / an</span></span>
               </div>
-              <div className="divide-y divide-nv-border/40">
-                {mb.list.map(e => (
-                  <div key={e.id} className="flex items-center gap-2 py-1.5 text-xs">
-                    <span className="w-12 text-nv-text-muted">{MONTHS_SHORT[e.month]}</span>
-                    <span className="flex-1 min-w-0 truncate text-nv-text flex items-center gap-1.5">{e.vehicle} <span className="text-nv-text-faint">· {typeLabel[e.vehicleType] ?? 'Voiture'}{e.vehicleType !== 'CYCLOMOTEUR' ? ` ${e.cv} CV` : ''}</span>{e.electric && <Zap size={10} className="text-emerald-400" />}</span>
-                    <span className="text-nv-text-muted tabular-nums w-20 text-right">{e.km.toLocaleString('fr-FR')} km</span>
-                    <span className="text-white font-medium tabular-nums w-20 text-right">{eur2(indemOf(e))}</span>
-                    <button onClick={() => togglePaid(e)} title={e.paid ? 'Versée' : 'Marquer comme versée'}
-                      className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[10px] font-medium transition-colors ${e.paid ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-nv-border text-nv-text-faint hover:text-nv-text'}`}>
-                      <Check size={9} />{e.paid ? 'Versée' : 'À verser'}
-                    </button>
-                    <button onClick={() => remove(e.id)} className="p-0.5 text-nv-text-faint hover:text-red-400"><Trash2 size={12} /></button>
-                  </div>
-                ))}
+              {/* Détail par mois → total du mois pour la personne */}
+              <div className="space-y-2.5">
+                {monthsOf(mb.list).map(([month, list]) => {
+                  const monthSub = list.reduce((s, e) => s + indemOf(e), 0)
+                  const monthUnpaid = list.filter(e => !e.paid).reduce((s, e) => s + indemOf(e), 0)
+                  return (
+                    <div key={month}>
+                      <div className="flex items-center justify-between px-1 mb-1">
+                        <span className="text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold">{MONTHS[month]}</span>
+                        <span className="text-xs font-semibold text-white tabular-nums">{eur2(monthSub)}{monthUnpaid > 0.005 && <span className="text-amber-400 font-normal text-[10px]"> · {eur2(monthUnpaid)} à verser</span>}</span>
+                      </div>
+                      <div className="divide-y divide-nv-border/40 rounded-lg bg-nv-dark/40 px-2">
+                        {list.map(e => (
+                          <div key={e.id} className="flex items-center gap-2 py-1.5 text-xs">
+                            <span className="flex-1 min-w-0 truncate text-nv-text flex items-center gap-1.5">{e.vehicle} <span className="text-nv-text-faint">· {typeLabel[e.vehicleType] ?? 'Voiture'}{e.vehicleType !== 'CYCLOMOTEUR' ? ` ${e.cv} CV` : ''}</span>{e.electric && <Zap size={10} className="text-emerald-400" />}</span>
+                            <span className="text-nv-text-muted tabular-nums w-20 text-right">{e.km.toLocaleString('fr-FR')} km</span>
+                            <span className="text-white font-medium tabular-nums w-20 text-right">{eur2(indemOf(e))}</span>
+                            <button onClick={() => togglePaid(e)} title={e.paid ? 'Versée' : 'Marquer comme versée'}
+                              className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[10px] font-medium transition-colors ${e.paid ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-nv-border text-nv-text-faint hover:text-nv-text'}`}>
+                              <Check size={9} />{e.paid ? 'Versée' : 'À verser'}
+                            </button>
+                            <button onClick={() => remove(e.id)} className="p-0.5 text-nv-text-faint hover:text-red-400"><Trash2 size={12} /></button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           ))}
