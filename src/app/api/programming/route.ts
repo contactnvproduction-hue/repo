@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { encryptLogins } from '@/lib/crypto'
 
 const db = prisma as any
 
@@ -31,15 +32,17 @@ export async function PUT(req: NextRequest) {
   const clientId: string | undefined = body.clientId
   if (!clientId) return NextResponse.json({ error: 'clientId requis' }, { status: 400 })
 
+  // Chiffrement des logs (identifiants des canaux) avant stockage
+  const enc = encryptLogins(body.channelData, Array.isArray(body.channelLogins) ? body.channelLogins : [])
   const data: Record<string, unknown> = {
-    channelLogins: Array.isArray(body.channelLogins) ? body.channelLogins : [],
+    channelLogins: enc.channelLogins,
+    channelData: enc.channelData,
     bio: body.bio ?? null,
     bioPerVideo: !!body.bioPerVideo,
     instaDescription: body.instaDescription ?? null,
     defaultMentions: body.defaultMentions ?? null,
     notes: body.notes ?? null,
   }
-  if (body.channelData && typeof body.channelData === 'object') data.channelData = body.channelData
   if (body.accessLogin !== undefined) data.accessLogin = body.accessLogin || null
   const saved = await db.clientProgramming.upsert({
     where: { clientId },

@@ -26,6 +26,7 @@ interface ClientActionsProps {
   client: {
     id: string; name: string; status: string; avatar?: string | null; relanceDate?: Date | string | null
     email?: string | null; phone?: string | null; company?: string | null; siret?: string | null; address?: string | null
+    hasProgAccess?: boolean
   }
 }
 
@@ -47,6 +48,8 @@ export function ClientActions({ client }: ClientActionsProps) {
   const [editPhone, setEditPhone] = useState(client.phone ?? '')
   const [editAddress, setEditAddress] = useState(client.address ?? '')
   const [editSiret, setEditSiret] = useState(client.siret ?? '')
+  const [progCode, setProgCode] = useState('')
+  const [progPassword, setProgPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [statusLoading, setStatusLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -139,7 +142,15 @@ export function ClientActions({ client }: ClientActionsProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(patch),
       })
+      // Identifiants d'accès à l'espace de programmation (code secret + mot de passe)
+      if (progCode.trim() || progPassword.trim()) {
+        await fetch(`/api/clients/${client.id}/programming-access`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...(progCode.trim() && { code: progCode.trim() }), ...(progPassword.trim() && { password: progPassword.trim() }) }),
+        }).catch(() => {})
+      }
       toast.success('Client mis à jour')
+      setProgCode(''); setProgPassword('')
       setShowEdit(false)
       router.refresh()
     } catch {
@@ -267,6 +278,26 @@ export function ClientActions({ client }: ClientActionsProps) {
             <label className="block text-sm font-medium text-nv-text-muted mb-1.5">SIRET</label>
             <input type="text" value={editSiret} onChange={e => setEditSiret(e.target.value)} placeholder="N° SIRET"
               className="w-full px-3 py-2 bg-nv-dark border border-nv-border rounded-lg text-white text-sm outline-none focus:border-primary" />
+          </div>
+
+          {/* Accès à l'espace de programmation (code secret + mot de passe) */}
+          <div className="rounded-lg border border-nv-border p-3 space-y-2.5">
+            <p className="text-xs font-semibold text-nv-text flex items-center gap-1.5">🔒 Accès espace de programmation
+              <span className={`text-[10px] font-normal px-1.5 py-0.5 rounded-full ${client.hasProgAccess ? 'bg-emerald-500/15 text-emerald-400' : 'bg-white/5 text-nv-text-faint'}`}>{client.hasProgAccess ? 'défini' : 'à définir'}</span>
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] text-nv-text-muted mb-1">Code d&apos;accès secret (mot)</label>
+                <input type="text" value={progCode} onChange={e => setProgCode(e.target.value)} placeholder={client.hasProgAccess ? '•••• (inchangé)' : 'Un mot secret'}
+                  className="w-full px-3 py-2 bg-nv-dark border border-nv-border rounded-lg text-white text-sm outline-none focus:border-primary" />
+              </div>
+              <div>
+                <label className="block text-[11px] text-nv-text-muted mb-1">Mot de passe client</label>
+                <input type="text" value={progPassword} onChange={e => setProgPassword(e.target.value)} placeholder={client.hasProgAccess ? '•••• (inchangé)' : 'Mot de passe'}
+                  className="w-full px-3 py-2 bg-nv-dark border border-nv-border rounded-lg text-white text-sm outline-none focus:border-primary" />
+              </div>
+            </div>
+            <p className="text-[10px] text-nv-text-faint">Le client se connecte à son espace avec ces deux identifiants. Stockés chiffrés. Laisse vide pour ne rien changer.</p>
           </div>
 
           {/* Photo */}

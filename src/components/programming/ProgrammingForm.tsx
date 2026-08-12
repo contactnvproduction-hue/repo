@@ -37,6 +37,7 @@ export function ProgrammingForm({ clients }: { clients: Client[] }) {
   // ── Gate ──
   const [clientId, setClientId] = useState('')
   const [code, setCode] = useState('')
+  const [password, setPassword] = useState('')
   const [unlocking, setUnlocking] = useState(false)
   const [unlocked, setUnlocked] = useState(false)
   const [mounted, setMounted] = useState(false)
@@ -58,11 +59,11 @@ export function ProgrammingForm({ clients }: { clients: Client[] }) {
 
   const enter = async () => {
     if (!clientId) { toast.error('Sélectionne ton nom'); return }
-    if (!code.trim()) { toast.error('Entre ton code d\'accès'); return }
+    if (!code.trim() || !password.trim()) { toast.error('Entre ton code et ton mot de passe'); return }
     setUnlocking(true)
     try {
-      const res = await fetch('/api/programming/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, code }) })
-      if (res.status === 401) { toast.error('Code incorrect'); setUnlocking(false); return }
+      const res = await fetch('/api/programming/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, code, password }) })
+      if (res.status === 401) { toast.error('Code ou mot de passe incorrect'); setUnlocking(false); return }
       if (!res.ok) throw new Error()
       const d = await res.json()
       const p = d.programming || {}
@@ -130,9 +131,13 @@ export function ProgrammingForm({ clients }: { clients: Client[] }) {
               </div>
             </div>
             <div>
-              <label className={`${label} flex items-center gap-1.5`}><KeyRound size={12} /> Code d&apos;accès {selected && !selected.hasCode && <span className="text-primary">(à créer)</span>}</label>
-              <input type="password" className={inp} placeholder={selected && !selected.hasCode ? 'Choisis ton mot / code personnalisé' : 'Ton code d\'accès'} value={code} onChange={e => setCode(e.target.value)} onKeyDown={e => e.key === 'Enter' && enter()} />
-              {selected && !selected.hasCode && <p className="text-[11px] text-nv-text-faint mt-1">Première connexion : ce code te servira pour revenir sur ton espace.</p>}
+              <label className={`${label} flex items-center gap-1.5`}><KeyRound size={12} /> Code d&apos;accès secret {selected && !selected.hasCode && <span className="text-primary">(à créer)</span>}</label>
+              <input type="password" className={inp} placeholder={selected && !selected.hasCode ? 'Choisis ton mot secret' : 'Ton mot secret'} value={code} onChange={e => setCode(e.target.value)} onKeyDown={e => e.key === 'Enter' && enter()} />
+            </div>
+            <div>
+              <label className={`${label} flex items-center gap-1.5`}><Lock size={12} /> Mot de passe</label>
+              <input type="password" className={inp} placeholder={selected && !selected.hasCode ? 'Choisis ton mot de passe' : 'Ton mot de passe'} value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && enter()} />
+              {selected && !selected.hasCode && <p className="text-[11px] text-nv-text-faint mt-1">Première connexion : ces identifiants te serviront pour revenir sur ton espace.</p>}
             </div>
             <button onClick={enter} disabled={unlocking} className="w-full flex items-center justify-center gap-2 py-2.5 bg-primary text-nv-black rounded-lg font-semibold disabled:opacity-60">
               {unlocking ? <Loader2 size={16} className="animate-spin" /> : <><Lock size={15} /> Accéder à mon espace</>}

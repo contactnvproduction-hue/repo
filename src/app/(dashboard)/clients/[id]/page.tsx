@@ -24,6 +24,7 @@ import { ClientDocumentsSection } from '@/components/clients/ClientDocumentsSect
 import { ClientOnboardingFormSection } from '@/components/clients/ClientOnboardingFormSection'
 import { ClientProductsSection } from '@/components/clients/ClientProductsSection'
 import { ClientProgrammingSection } from '@/components/clients/ClientProgrammingSection'
+import { decryptLogins } from '@/lib/crypto'
 
 const statusBadge: Record<string, 'success' | 'info' | 'warning' | 'muted'> = {
   ACTIF: 'success', PROSPECT: 'info', EN_PAUSE: 'warning', ARCHIVÉ: 'muted',
@@ -132,10 +133,16 @@ export default async function ClientDetailPage({ params }: PageProps) {
     (async () => { try { return await (prisma as any).signedContract.findMany({ where: { clientId: id }, orderBy: { createdAt: 'desc' }, select: { id: true, shortCode: true, status: true, missionType: true, monthlyAmount: true, totalAmount: true, signedAt: true } }) } catch { return [] } })(),
   ])
 
-  const [clientProgramming, clientVideos] = await Promise.all([
+  const [clientProgrammingRaw, clientVideos] = await Promise.all([
     (async () => { try { return await (prisma as any).clientProgramming.findUnique({ where: { clientId: id } }) } catch { return null } })(),
     (async () => { try { return await (prisma as any).clientVideo.findMany({ where: { clientId: id }, orderBy: [{ scheduledAt: 'asc' }, { createdAt: 'desc' }] }) } catch { return [] } })(),
   ])
+  // Déchiffre les logs des canaux pour l'affichage équipe (fiche client)
+  const clientProgramming = clientProgrammingRaw ? (() => {
+    const dec = decryptLogins((clientProgrammingRaw as any).channelData, (clientProgrammingRaw as any).channelLogins)
+    return { ...clientProgrammingRaw, channelData: dec.channelData, channelLogins: dec.channelLogins, accessCode: undefined, accessPassword: undefined }
+  })() : null
+  const hasProgAccess = !!((clientProgrammingRaw as any)?.accessCode && (clientProgrammingRaw as any)?.accessPassword)
 
   if (!client) notFound()
 
@@ -204,7 +211,7 @@ export default async function ClientDetailPage({ params }: PageProps) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <ClientActions client={{ id: client.id, name: client.name, status: client.status, avatar: client.avatar, relanceDate: client.relanceDate, email: client.email, phone: client.phone, company: client.company, siret: client.siret, address: client.address }} />
+          <ClientActions client={{ id: client.id, name: client.name, status: client.status, avatar: client.avatar, relanceDate: client.relanceDate, email: client.email, phone: client.phone, company: client.company, siret: client.siret, address: client.address, hasProgAccess }} />
           <DeleteButton
             endpoint={`/api/clients/${client.id}`}
             confirmMessage={`Supprimer le client "${client.name}" ? Cette action est irréversible.`}
