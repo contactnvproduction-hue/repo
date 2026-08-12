@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -15,16 +15,33 @@ import type { ForecastMonth, RenewalSuggestion } from '@/lib/mrr-forecast'
 
 const eur = (n: number) => `${Math.round(n).toLocaleString('fr-FR')} €`
 
+const CHARGES_KEY = 'nv_forecast_charges'
+type ChargePole = { name: string; color: string; baseline: number }
+
 export function SalesForecast({
   months: initialMonths,
+  chargesPoles = [],
 }: {
   months: ForecastMonth[]
   suggestions?: RenewalSuggestion[]
+  chargesPoles?: ChargePole[]
 }) {
   const router = useRouter()
   const [months, setMonths] = useState(initialMonths)
   const [selectedKey, setSelectedKey] = useState(initialMonths[0]?.key)
   const [toggling, setToggling] = useState<string | null>(null)
+
+  // Prévisionnel des SORTIES pôle par pôle (ajustable, persisté localement).
+  // Baseline = moyenne 3 mois par pôle ; override = valeur saisie au curseur.
+  const [chargeOv, setChargeOv] = useState<Record<string, Record<string, number>>>({})
+  useEffect(() => { try { const r = JSON.parse(localStorage.getItem(CHARGES_KEY) || '{}'); if (r && typeof r === 'object') setChargeOv(r) } catch {} }, [])
+  const poleAmount = (key: string, pole: string) => chargeOv[key]?.[pole] ?? (chargesPoles.find(p => p.name === pole)?.baseline ?? 0)
+  const setPoleAmount = (key: string, pole: string, v: number) => {
+    setChargeOv(prev => { const next = { ...prev, [key]: { ...(prev[key] ?? {}), [pole]: v } }; try { localStorage.setItem(CHARGES_KEY, JSON.stringify(next)) } catch {}; return next })
+  }
+  const resetMonth = (key: string) => setChargeOv(prev => { const next = { ...prev }; delete next[key]; try { localStorage.setItem(CHARGES_KEY, JSON.stringify(next)) } catch {}; return next })
+  const hasCharges = chargesPoles.length > 0
+  const chargesForMonth = (m: ForecastMonth) => hasCharges ? chargesPoles.reduce((s, p) => s + poleAmount(m.key, p.name), 0) : m.chargesTotal
 
   const selected = months.find(m => m.key === selectedKey) ?? months[0]
 
@@ -115,17 +132,17 @@ export function SalesForecast({
     catch { toast.error('Erreur'); router.refresh() } finally { setToggling(null) }
   }
 
-  const chartData = useMemo(() => months.map(m => ({
-    name: m.shortLabel,
-    key: m.key,
-    CA: Math.round(m.caTotal),
-    Charges: Math.round(m.chargesTotal),
-    Profit: Math.round(m.profit),
-  })), [months])
+  const chartData = useMemo(() => months.map(m => {
+    const ch = chargesForMonth(m)
+    return { name: m.shortLabel, key: m.key, CA: Math.round(m.caTotal), Charges: Math.round(ch), Profit: Math.round(m.caTotal - ch) }
+  }), [months, chargeOv, chargesPoles]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!selected) return null
 
-  const margin = selected.caTotal > 0 ? Math.round((selected.profit / selected.caTotal) * 100) : 0
+  // Charges & net LIVE du mois sélectionné (curseurs pôle par pôle)
+  const liveCharges = chargesForMonth(selected)
+  const liveProfit = selected.caTotal - liveCharges
+  const margin = selected.caTotal > 0 ? Math.round((liveProfit / selected.caTotal) * 100) : 0
 
   return (
     <div className="space-y-5">
@@ -170,9 +187,9 @@ export function SalesForecast({
             <p className={`text-xs font-semibold capitalize ${m.key === selectedKey ? 'text-primary' : 'text-nv-text-muted'}`}>
               {m.shortLabel}{m.isCurrent ? ' · en cours' : ''}
             </p>
-            <p className={`text-sm font-bold ${m.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-              {m.profit >= 0 ? '+' : ''}{eur(m.profit)}
-            </p>
+            {(() => { const p = m.caTotal - chargesForMonth(m); return (
+              <p className={`text-sm font-bold ${p >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{p >= 0 ? '+' : ''}{eur(p)}</p>
+            ) })()}
           </button>
         ))}
       </div>
@@ -193,12 +210,12 @@ export function SalesForecast({
           </div>
           <div className="bg-nv-dark border border-nv-border rounded-xl p-2.5">
             <p className="text-[10px] text-nv-text-muted flex items-center gap-1"><TrendingDown size={11} className="text-red-400" />Charges</p>
-            <p className="text-lg font-bold text-white tabular-nums leading-tight">{eur(selected.chargesTotal)}</p>
-            <p className="text-[10px] text-nv-text-faint">{selected.chargesMonthsUsed > 0 ? `moy. ${selected.chargesMonthsUsed} mois` : '—'}</p>
+            <p className="text-lg font-bold text-white tabular-nums leading-tight">{eur(liveCharges)}</p>
+            <p className="text-[10px] text-nv-text-faint">{hasCharges ? 'prévision pôle par pôle' : (selected.chargesMonthsUsed > 0 ? `moy. ${selected.chargesMonthsUsed} mois` : '—')}</p>
           </div>
-          <div className={`rounded-xl p-2.5 border ${selected.profit >= 0 ? 'bg-emerald-500/5 border-emerald-500/25' : 'bg-red-500/5 border-red-500/25'}`}>
-            <p className="text-[10px] text-nv-text-muted flex items-center gap-1"><Wallet size={11} className={selected.profit >= 0 ? 'text-emerald-400' : 'text-red-400'} />Net prévu</p>
-            <p className={`text-lg font-bold tabular-nums leading-tight ${selected.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{selected.profit >= 0 ? '+' : ''}{eur(selected.profit)}</p>
+          <div className={`rounded-xl p-2.5 border ${liveProfit >= 0 ? 'bg-emerald-500/5 border-emerald-500/25' : 'bg-red-500/5 border-red-500/25'}`}>
+            <p className="text-[10px] text-nv-text-muted flex items-center gap-1"><Wallet size={11} className={liveProfit >= 0 ? 'text-emerald-400' : 'text-red-400'} />Net prévu</p>
+            <p className={`text-lg font-bold tabular-nums leading-tight ${liveProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{liveProfit >= 0 ? '+' : ''}{eur(liveProfit)}</p>
             <p className="text-[10px] text-nv-text-faint">Marge {margin}%</p>
           </div>
         </div>
@@ -280,21 +297,39 @@ export function SalesForecast({
             )}
           </div>
 
-          {/* Sorties */}
+          {/* Sorties — prévision pôle par pôle, ajustable au curseur (net en direct) */}
           <div>
-            <h4 className="text-xs font-semibold text-nv-text-faint uppercase tracking-wider mb-2">Ce qui sort</h4>
-            <div className="space-y-1.5">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-xs font-semibold text-nv-text-faint uppercase tracking-wider">Ce qui sort · charges prévues</h4>
+              {hasCharges && <button onClick={() => resetMonth(selected.key)} className="text-[10px] text-nv-text-faint hover:text-primary">Réinitialiser</button>}
+            </div>
+            {!hasCharges ? (
               <div className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg border border-nv-border bg-nv-dark text-sm">
                 <Building2 className="w-3.5 h-3.5 text-nv-text-muted shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <span className="text-nv-text">Charges (estimation)</span>
-                  <span className="text-[10px] text-nv-text-faint block">
-                    {selected.chargesMonthsUsed > 0 ? `Moyenne des ${selected.chargesMonthsUsed} derniers mois — tous pôles, salaires inclus (Finance → Charges)` : 'Aucune charge saisie sur les 3 derniers mois'}
-                  </span>
-                </div>
+                <div className="flex-1 min-w-0"><span className="text-nv-text">Charges (estimation)</span></div>
                 <span className="font-semibold text-nv-text shrink-0">{eur(selected.chargesTotal)}</span>
               </div>
-            </div>
+            ) : (
+              <div className="space-y-2">
+                {chargesPoles.map(p => {
+                  const amt = poleAmount(selected.key, p.name)
+                  const max = Math.max(500, Math.round((p.baseline || 200) * 2.5))
+                  return (
+                    <div key={p.name} className="flex items-center gap-2.5">
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
+                      <span className="text-xs text-nv-text w-28 truncate">{p.name}</span>
+                      <input type="range" min={0} max={max} step={50} value={amt} onChange={e => setPoleAmount(selected.key, p.name, Number(e.target.value))} className="flex-1 accent-[#e8b84b]" />
+                      <span className="text-xs font-medium text-white tabular-nums w-16 text-right">{eur(amt)}</span>
+                    </div>
+                  )
+                })}
+                <div className="flex items-center justify-between border-t border-nv-border pt-2 mt-1">
+                  <span className="text-xs font-semibold text-white">Total charges prévues</span>
+                  <span className="text-sm font-bold text-red-400 tabular-nums">{eur(liveCharges)}</span>
+                </div>
+                <p className="text-[10px] text-nv-text-faint">Base : moyenne des 3 derniers mois par pôle — ajuste chaque curseur, le net se recalcule en direct.</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
