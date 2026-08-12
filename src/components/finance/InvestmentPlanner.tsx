@@ -47,15 +47,18 @@ export function InvestmentPlanner({ initial, poles, resultNetYear, monthlyNet = 
   const setMonthPolePct = (key: string, pole: string, v: number) => { const bm = { ...monthAlloc, [key]: { ...(monthAlloc[key] ?? alloc), [pole]: v } }; setMonthAlloc(bm); persist(envelopePct, alloc, bm) }
   const allocFor = (key: string) => monthAlloc[key] ?? alloc
 
-  // Net LIVE diffusé par le prévisionnel (curseurs de charges) → sync continue
-  const [liveNet, setLiveNet] = useState<Record<string, number>>({})
+  // Chiffres LIVE diffusés par le prévisionnel (CA, charges, net après curseurs)
+  // → tout suit en continu (net ET charges ET CA dans la fiche du mois).
+  const [live, setLive] = useState<Record<string, { ca: number; charges: number; net: number }>>({})
   useEffect(() => {
-    try { const r = JSON.parse(localStorage.getItem('nv_forecast_livenet') || '{}'); if (r && typeof r === 'object') setLiveNet(r) } catch {}
-    const h = (e: Event) => { const d = (e as CustomEvent).detail; if (d && typeof d === 'object') setLiveNet(d) }
-    window.addEventListener('nv-forecast-net', h)
-    return () => window.removeEventListener('nv-forecast-net', h)
+    try { const r = JSON.parse(localStorage.getItem('nv_forecast_live') || '{}'); if (r && typeof r === 'object') setLive(r) } catch {}
+    const h = (e: Event) => { const d = (e as CustomEvent).detail; if (d && typeof d === 'object') setLive(d) }
+    window.addEventListener('nv-forecast-live', h)
+    return () => window.removeEventListener('nv-forecast-live', h)
   }, [])
-  const netOf = (key: string) => Math.max(0, liveNet[key] ?? forecastByMonth[key]?.net ?? estMonthlyNet)
+  const netOf = (key: string) => Math.max(0, live[key]?.net ?? forecastByMonth[key]?.net ?? estMonthlyNet)
+  // fc du mois fusionné avec les valeurs live (CA + charges à jour)
+  const fcOf = (key: string) => ({ ...(forecastByMonth[key] ?? {}), ...(live[key] ?? {}) }) as ForecastMonthLite
   const envelopeOf = (key: string) => netOf(key) * (envelopePct / 100)
   // Investissements « actifs » pour un mois : ponctuels de ce mois + récurrents
   // (abonnement, location…) dont le mois de départ est ≤ ce mois.
@@ -77,7 +80,7 @@ export function InvestmentPlanner({ initial, poles, resultNetYear, monthlyNet = 
       carried = savings
       return row
     })
-  }, [monthKeys, items, envelopePct, forecastByMonth, estMonthlyNet, liveNet]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [monthKeys, items, envelopePct, forecastByMonth, estMonthlyNet, live]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const totalSaved = rows.length ? rows[rows.length - 1].savings : 0
   const totalPlanned = items.filter(i => monthKeys.includes(i.month)).reduce((s, i) => s + i.amount, 0)
@@ -146,7 +149,7 @@ export function InvestmentPlanner({ initial, poles, resultNetYear, monthlyNet = 
       {openRow && (
         <MonthModal
           row={openRow}
-          fc={forecastByMonth[openRow.key]}
+          fc={fcOf(openRow.key)}
           poles={poles}
           alloc={allocFor(openRow.key)}
           invests={investsOf(openRow.key)}

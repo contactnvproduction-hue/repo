@@ -43,13 +43,13 @@ export function SalesForecast({
   const hasCharges = chargesPoles.length > 0
   const chargesForMonth = (m: ForecastMonth) => hasCharges ? chargesPoles.reduce((s, p) => s + poleAmount(m.key, p.name), 0) : m.chargesTotal
 
-  // Diffuse le net prévisionnel LIVE (après curseurs de charges) → la fiche de
-  // pilotage des investissements se met à jour en continu.
+  // Diffuse les chiffres prévisionnels LIVE (CA, charges après curseurs, net) →
+  // la fiche de pilotage des investissements met tout à jour en continu.
   useEffect(() => {
-    const net: Record<string, number> = {}
-    for (const m of months) net[m.key] = m.caTotal - chargesForMonth(m)
-    try { localStorage.setItem('nv_forecast_livenet', JSON.stringify(net)) } catch {}
-    window.dispatchEvent(new CustomEvent('nv-forecast-net', { detail: net }))
+    const data: Record<string, { ca: number; charges: number; net: number }> = {}
+    for (const m of months) { const ch = chargesForMonth(m); data[m.key] = { ca: m.caTotal, charges: ch, net: m.caTotal - ch } }
+    try { localStorage.setItem('nv_forecast_live', JSON.stringify(data)) } catch {}
+    window.dispatchEvent(new CustomEvent('nv-forecast-live', { detail: data }))
   }, [chargeOv, months, chargesPoles]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const selected = months.find(m => m.key === selectedKey) ?? months[0]
