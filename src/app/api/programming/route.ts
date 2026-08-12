@@ -31,7 +31,7 @@ export async function PUT(req: NextRequest) {
   const clientId: string | undefined = body.clientId
   if (!clientId) return NextResponse.json({ error: 'clientId requis' }, { status: 400 })
 
-  const data = {
+  const data: Record<string, unknown> = {
     channelLogins: Array.isArray(body.channelLogins) ? body.channelLogins : [],
     bio: body.bio ?? null,
     bioPerVideo: !!body.bioPerVideo,
@@ -39,6 +39,8 @@ export async function PUT(req: NextRequest) {
     defaultMentions: body.defaultMentions ?? null,
     notes: body.notes ?? null,
   }
+  if (body.channelData && typeof body.channelData === 'object') data.channelData = body.channelData
+  if (body.accessLogin !== undefined) data.accessLogin = body.accessLogin || null
   const saved = await db.clientProgramming.upsert({
     where: { clientId },
     update: data,
