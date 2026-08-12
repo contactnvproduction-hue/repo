@@ -43,6 +43,15 @@ export function SalesForecast({
   const hasCharges = chargesPoles.length > 0
   const chargesForMonth = (m: ForecastMonth) => hasCharges ? chargesPoles.reduce((s, p) => s + poleAmount(m.key, p.name), 0) : m.chargesTotal
 
+  // Diffuse le net prévisionnel LIVE (après curseurs de charges) → la fiche de
+  // pilotage des investissements se met à jour en continu.
+  useEffect(() => {
+    const net: Record<string, number> = {}
+    for (const m of months) net[m.key] = m.caTotal - chargesForMonth(m)
+    try { localStorage.setItem('nv_forecast_livenet', JSON.stringify(net)) } catch {}
+    window.dispatchEvent(new CustomEvent('nv-forecast-net', { detail: net }))
+  }, [chargeOv, months, chargesPoles]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const selected = months.find(m => m.key === selectedKey) ?? months[0]
 
   // Recalcule les totaux d'un mois après un toggle (facture ou retainer)

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
 import { MessageDock } from '@/components/messages/MessageDock'
+import { RunningTimerReminder } from '@/components/ceo/RunningTimerReminder'
 import type { UserRole } from '@prisma/client'
 
 type MessageLite = {
@@ -49,6 +50,7 @@ export function DashboardShell({ user, notifCount, messageRecipients, initialMes
         </main>
       </div>
       <MessageDock currentUserId={user.id} recipients={messageRecipients} initialReceived={initialMessages} />
+      <RunningTimerReminder />
     </div>
   )
 }
