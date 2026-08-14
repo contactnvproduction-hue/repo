@@ -4,7 +4,7 @@ import { AverageTicket } from '@/components/sales/AverageTicket'
 import { SalesForecast } from '@/components/sales/SalesForecast'
 import { FinanceSection } from '@/components/finance/FinanceSection'
 import { computeSalesForecast } from '@/lib/mrr-forecast'
-import { resolvePoles } from '@/lib/expense-poles'
+import { resolvePoles, estimateRecoverableVat } from '@/lib/expense-poles'
 import { Wallet } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
@@ -34,6 +34,24 @@ export default async function ComptaPage() {
     .map(name => ({ name, color: colorOf(name), baseline: Math.round((poleSum[name] ?? 0) / 3) }))
     .sort((a, b) => b.baseline - a.baseline)
 
+  // Résultat imposable RÉALISÉ depuis le 1er janvier → sert à savoir si le seuil
+  // d'IS à 15% (42 500 €) est déjà atteint pour l'année (chaînage de l'IS mensuel).
+  const vatRate = (settings as any)?.defaultVatRate ?? 20
+  const isReducedRate = (settings as any)?.isReducedRate !== false
+  const yStart = new Date(now.getFullYear(), 0, 1)
+  const [ytdPayments, ytdExpenses] = await Promise.all([
+    prisma.payment.findMany({ where: { confirmed: true, date: { gte: yStart } }, select: { amount: true, date: true, invoice: { select: { clientId: true } } } }).catch(() => []),
+    prisma.expense.findMany({ where: { date: { gte: yStart } }, select: { amount: true, categoryLabel: true } }).catch(() => []),
+  ])
+  const seenY = new Set<string>()
+  let caYTD = 0
+  for (const p of ytdPayments as any[]) { const k = `${p.invoice?.clientId ?? 'x'}|${p.amount}|${new Date(p.date).toISOString().slice(0, 10)}`; if (seenY.has(k)) continue; seenY.add(k); caYTD += p.amount }
+  const chargesYTD = (ytdExpenses as any[]).reduce((s, e) => s + e.amount, 0)
+  const vatFracY = vatRate / (100 + vatRate)
+  const tvaColYTD = caYTD * vatFracY
+  const tvaDedYTD = (ytdExpenses as any[]).reduce((s, e) => s + estimateRecoverableVat(e.amount, e.categoryLabel), 0)
+  const realizedTaxableYTD = (caYTD - chargesYTD) - (tvaColYTD - tvaDedYTD)
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
@@ -45,7 +63,7 @@ export default async function ComptaPage() {
         previsionnel={
           <div className="space-y-5">
             <AverageTicket />
-            <SalesForecast months={forecast.months} suggestions={forecast.suggestions} chargesPoles={chargesPoles} vatRate={(settings as any)?.defaultVatRate ?? 20} isReducedRate={(settings as any)?.isReducedRate !== false} />
+            <SalesForecast months={forecast.months} suggestions={forecast.suggestions} chargesPoles={chargesPoles} vatRate={vatRate} isReducedRate={isReducedRate} realizedTaxableYTD={realizedTaxableYTD} />
           </div>
         }
       />

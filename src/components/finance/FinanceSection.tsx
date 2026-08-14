@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/db'
-import { resolvePoles, isSalaryPole } from '@/lib/expense-poles'
+import { resolvePoles, isSalaryPole, estimateRecoverableVat } from '@/lib/expense-poles'
 import { computeIS } from '@/lib/tax'
 import { FinanceHub } from './FinanceHub'
 
@@ -72,14 +72,21 @@ export async function FinanceSection({ previsionnel, forecastByMonth = {} }: { p
     pole: (e as any).categoryLabel || null, category: e.category, isRecurring: e.isRecurring,
   }))
 
-  // Résultat + IS (barème progressif 15% / 25% calculé automatiquement).
+  // Résultat + TVA à reverser + IS (barème progressif 15% / 25%).
   // Les salaires sont déjà inclus dans expensesYear (pôle Salaires).
   const eligibleReduced = (settings as any)?.isReducedRate !== false
   const chargesTotalYear = expensesYear
-  const resultBeforeTax = caYear - chargesTotalYear
-  const is = computeIS(resultBeforeTax, eligibleReduced)
+  const resultBeforeTax = caYear - chargesTotalYear // brut (TTC)
+  // TVA annuelle : collectée sur le CA (TTC) − déductible par pôle (salaires = 0)
+  const vatFrac = ((settings as any)?.defaultVatRate ?? 20) / (100 + ((settings as any)?.defaultVatRate ?? 20))
+  const tvaCollected = caYear * vatFrac
+  const tvaDeductible = Object.entries(poleTotalsYear).reduce((s, [pole, amt]) => s + estimateRecoverableVat(amt as number, pole), 0)
+  const tvaNet = tvaCollected - tvaDeductible
+  const tvaDue = Math.max(0, tvaNet)
+  const resultHT = resultBeforeTax - tvaNet // base imposable HT
+  const is = computeIS(Math.max(0, resultHT), eligibleReduced)
   const taxAmount = is.total
-  const resultNet = resultBeforeTax - taxAmount
+  const resultNet = resultHT - taxAmount // net après TVA + IS
   const margin = caYear > 0 ? Math.round((resultNet / caYear) * 100) : 0
 
   // Série mensuelle CA / charges (salaires inclus) / profit
@@ -96,7 +103,7 @@ export async function FinanceSection({ previsionnel, forecastByMonth = {} }: { p
       previsionnel={previsionnel}
       synthese={{
         year, caYear, caLastYear, expensesYear, salariesYear, chargesTotalYear,
-        resultBeforeTax, taxAmount, resultNet, margin, monthly,
+        resultBeforeTax, tvaDue, resultHT, taxAmount, resultNet, margin, monthly,
         is: { reducedBase: is.reducedBase, reducedTax: is.reducedTax, normalBase: is.normalBase, normalTax: is.normalTax, effectiveRate: is.effectiveRate },
         eligibleReduced,
         poleTotalsYear,

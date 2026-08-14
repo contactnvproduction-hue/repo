@@ -20,7 +20,7 @@ const MONTHS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep
 
 type Synthese = {
   year: number; caYear: number; caLastYear: number; expensesYear: number; salariesYear: number
-  chargesTotalYear: number; resultBeforeTax: number; taxAmount: number
+  chargesTotalYear: number; resultBeforeTax: number; tvaDue: number; resultHT: number; taxAmount: number
   resultNet: number; margin: number; monthly: { month: number; ca: number; charges: number; profit: number }[]
   is: { reducedBase: number; reducedTax: number; normalBase: number; normalTax: number; effectiveRate: number }
   eligibleReduced: boolean
@@ -134,7 +134,9 @@ function Synthese({ data }: { data: Synthese }) {
             <p className="text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold mt-3 mb-1">Charges</p>
             {polesYear.map(([pole, amount]) => <Line2 key={pole} label={pole} value={-amount} indent />)}
             <Line2 label="Total charges" value={-data.chargesTotalYear} bold border />
-            <Line2 label="Résultat avant impôt" value={data.resultBeforeTax} bold positive={data.resultBeforeTax >= 0} border />
+            <Line2 label="Résultat brut (CA − charges)" value={data.resultBeforeTax} bold positive={data.resultBeforeTax >= 0} border />
+            <Line2 label="TVA à reverser (collectée − déductible)" value={-data.tvaDue} muted />
+            <Line2 label="Résultat imposable (HT)" value={data.resultHT} positive={data.resultHT >= 0} border />
             {/* Détail IS progressif */}
             {data.taxAmount > 0 && (
               <>
@@ -144,7 +146,7 @@ function Synthese({ data }: { data: Synthese }) {
                 <Line2 label={`IS total (${data.is.effectiveRate}% effectif)`} value={-data.taxAmount} border />
               </>
             )}
-            <Line2 label="Résultat net" value={data.resultNet} bold positive={data.resultNet >= 0} border />
+            <Line2 label="Résultat net (après TVA & IS)" value={data.resultNet} bold positive={data.resultNet >= 0} border />
           </div>
           <label className="flex items-center gap-2 mt-4 pt-3 border-t border-nv-border cursor-pointer text-xs text-nv-text-muted">
             <input type="checkbox" checked={data.eligibleReduced} disabled={saving} onChange={e => toggleReduced(e.target.checked)} className="w-4 h-4 accent-[#e8b84b]" />

@@ -13,7 +13,7 @@ import {
 import toast from 'react-hot-toast'
 import type { ForecastMonth, RenewalSuggestion } from '@/lib/mrr-forecast'
 import { estimateRecoverableVat } from '@/lib/expense-poles'
-import { computeIS } from '@/lib/tax'
+import { IS_REDUCED_RATE, IS_NORMAL_RATE, IS_REDUCED_THRESHOLD } from '@/lib/tax'
 
 const eur = (n: number) => `${Math.round(n).toLocaleString('fr-FR')} €`
 
@@ -25,12 +25,14 @@ export function SalesForecast({
   chargesPoles = [],
   vatRate = 20,
   isReducedRate = true,
+  realizedTaxableYTD = 0,
 }: {
   months: ForecastMonth[]
   suggestions?: RenewalSuggestion[]
   chargesPoles?: ChargePole[]
   vatRate?: number
   isReducedRate?: boolean
+  realizedTaxableYTD?: number
 }) {
   const router = useRouter()
   const [months, setMonths] = useState(initialMonths)
@@ -50,10 +52,10 @@ export function SalesForecast({
   const chargesForMonth = (m: ForecastMonth) => hasCharges ? chargesPoles.reduce((s, p) => s + poleAmount(m.key, p.name), 0) : m.chargesTotal
   const vatFrac = vatRate / (100 + vatRate)
 
-  // Décomposition mensuelle : brut (CA − charges) → TVA à reverser → IS → NET.
+  // Décomposition mensuelle : brut (CA − charges) → TVA à reverser → base HT.
   // CA et charges sont TTC : on extrait la TVA collectée et la TVA déductible par
-  // pôle (salaires/freelances = 0), l'IS s'applique sur le résultat HT.
-  const financials = (m: ForecastMonth) => {
+  // pôle (salaires/freelances = 0).
+  const baseOf = (m: ForecastMonth) => {
     const ca = m.caTotal
     const charges = chargesForMonth(m)
     const brut = ca - charges
@@ -64,9 +66,36 @@ export function SalesForecast({
     const tvaNet = tvaCollected - tvaDeductible
     const tvaDue = Math.max(0, tvaNet)
     const taxableHT = brut - tvaNet // = CA_HT − charges_HT
-    const is = computeIS(Math.max(0, taxableHT), isReducedRate).total
-    const net = brut - tvaDue - is
-    return { ca, charges, brut, tvaDue, is, net }
+    return { ca, charges, brut, tvaDue, taxableHT }
+  }
+
+  // IS chaîné sur l'ANNÉE : le taux réduit 15% ne s'applique que jusqu'à 42 500 €
+  // de bénéfice annuel (réalisé YTD + prévisionnel cumulé). Au-delà → 25%.
+  const curYear = new Date().getFullYear()
+  const isByMonth = useMemo(() => {
+    const cumByYear: Record<number, number> = {}
+    const map: Record<string, number> = {}
+    for (const m of [...months].sort((a, b) => a.key.localeCompare(b.key))) {
+      const year = Number(m.key.slice(0, 4))
+      if (cumByYear[year] === undefined) cumByYear[year] = year === curYear ? Math.max(0, realizedTaxableYTD) : 0
+      const t = Math.max(0, baseOf(m).taxableHT)
+      let is: number
+      if (!isReducedRate) is = t * IS_NORMAL_RATE
+      else {
+        const remaining = Math.max(0, IS_REDUCED_THRESHOLD - cumByYear[year])
+        const red = Math.min(t, remaining)
+        is = red * IS_REDUCED_RATE + (t - red) * IS_NORMAL_RATE
+      }
+      map[m.key] = is
+      cumByYear[year] += t
+    }
+    return map
+  }, [months, chargeOv, chargesPoles, vatRate, isReducedRate, realizedTaxableYTD]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const financials = (m: ForecastMonth) => {
+    const b = baseOf(m)
+    const is = isByMonth[m.key] ?? 0
+    return { ...b, is, net: b.brut - b.tvaDue - is }
   }
 
   // Diffuse les chiffres prévisionnels LIVE (CA, charges après curseurs, net) →
@@ -371,7 +400,7 @@ export function SalesForecast({
             <div className="mt-3 space-y-1.5 rounded-lg bg-nv-dark border border-nv-border p-3 text-sm">
               <div className="flex items-center justify-between"><span className="text-nv-text-muted">Résultat brut (CA − charges)</span><span className={`tabular-nums ${fin.brut >= 0 ? 'text-nv-text' : 'text-red-400'}`}>{eur(fin.brut)}</span></div>
               <div className="flex items-center justify-between"><span className="text-nv-text-muted">TVA à reverser <span className="text-[10px] text-nv-text-faint">(collectée − déductible)</span></span><span className="text-red-400 tabular-nums">− {eur(fin.tvaDue)}</span></div>
-              <div className="flex items-center justify-between"><span className="text-nv-text-muted">IS <span className="text-[10px] text-nv-text-faint">({isReducedRate ? '15%' : '25%'})</span></span><span className="text-red-400 tabular-nums">− {eur(fin.is)}</span></div>
+              <div className="flex items-center justify-between"><span className="text-nv-text-muted">IS <span className="text-[10px] text-nv-text-faint">({fin.taxableHT > 0 ? Math.round((fin.is / fin.taxableHT) * 100) : (isReducedRate ? 15 : 25)}% — seuil 15% annuel {realizedTaxableYTD >= IS_REDUCED_THRESHOLD ? 'déjà atteint' : ''})</span></span><span className="text-red-400 tabular-nums">− {eur(fin.is)}</span></div>
               <div className="flex items-center justify-between border-t border-nv-border pt-1.5"><span className="text-xs font-semibold text-white">Net prévu</span><span className={`text-sm font-bold tabular-nums ${fin.net >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{fin.net >= 0 ? '+' : ''}{eur(fin.net)}</span></div>
             </div>
           </div>
