@@ -396,14 +396,23 @@ export function SalesForecast({
               </div>
             )}
 
-            {/* Déductions fiscales du mois → passage brut → net */}
-            <div className="mt-3 space-y-1.5 rounded-lg bg-nv-dark border border-nv-border p-3 text-sm">
-              <div className="flex items-center justify-between"><span className="text-nv-text-muted">Résultat brut (CA − charges)</span><span className={`tabular-nums ${fin.brut >= 0 ? 'text-nv-text' : 'text-red-400'}`}>{eur(fin.brut)}</span></div>
-              <div className="flex items-center justify-between text-[11px] text-nv-text-faint pl-3"><span>TVA collectée (sur le CA)</span><span className="tabular-nums">{eur(fin.tvaCollected)}</span></div>
-              <div className="flex items-center justify-between text-[11px] text-nv-text-faint pl-3"><span>− TVA déductible (sur charges)</span><span className="tabular-nums">− {eur(fin.tvaDeductible)}</span></div>
-              <div className="flex items-center justify-between"><span className="text-nv-text-muted">TVA à reverser</span><span className="text-red-400 tabular-nums">− {eur(fin.tvaDue)}</span></div>
-              <div className="flex items-center justify-between"><span className="text-nv-text-muted">IS <span className="text-[10px] text-nv-text-faint">({fin.taxableHT > 0 ? Math.round((fin.is / fin.taxableHT) * 100) : (isReducedRate ? 15 : 25)}% — seuil 15% annuel {realizedTaxableYTD >= IS_REDUCED_THRESHOLD ? 'déjà atteint' : ''})</span></span><span className="text-red-400 tabular-nums">− {eur(fin.is)}</span></div>
-              <div className="flex items-center justify-between border-t border-nv-border pt-1.5"><span className="text-xs font-semibold text-white">Net prévu</span><span className={`text-sm font-bold tabular-nums ${fin.net >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{fin.net >= 0 ? '+' : ''}{eur(fin.net)}</span></div>
+            {/* Cascade « du CA au net » — claire et ligne par ligne */}
+            <div className="mt-3 rounded-xl bg-nv-dark border border-nv-border overflow-hidden text-sm">
+              <div className="px-3 py-2 flex items-center justify-between"><span className="text-nv-text">Chiffre d&apos;affaires prévu <span className="text-[10px] text-nv-text-faint">(TTC)</span></span><span className="tabular-nums text-white">{eur(fin.ca)}</span></div>
+              <div className="px-3 py-2 flex items-center justify-between border-t border-nv-border/60"><span className="text-nv-text-muted">− Charges prévues <span className="text-[10px] text-nv-text-faint">(TTC)</span></span><span className="tabular-nums text-red-400">− {eur(fin.charges)}</span></div>
+              <div className="px-3 py-2 flex items-center justify-between border-t border-nv-border bg-white/[0.02]"><span className="font-medium text-white">= Résultat brut</span><span className={`tabular-nums font-semibold ${fin.brut >= 0 ? 'text-white' : 'text-red-400'}`}>{eur(fin.brut)}</span></div>
+
+              {/* Bloc TVA — sur le CA, pas sur le bénéfice */}
+              <div className="px-3 py-2 border-t border-nv-border">
+                <p className="text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold mb-1.5">TVA — collectée sur le CA, moins la déductible</p>
+                <div className="flex items-center justify-between text-[11px] text-nv-text-muted pl-3"><span>TVA collectée (sur le CA)</span><span className="tabular-nums">{eur(fin.tvaCollected)}</span></div>
+                <div className="flex items-center justify-between text-[11px] text-nv-text-muted pl-3"><span>− TVA déductible (sur charges)</span><span className="tabular-nums">− {eur(fin.tvaDeductible)}</span></div>
+                <div className="flex items-center justify-between mt-1 pt-1 border-t border-nv-border/60"><span className="text-nv-text">= TVA à reverser</span><span className="text-red-400 tabular-nums">− {eur(fin.tvaDue)}</span></div>
+              </div>
+
+              <div className="px-3 py-2 flex items-center justify-between border-t border-nv-border bg-white/[0.02]"><span className="font-medium text-white">= Résultat imposable (HT)</span><span className={`tabular-nums font-semibold ${fin.taxableHT >= 0 ? 'text-white' : 'text-red-400'}`}>{eur(fin.taxableHT)}</span></div>
+              <div className="px-3 py-2 flex items-center justify-between border-t border-nv-border/60"><span className="text-nv-text-muted">− IS <span className="text-[10px] text-nv-text-faint">({fin.taxableHT > 0 ? Math.round((fin.is / fin.taxableHT) * 100) : (isReducedRate ? 15 : 25)}% · seuil 15% annuel {realizedTaxableYTD >= IS_REDUCED_THRESHOLD ? 'déjà atteint → 25%' : 'non atteint'})</span></span><span className="text-red-400 tabular-nums">− {eur(fin.is)}</span></div>
+              <div className="px-3 py-2.5 flex items-center justify-between border-t border-nv-border bg-emerald-500/[0.06]"><span className="text-sm font-bold text-white">= Net prévu <span className="text-[10px] text-nv-text-faint font-normal">(après TVA & IS)</span></span><span className={`text-base font-bold tabular-nums ${fin.net >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{fin.net >= 0 ? '+' : ''}{eur(fin.net)}</span></div>
             </div>
           </div>
         </div>
