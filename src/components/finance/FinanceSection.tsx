@@ -103,7 +103,7 @@ export async function FinanceSection({ previsionnel, forecastByMonth = {} }: { p
       previsionnel={previsionnel}
       synthese={{
         year, caYear, caLastYear, expensesYear, salariesYear, chargesTotalYear,
-        resultBeforeTax, tvaDue, resultHT, taxAmount, resultNet, margin, monthly,
+        resultBeforeTax, tvaCollected, tvaDeductible, tvaDue, resultHT, taxAmount, resultNet, margin, monthly,
         is: { reducedBase: is.reducedBase, reducedTax: is.reducedTax, normalBase: is.normalBase, normalTax: is.normalTax, effectiveRate: is.effectiveRate },
         eligibleReduced,
         poleTotalsYear,

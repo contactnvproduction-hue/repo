@@ -20,7 +20,7 @@ const MONTHS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep
 
 type Synthese = {
   year: number; caYear: number; caLastYear: number; expensesYear: number; salariesYear: number
-  chargesTotalYear: number; resultBeforeTax: number; tvaDue: number; resultHT: number; taxAmount: number
+  chargesTotalYear: number; resultBeforeTax: number; tvaCollected: number; tvaDeductible: number; tvaDue: number; resultHT: number; taxAmount: number
   resultNet: number; margin: number; monthly: { month: number; ca: number; charges: number; profit: number }[]
   is: { reducedBase: number; reducedTax: number; normalBase: number; normalTax: number; effectiveRate: number }
   eligibleReduced: boolean
@@ -135,7 +135,10 @@ function Synthese({ data }: { data: Synthese }) {
             {polesYear.map(([pole, amount]) => <Line2 key={pole} label={pole} value={-amount} indent />)}
             <Line2 label="Total charges" value={-data.chargesTotalYear} bold border />
             <Line2 label="Résultat brut (CA − charges)" value={data.resultBeforeTax} bold positive={data.resultBeforeTax >= 0} border />
-            <Line2 label="TVA à reverser (collectée − déductible)" value={-data.tvaDue} muted />
+            <p className="text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold mt-3 mb-1">TVA à reverser</p>
+            <Line2 label="TVA collectée (sur le CA)" value={data.tvaCollected} indent muted />
+            <Line2 label="TVA déductible (sur les charges)" value={-data.tvaDeductible} indent muted />
+            <Line2 label="TVA à reverser (collectée − déductible)" value={-data.tvaDue} border />
             <Line2 label="Résultat imposable (HT)" value={data.resultHT} positive={data.resultHT >= 0} border />
             {/* Détail IS progressif */}
             {data.taxAmount > 0 && (

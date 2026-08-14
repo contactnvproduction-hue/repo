@@ -66,7 +66,7 @@ export function SalesForecast({
     const tvaNet = tvaCollected - tvaDeductible
     const tvaDue = Math.max(0, tvaNet)
     const taxableHT = brut - tvaNet // = CA_HT − charges_HT
-    return { ca, charges, brut, tvaDue, taxableHT }
+    return { ca, charges, brut, tvaCollected, tvaDeductible, tvaDue, taxableHT }
   }
 
   // IS chaîné sur l'ANNÉE : le taux réduit 15% ne s'applique que jusqu'à 42 500 €
@@ -399,7 +399,9 @@ export function SalesForecast({
             {/* Déductions fiscales du mois → passage brut → net */}
             <div className="mt-3 space-y-1.5 rounded-lg bg-nv-dark border border-nv-border p-3 text-sm">
               <div className="flex items-center justify-between"><span className="text-nv-text-muted">Résultat brut (CA − charges)</span><span className={`tabular-nums ${fin.brut >= 0 ? 'text-nv-text' : 'text-red-400'}`}>{eur(fin.brut)}</span></div>
-              <div className="flex items-center justify-between"><span className="text-nv-text-muted">TVA à reverser <span className="text-[10px] text-nv-text-faint">(collectée − déductible)</span></span><span className="text-red-400 tabular-nums">− {eur(fin.tvaDue)}</span></div>
+              <div className="flex items-center justify-between text-[11px] text-nv-text-faint pl-3"><span>TVA collectée (sur le CA)</span><span className="tabular-nums">{eur(fin.tvaCollected)}</span></div>
+              <div className="flex items-center justify-between text-[11px] text-nv-text-faint pl-3"><span>− TVA déductible (sur charges)</span><span className="tabular-nums">− {eur(fin.tvaDeductible)}</span></div>
+              <div className="flex items-center justify-between"><span className="text-nv-text-muted">TVA à reverser</span><span className="text-red-400 tabular-nums">− {eur(fin.tvaDue)}</span></div>
               <div className="flex items-center justify-between"><span className="text-nv-text-muted">IS <span className="text-[10px] text-nv-text-faint">({fin.taxableHT > 0 ? Math.round((fin.is / fin.taxableHT) * 100) : (isReducedRate ? 15 : 25)}% — seuil 15% annuel {realizedTaxableYTD >= IS_REDUCED_THRESHOLD ? 'déjà atteint' : ''})</span></span><span className="text-red-400 tabular-nums">− {eur(fin.is)}</span></div>
               <div className="flex items-center justify-between border-t border-nv-border pt-1.5"><span className="text-xs font-semibold text-white">Net prévu</span><span className={`text-sm font-bold tabular-nums ${fin.net >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{fin.net >= 0 ? '+' : ''}{eur(fin.net)}</span></div>
             </div>
