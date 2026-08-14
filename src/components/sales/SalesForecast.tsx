@@ -12,6 +12,8 @@ import {
 } from 'recharts'
 import toast from 'react-hot-toast'
 import type { ForecastMonth, RenewalSuggestion } from '@/lib/mrr-forecast'
+import { estimateRecoverableVat } from '@/lib/expense-poles'
+import { computeIS } from '@/lib/tax'
 
 const eur = (n: number) => `${Math.round(n).toLocaleString('fr-FR')} €`
 
@@ -21,10 +23,14 @@ type ChargePole = { name: string; color: string; baseline: number }
 export function SalesForecast({
   months: initialMonths,
   chargesPoles = [],
+  vatRate = 20,
+  isReducedRate = true,
 }: {
   months: ForecastMonth[]
   suggestions?: RenewalSuggestion[]
   chargesPoles?: ChargePole[]
+  vatRate?: number
+  isReducedRate?: boolean
 }) {
   const router = useRouter()
   const [months, setMonths] = useState(initialMonths)
@@ -42,15 +48,35 @@ export function SalesForecast({
   const resetMonth = (key: string) => setChargeOv(prev => { const next = { ...prev }; delete next[key]; try { localStorage.setItem(CHARGES_KEY, JSON.stringify(next)) } catch {}; return next })
   const hasCharges = chargesPoles.length > 0
   const chargesForMonth = (m: ForecastMonth) => hasCharges ? chargesPoles.reduce((s, p) => s + poleAmount(m.key, p.name), 0) : m.chargesTotal
+  const vatFrac = vatRate / (100 + vatRate)
+
+  // Décomposition mensuelle : brut (CA − charges) → TVA à reverser → IS → NET.
+  // CA et charges sont TTC : on extrait la TVA collectée et la TVA déductible par
+  // pôle (salaires/freelances = 0), l'IS s'applique sur le résultat HT.
+  const financials = (m: ForecastMonth) => {
+    const ca = m.caTotal
+    const charges = chargesForMonth(m)
+    const brut = ca - charges
+    const tvaCollected = ca * vatFrac
+    const tvaDeductible = hasCharges
+      ? chargesPoles.reduce((s, p) => s + estimateRecoverableVat(poleAmount(m.key, p.name), p.name), 0)
+      : estimateRecoverableVat(charges, null)
+    const tvaNet = tvaCollected - tvaDeductible
+    const tvaDue = Math.max(0, tvaNet)
+    const taxableHT = brut - tvaNet // = CA_HT − charges_HT
+    const is = computeIS(Math.max(0, taxableHT), isReducedRate).total
+    const net = brut - tvaDue - is
+    return { ca, charges, brut, tvaDue, is, net }
+  }
 
   // Diffuse les chiffres prévisionnels LIVE (CA, charges après curseurs, net) →
   // la fiche de pilotage des investissements met tout à jour en continu.
   useEffect(() => {
     const data: Record<string, { ca: number; charges: number; net: number }> = {}
-    for (const m of months) { const ch = chargesForMonth(m); data[m.key] = { ca: m.caTotal, charges: ch, net: m.caTotal - ch } }
+    for (const m of months) { const f = financials(m); data[m.key] = { ca: f.ca, charges: f.charges, net: f.net } }
     try { localStorage.setItem('nv_forecast_live', JSON.stringify(data)) } catch {}
     window.dispatchEvent(new CustomEvent('nv-forecast-live', { detail: data }))
-  }, [chargeOv, months, chargesPoles]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [chargeOv, months, chargesPoles, vatRate, isReducedRate]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const selected = months.find(m => m.key === selectedKey) ?? months[0]
 
@@ -142,15 +168,16 @@ export function SalesForecast({
   }
 
   const chartData = useMemo(() => months.map(m => {
-    const ch = chargesForMonth(m)
-    return { name: m.shortLabel, key: m.key, CA: Math.round(m.caTotal), Charges: Math.round(ch), Profit: Math.round(m.caTotal - ch) }
-  }), [months, chargeOv, chargesPoles]) // eslint-disable-line react-hooks/exhaustive-deps
+    const f = financials(m)
+    return { name: m.shortLabel, key: m.key, CA: Math.round(f.ca), Charges: Math.round(f.charges), Profit: Math.round(f.net) }
+  }), [months, chargeOv, chargesPoles, vatRate, isReducedRate]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!selected) return null
 
-  // Charges & net LIVE du mois sélectionné (curseurs pôle par pôle)
-  const liveCharges = chargesForMonth(selected)
-  const liveProfit = selected.caTotal - liveCharges
+  // Décomposition LIVE du mois sélectionné (curseurs pôle par pôle → TVA → IS → net)
+  const fin = financials(selected)
+  const liveCharges = fin.charges
+  const liveProfit = fin.net
   const margin = selected.caTotal > 0 ? Math.round((liveProfit / selected.caTotal) * 100) : 0
 
   return (
@@ -196,7 +223,7 @@ export function SalesForecast({
             <p className={`text-xs font-semibold capitalize ${m.key === selectedKey ? 'text-primary' : 'text-nv-text-muted'}`}>
               {m.shortLabel}{m.isCurrent ? ' · en cours' : ''}
             </p>
-            {(() => { const p = m.caTotal - chargesForMonth(m); return (
+            {(() => { const p = financials(m).net; return (
               <p className={`text-sm font-bold ${p >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{p >= 0 ? '+' : ''}{eur(p)}</p>
             ) })()}
           </button>
@@ -223,9 +250,9 @@ export function SalesForecast({
             <p className="text-[10px] text-nv-text-faint">{hasCharges ? 'prévision pôle par pôle' : (selected.chargesMonthsUsed > 0 ? `moy. ${selected.chargesMonthsUsed} mois` : '—')}</p>
           </div>
           <div className={`rounded-xl p-2.5 border ${liveProfit >= 0 ? 'bg-emerald-500/5 border-emerald-500/25' : 'bg-red-500/5 border-red-500/25'}`}>
-            <p className="text-[10px] text-nv-text-muted flex items-center gap-1"><Wallet size={11} className={liveProfit >= 0 ? 'text-emerald-400' : 'text-red-400'} />Net prévu</p>
+            <p className="text-[10px] text-nv-text-muted flex items-center gap-1"><Wallet size={11} className={liveProfit >= 0 ? 'text-emerald-400' : 'text-red-400'} />Net (après TVA & IS)</p>
             <p className={`text-lg font-bold tabular-nums leading-tight ${liveProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{liveProfit >= 0 ? '+' : ''}{eur(liveProfit)}</p>
-            <p className="text-[10px] text-nv-text-faint">Marge {margin}%</p>
+            <p className="text-[10px] text-nv-text-faint">brut {eur(fin.brut)} · marge {margin}%</p>
           </div>
         </div>
 
@@ -339,6 +366,14 @@ export function SalesForecast({
                 <p className="text-[10px] text-nv-text-faint">Base : moyenne des 3 derniers mois par pôle — ajuste chaque curseur, le net se recalcule en direct.</p>
               </div>
             )}
+
+            {/* Déductions fiscales du mois → passage brut → net */}
+            <div className="mt-3 space-y-1.5 rounded-lg bg-nv-dark border border-nv-border p-3 text-sm">
+              <div className="flex items-center justify-between"><span className="text-nv-text-muted">Résultat brut (CA − charges)</span><span className={`tabular-nums ${fin.brut >= 0 ? 'text-nv-text' : 'text-red-400'}`}>{eur(fin.brut)}</span></div>
+              <div className="flex items-center justify-between"><span className="text-nv-text-muted">TVA à reverser <span className="text-[10px] text-nv-text-faint">(collectée − déductible)</span></span><span className="text-red-400 tabular-nums">− {eur(fin.tvaDue)}</span></div>
+              <div className="flex items-center justify-between"><span className="text-nv-text-muted">IS <span className="text-[10px] text-nv-text-faint">({isReducedRate ? '15%' : '25%'})</span></span><span className="text-red-400 tabular-nums">− {eur(fin.is)}</span></div>
+              <div className="flex items-center justify-between border-t border-nv-border pt-1.5"><span className="text-xs font-semibold text-white">Net prévu</span><span className={`text-sm font-bold tabular-nums ${fin.net >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{fin.net >= 0 ? '+' : ''}{eur(fin.net)}</span></div>
+            </div>
           </div>
         </div>
       </div>

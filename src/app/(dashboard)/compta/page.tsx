@@ -45,7 +45,7 @@ export default async function ComptaPage() {
         previsionnel={
           <div className="space-y-5">
             <AverageTicket />
-            <SalesForecast months={forecast.months} suggestions={forecast.suggestions} chargesPoles={chargesPoles} />
+            <SalesForecast months={forecast.months} suggestions={forecast.suggestions} chargesPoles={chargesPoles} vatRate={(settings as any)?.defaultVatRate ?? 20} isReducedRate={(settings as any)?.isReducedRate !== false} />
           </div>
         }
       />
