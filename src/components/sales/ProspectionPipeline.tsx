@@ -22,7 +22,7 @@ type Lead = {
   closerStatusId: string | null; closerStatus: CloserStatus | null
   followUpDate: string | null; rdvBookedAt: string | null; rdvDate: string | null
   saleMonthlyAmount: number | null; wonAt: string | null; lostAt: string | null
-  convertedClientId: string | null; closingNotes: string | null; isExistingClient: boolean; resources: Resource[]; annotations: Note[]; calls: string[]; createdAt: string
+  convertedClientId: string | null; closingNotes: string | null; isExistingClient: boolean; resources: Resource[]; annotations: Note[]; calls: { date: string; showedUp: boolean }[]; createdAt: string
 }
 type Settings = { commissionPerBookedCall: number; commissionPercent: number }
 
@@ -93,18 +93,26 @@ export function ProspectionPipeline({ leads: initialLeads, commercials, admins, 
     [leads, filter, comFilter, monthFilter, q]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Calls bookés d'un lead comptés sur la DATE réelle des appels renseignés
-  const callsInMonth = (l: Lead, yy: number, mm: number) => l.calls.filter(iso => inMonth(iso, yy, mm)).length
+  const callsInMonth = (l: Lead, yy: number, mm: number) => l.calls.filter(c => inMonth(c.date, yy, mm)).length
+  const showedInMonth = (l: Lead, yy: number, mm: number) => l.calls.filter(c => inMonth(c.date, yy, mm) && c.showedUp).length
 
   const commissions = useMemo(() => commercials.map(c => {
     const mine = leads.filter(l => l.commercialId === c.id)
+    const leadsCount = mine.length // leads dont la personne a la charge
     // RDV bookés = nombre de calls datés dans le mois (fallback rdvBookedAt si aucun call)
     const rdvCount = mine.reduce((s, l) => s + (l.calls.length ? callsInMonth(l, y, m) : (inMonth(l.rdvBookedAt, y, m) ? 1 : 0)), 0)
+    const showedCount = mine.reduce((s, l) => s + showedInMonth(l, y, m), 0)
+    // Leads distincts ayant obtenu un call ce mois → taux de conversion en call
+    const leadsWithCall = mine.filter(l => l.calls.length ? callsInMonth(l, y, m) > 0 : inMonth(l.rdvBookedAt, y, m)).length
     const won = mine.filter(l => inMonth(l.wonAt, y, m))
     const prime = rdvCount * settings.commissionPerBookedCall
     const variable = won.reduce((s, l) => s + (l.saleMonthlyAmount ?? 0), 0) * (settings.commissionPercent / 100)
     const conversion = rdvCount > 0 ? Math.round((won.length / rdvCount) * 100) : 0
-    return { c, rdvCount, wonCount: won.length, conversion, total: prime + variable, prime, variable }
-  }).filter(x => x.rdvCount > 0 || x.wonCount > 0).sort((a, b) => b.total - a.total), [leads, commercials, settings, y, m]) // eslint-disable-line react-hooks/exhaustive-deps
+    const callConvPct = leadsCount > 0 ? Math.round((leadsWithCall / leadsCount) * 100) : 0 // leads → call
+    const showupPct = rdvCount > 0 ? Math.round((showedCount / rdvCount) * 100) : 0 // présentés / bookés
+    const saleConvPct = rdvCount > 0 ? Math.round((won.length / rdvCount) * 100) : 0 // call → vente
+    return { c, leadsCount, rdvCount, showedCount, wonCount: won.length, conversion, callConvPct, showupPct, saleConvPct, total: prime + variable, prime, variable }
+  }).filter(x => x.rdvCount > 0 || x.wonCount > 0 || x.leadsCount > 0).sort((a, b) => b.total - a.total), [leads, commercials, settings, y, m]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const kpis = {
     actifs: counts.ACTIF,
@@ -172,16 +180,25 @@ export function ProspectionPipeline({ leads: initialLeads, commercials, admins, 
         <>
           {commissions.length > 0 && (
             <div className="bg-nv-card border border-nv-border rounded-xl p-3">
-              <div className="flex items-center gap-2 mb-2"><Coins size={13} className="text-primary" /><span className="text-xs font-semibold text-white">Commissions — {now.toLocaleDateString('fr-FR', { month: 'long' })}</span><span className="text-[10px] text-nv-text-faint ml-auto">{eur(settings.commissionPerBookedCall)}/RDV · {settings.commissionPercent}% / 1re mensualité nette</span></div>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex items-center gap-2 mb-2 flex-wrap"><Coins size={13} className="text-primary" /><span className="text-xs font-semibold text-white">Perfs commerciales — {now.toLocaleDateString('fr-FR', { month: 'long' })}</span><span className="text-[10px] text-nv-text-faint ml-auto">{eur(settings.commissionPerBookedCall)}/RDV · {settings.commissionPercent}% / 1re mensualité nette</span></div>
+              {/* En-têtes */}
+              <div className="hidden md:grid grid-cols-[1.4fr_repeat(6,1fr)] gap-2 px-2 pb-1 text-[9px] uppercase tracking-wider text-nv-text-faint font-semibold text-center">
+                <span className="text-left">Commercial</span><span>Leads</span><span>Calls bookés</span><span>Conv. en call</span><span>Présence (show-up)</span><span>Signés · conv. vente</span><span>Commission</span>
+              </div>
+              <div className="space-y-1.5">
                 {commissions.map(c => (
-                  <div key={c.c.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-nv-dark border border-nv-border">
-                    <span className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">{c.c.name.charAt(0)}</span>
-                    <div><p className="text-xs font-medium text-white leading-tight">{c.c.name}</p><p className="text-[10px] text-nv-text-faint">{c.rdvCount} RDV · {c.wonCount} signé{c.wonCount > 1 ? 's' : ''} · <span className="text-emerald-400">{c.conversion}%</span></p></div>
-                    <span className="text-sm font-bold text-primary tabular-nums ml-1">{eur(c.total)}</span>
+                  <div key={c.c.id} className="grid grid-cols-2 md:grid-cols-[1.4fr_repeat(6,1fr)] gap-2 items-center px-2 py-1.5 rounded-lg bg-nv-dark border border-nv-border text-center">
+                    <span className="flex items-center gap-1.5 text-left"><span className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center text-[9px] font-bold text-primary shrink-0">{c.c.name.charAt(0)}</span><span className="text-xs font-medium text-white truncate">{c.c.name}</span></span>
+                    <span className="text-xs text-nv-text-muted tabular-nums"><span className="md:hidden text-[9px] text-nv-text-faint">Leads </span>{c.leadsCount}</span>
+                    <span className="text-xs text-nv-text-muted tabular-nums"><span className="md:hidden text-[9px] text-nv-text-faint">Calls </span>{c.rdvCount}</span>
+                    <span className="text-xs tabular-nums text-blue-400"><span className="md:hidden text-[9px] text-nv-text-faint">Conv.call </span>{c.callConvPct}%</span>
+                    <span className="text-xs tabular-nums text-cyan-400"><span className="md:hidden text-[9px] text-nv-text-faint">Show-up </span>{c.showupPct}%</span>
+                    <span className="text-xs tabular-nums text-emerald-400"><span className="md:hidden text-[9px] text-nv-text-faint">Vente </span>{c.wonCount} · {c.saleConvPct}%</span>
+                    <span className="text-sm font-bold text-primary tabular-nums">{eur(c.total)}</span>
                   </div>
                 ))}
               </div>
+              <p className="text-[10px] text-nv-text-faint mt-2">Show-up = calls où le prospect s&apos;est présenté / calls bookés. Conv. en call = leads ayant obtenu un call / leads en charge. Conv. vente = signés / calls bookés.</p>
             </div>
           )}
 
@@ -256,7 +273,7 @@ function StatsView({ leads: allLeads, commercials, settings }: { leads: Lead[]; 
   const [sel, setSel] = useState<string>('')
   const leads = sel ? allLeads.filter(l => l.commercialId === sel) : allLeads
   // RDV = nombre de calls datés dans le mois (fallback rdvBookedAt si aucun call renseigné)
-  const bookedInMonth = (ls: Lead[], y: number, m: number) => ls.reduce((s, l) => s + (l.calls.length ? l.calls.filter(iso => inMonth(iso, y, m)).length : (inMonth(l.rdvBookedAt, y, m) ? 1 : 0)), 0)
+  const bookedInMonth = (ls: Lead[], y: number, m: number) => ls.reduce((s, l) => s + (l.calls.length ? l.calls.filter(c => inMonth(c.date, y, m)).length : (inMonth(l.rdvBookedAt, y, m) ? 1 : 0)), 0)
   const months = Array.from({ length: 6 }, (_, i) => {
     const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1); const y = d.getFullYear(), m = d.getMonth()
     const gen = leads.filter(l => inMonth(l.createdAt, y, m)).length
@@ -264,8 +281,9 @@ function StatsView({ leads: allLeads, commercials, settings }: { leads: Lead[]; 
     const ventes = leads.filter(l => inMonth(l.wonAt, y, m))
     const caSigned = ventes.reduce((s, l) => s + (l.saleMonthlyAmount ?? 0), 0)
     const conversion = rdv > 0 ? Math.round((ventes.length / rdv) * 100) : 0
+    const panier = ventes.length > 0 ? Math.round(caSigned / ventes.length) : 0 // panier moyen du mois
     const commission = rdv * settings.commissionPerBookedCall + caSigned * (settings.commissionPercent / 100)
-    return { m, y, gen, rdv, ventes: ventes.length, conversion, caSigned, commission, isCurrent: i === 5 }
+    return { m, y, gen, rdv, ventes: ventes.length, conversion, panier, caSigned, commission, isCurrent: i === 5 }
   })
   const totalToPay = commercials.map(c => {
     const mine = allLeads.filter(l => l.commercialId === c.id)
@@ -285,19 +303,41 @@ function StatsView({ leads: allLeads, commercials, settings }: { leads: Lead[]; 
           ))}
         </div>
       )}
+      {/* Panier moyen — évolution mois par mois */}
+      <div className="bg-nv-card border border-nv-border rounded-xl p-4">
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <h4 className="text-sm font-semibold text-white">Panier moyen — évolution</h4>
+          <span className="text-xs text-nv-text-muted">Ce mois : <span className="text-lg font-bold text-primary tabular-nums">{eur(months[months.length - 1]?.panier ?? 0)}</span> <span className="text-[10px] text-nv-text-faint">/ vente signée</span></span>
+        </div>
+        {(() => {
+          const maxP = Math.max(1, ...months.map(mo => mo.panier))
+          return (
+            <div className="flex items-end justify-between gap-2 h-28">
+              {months.map((mo, i) => (
+                <div key={i} className="flex-1 flex flex-col items-center gap-1 h-full justify-end">
+                  <span className="text-[10px] font-semibold text-white tabular-nums">{mo.panier > 0 ? eur(mo.panier) : ''}</span>
+                  <div className="w-full rounded-t-lg transition-all" style={{ height: `${(mo.panier / maxP) * 100}%`, minHeight: mo.panier > 0 ? '6px' : '2px', backgroundColor: mo.isCurrent ? '#e8b84b' : 'rgba(232,184,75,0.35)' }} />
+                  <span className={`text-[10px] ${mo.isCurrent ? 'text-primary font-semibold' : 'text-nv-text-faint'}`}>{MONTHS[mo.m]}</span>
+                </div>
+              ))}
+            </div>
+          )
+        })()}
+      </div>
+
       <div className="bg-nv-card border border-nv-border rounded-xl overflow-hidden">
-        <div className="grid grid-cols-[80px_1fr_1fr_1fr_1fr_1fr_1fr] gap-2 px-4 py-2 text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold border-b border-nv-border bg-nv-dark/40 text-right">
-          <span className="text-left">Mois</span><span>Leads</span><span>Calls booké</span><span>Signés</span><span>Conv.</span><span>CA signé</span><span>Commission</span>
+        <div className="grid grid-cols-[70px_1fr_1fr_1fr_1fr_1fr_1fr] gap-2 px-4 py-2 text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold border-b border-nv-border bg-nv-dark/40 text-right">
+          <span className="text-left">Mois</span><span>Leads</span><span>Calls</span><span>Signés</span><span>Conv.</span><span>Panier moy.</span><span>Commission</span>
         </div>
         <div className="divide-y divide-nv-border/50">
           {months.map(mo => (
-            <div key={`${mo.y}-${mo.m}`} className={`grid grid-cols-[80px_1fr_1fr_1fr_1fr_1fr_1fr] gap-2 px-4 py-2.5 text-right text-sm tabular-nums ${mo.isCurrent ? 'bg-primary/5' : ''}`}>
+            <div key={`${mo.y}-${mo.m}`} className={`grid grid-cols-[70px_1fr_1fr_1fr_1fr_1fr_1fr] gap-2 px-4 py-2.5 text-right text-sm tabular-nums ${mo.isCurrent ? 'bg-primary/5' : ''}`}>
               <span className={`text-left font-medium ${mo.isCurrent ? 'text-primary' : 'text-white'}`}>{MONTHS[mo.m]} {String(mo.y).slice(2)}</span>
               <span className="text-nv-text-muted">{mo.gen}</span>
               <span className="text-nv-text-muted">{mo.rdv}</span>
               <span className="text-nv-text-muted">{mo.ventes}</span>
               <span className="text-emerald-400">{mo.conversion}%</span>
-              <span className="text-nv-text">{eur(mo.caSigned)}</span>
+              <span className="text-nv-text">{eur(mo.panier)}</span>
               <span className="text-primary font-semibold">{eur(mo.commission)}</span>
             </div>
           ))}

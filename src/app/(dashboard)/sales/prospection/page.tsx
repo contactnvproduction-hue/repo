@@ -38,7 +38,7 @@ export default async function ProspectionPage() {
 
   const [allLeads, users] = await Promise.all([
     (prisma as any).lead.findMany({
-      include: { status: true, prospectStatus: true, prospectNotes: { orderBy: { createdAt: 'desc' } }, calls: { select: { date: true } } },
+      include: { status: true, prospectStatus: true, prospectNotes: { orderBy: { createdAt: 'desc' } }, calls: { select: { date: true, showedUp: true } } },
       orderBy: { createdAt: 'desc' },
     }).catch(() => []),
     prisma.user.findMany({ select: { id: true, name: true, avatar: true, role: true }, orderBy: { name: 'asc' } }),
@@ -61,7 +61,7 @@ export default async function ProspectionPage() {
     convertedClientId: l.convertedClientId ?? null,
     closingNotes: l.closingNotes ?? null,
     isExistingClient: l.isExistingClient ?? false,
-    calls: (l.calls ?? []).map((c: any) => new Date(c.date).toISOString()),
+    calls: (l.calls ?? []).map((c: any) => ({ date: new Date(c.date).toISOString(), showedUp: !!c.showedUp })),
     resources: Array.isArray(l.resources) ? l.resources : [],
     annotations: (l.prospectNotes ?? []).map((n: any) => ({ id: n.id, content: n.content, authorName: n.authorName, createdAt: new Date(n.createdAt).toISOString() })),
     createdAt: new Date(l.createdAt).toISOString(),
