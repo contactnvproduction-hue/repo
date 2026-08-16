@@ -80,7 +80,9 @@ export async function FinanceSection({ previsionnel, forecastByMonth = {} }: { p
   // TVA annuelle : collectée sur le CA (TTC) − déductible par pôle (salaires = 0)
   const vatFrac = ((settings as any)?.defaultVatRate ?? 20) / (100 + ((settings as any)?.defaultVatRate ?? 20))
   const tvaCollected = caYear * vatFrac
-  const tvaDeductible = Object.entries(poleTotalsYear).reduce((s, [pole, amt]) => s + estimateRecoverableVat(amt as number, pole), 0)
+  // Déductible estimé PRUDEMMENT (abattement de sécurité) : on préfère sous-estimer
+  // la TVA récupérable → TVA à reverser plutôt majorée pour la provision.
+  const tvaDeductible = Object.entries(poleTotalsYear).reduce((s, [pole, amt]) => s + estimateRecoverableVat(amt as number, pole), 0) * 0.85
   const tvaNet = tvaCollected - tvaDeductible
   const tvaDue = Math.max(0, tvaNet)
   const resultHT = resultBeforeTax - tvaNet // base imposable HT
@@ -88,6 +90,9 @@ export async function FinanceSection({ previsionnel, forecastByMonth = {} }: { p
   const taxAmount = is.total
   const resultNet = resultHT - taxAmount // net après TVA + IS
   const margin = caYear > 0 ? Math.round((resultNet / caYear) * 100) : 0
+  // Provision d'IS à garder de côté pour le paiement (solde d'IS ~ mai N+1)
+  const isProvision = taxAmount
+  const isProvisionMonthLabel = `mai ${year + 1}`
 
   // Série mensuelle CA / charges (salaires inclus) / profit
   const monthly = Array.from({ length: 12 }, (_, m) => ({
@@ -104,6 +109,7 @@ export async function FinanceSection({ previsionnel, forecastByMonth = {} }: { p
       synthese={{
         year, caYear, caLastYear, expensesYear, salariesYear, chargesTotalYear,
         resultBeforeTax, tvaCollected, tvaDeductible, tvaDue, resultHT, taxAmount, resultNet, margin, monthly,
+        isProvision, isProvisionMonthLabel,
         is: { reducedBase: is.reducedBase, reducedTax: is.reducedTax, normalBase: is.normalBase, normalTax: is.normalTax, effectiveRate: is.effectiveRate },
         eligibleReduced,
         poleTotalsYear,

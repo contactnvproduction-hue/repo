@@ -21,6 +21,7 @@ const MONTHS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep
 type Synthese = {
   year: number; caYear: number; caLastYear: number; expensesYear: number; salariesYear: number
   chargesTotalYear: number; resultBeforeTax: number; tvaCollected: number; tvaDeductible: number; tvaDue: number; resultHT: number; taxAmount: number
+  isProvision: number; isProvisionMonthLabel: string
   resultNet: number; margin: number; monthly: { month: number; ca: number; charges: number; profit: number }[]
   is: { reducedBase: number; reducedTax: number; normalBase: number; normalTax: number; effectiveRate: number }
   eligibleReduced: boolean
@@ -130,17 +131,16 @@ function Synthese({ data }: { data: Synthese }) {
         <div className="bg-nv-card border border-nv-border rounded-2xl p-5">
           <h3 className="text-sm font-semibold text-white flex items-center gap-2 mb-3"><Landmark size={15} className="text-primary" /> Compte de résultat — {data.year}</h3>
           <div>
-            <Line2 label="Chiffre d'affaires encaissé" value={data.caYear} bold positive />
+            <Line2 label="Chiffre d'affaires (TTC)" value={data.caYear} bold positive />
+            {/* TVA en premier — collectée sur le CA, avant les charges */}
+            <p className="text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold mt-3 mb-1">TVA (sur le CA)</p>
+            <Line2 label="TVA collectée (20% du CA)" value={-data.tvaCollected} indent muted />
+            <Line2 label="TVA déductible (estimée, prudente)" value={data.tvaDeductible} indent muted />
+            <Line2 label="TVA à reverser" value={-data.tvaDue} bold border />
             <p className="text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold mt-3 mb-1">Charges</p>
             {polesYear.map(([pole, amount]) => <Line2 key={pole} label={pole} value={-amount} indent />)}
             <Line2 label="Total charges" value={-data.chargesTotalYear} bold border />
-            <Line2 label="Résultat brut (CA − charges)" value={data.resultBeforeTax} bold positive={data.resultBeforeTax >= 0} border />
-            <p className="text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold mt-3 mb-1">TVA à reverser</p>
-            <Line2 label="TVA collectée (sur le CA)" value={data.tvaCollected} indent muted />
-            <Line2 label="TVA déductible (sur les charges)" value={-data.tvaDeductible} indent muted />
-            <Line2 label="TVA à reverser (collectée − déductible)" value={-data.tvaDue} border />
-            <Line2 label="Résultat imposable (HT)" value={data.resultHT} positive={data.resultHT >= 0} border />
-            {/* Détail IS progressif */}
+            {/* IS */}
             {data.taxAmount > 0 && (
               <>
                 <p className="text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold mt-3 mb-1">Impôt sur les sociétés</p>
@@ -149,8 +149,19 @@ function Synthese({ data }: { data: Synthese }) {
                 <Line2 label={`IS total (${data.is.effectiveRate}% effectif)`} value={-data.taxAmount} border />
               </>
             )}
-            <Line2 label="Résultat net (après TVA & IS)" value={data.resultNet} bold positive={data.resultNet >= 0} border />
+            <Line2 label="Résultat net estimé (après TVA & IS)" value={data.resultNet} bold positive={data.resultNet >= 0} border />
           </div>
+
+          {/* Provision d'IS à mettre de côté */}
+          {data.isProvision > 0 && (
+            <div className="mt-3 flex items-center justify-between rounded-xl border border-amber-500/30 bg-amber-500/5 px-3.5 py-2.5">
+              <div>
+                <p className="text-xs font-semibold text-amber-300">Provision IS à garder de côté</p>
+                <p className="text-[11px] text-nv-text-faint">à payer ~ {data.isProvisionMonthLabel} · à réserver hors investissements</p>
+              </div>
+              <span className="text-lg font-bold text-amber-400 tabular-nums">{eur(data.isProvision)}</span>
+            </div>
+          )}
           <label className="flex items-center gap-2 mt-4 pt-3 border-t border-nv-border cursor-pointer text-xs text-nv-text-muted">
             <input type="checkbox" checked={data.eligibleReduced} disabled={saving} onChange={e => toggleReduced(e.target.checked)} className="w-4 h-4 accent-[#e8b84b]" />
             Éligible au taux réduit d&apos;IS à 15% (CA &lt; 10 M€, capital libéré, détenu ≥ 75% par des personnes physiques)
