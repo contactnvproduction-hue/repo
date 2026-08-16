@@ -16,6 +16,7 @@ const updateClientSchema = z.object({
   source: z.enum(['INSTAGRAM', 'YOUTUBE', 'BOUCHE_A_OREILLE', 'GOOGLE', 'SITE_WEB', 'RECOMMANDATION', 'LINKEDIN', 'AUTRE']).optional(),
   notes: z.string().optional(),
   relanceDate: z.string().optional().nullable(),
+  callToBookAt: z.string().optional().nullable(),
   followUpEnabled: z.boolean().optional(),
   adaNotes: z.record(z.string(), z.unknown()).optional().nullable(),
   mensualise: z.boolean().optional(),
@@ -74,7 +75,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: result.error.flatten() }, { status: 400 })
   }
 
-  const { relanceDate, adaNotes, ...rest } = result.data
+  const { relanceDate, callToBookAt, adaNotes, ...rest } = result.data
   const client = await prisma.client.update({
     where: { id },
     data: {
@@ -82,6 +83,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(relanceDate !== undefined && {
         relanceDate: relanceDate ? new Date(relanceDate) : null,
       }),
+      ...(callToBookAt !== undefined && {
+        callToBookAt: callToBookAt ? new Date(callToBookAt) : null,
+      } as any),
       ...(adaNotes !== undefined && {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         adaNotes: adaNotes as any,

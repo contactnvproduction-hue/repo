@@ -17,7 +17,7 @@ import { ClientSocialKPIs } from '@/components/clients/ClientSocialKPIs'
 import { DeleteButton } from '@/components/ui/DeleteButton'
 import { ClientInteractions } from '@/components/clients/ClientInteractions'
 import { ClientRetainerManager } from '@/components/clients/ClientRetainerManager'
-import { FollowUpPrompt } from '@/components/clients/FollowUpPrompt'
+import { CallReminder } from '@/components/clients/CallReminder'
 import { InvoicePdfButton } from '@/components/billing/InvoicePdfButton'
 import { ClientChargesSection } from '@/components/clients/ClientChargesSection'
 import { ClientDocumentsSection } from '@/components/clients/ClientDocumentsSection'
@@ -220,13 +220,11 @@ export default async function ClientDetailPage({ params }: PageProps) {
         </div>
       </div>
 
-      {/* « Client relancé ? » — revient tous les 3 jours */}
+      {/* Reminder de follow-up : appel à booker */}
       {client.status === 'ACTIF' && (
-        <FollowUpPrompt
+        <CallReminder
           clientId={client.id}
-          clientName={client.name}
-          lastFollowUpAt={(client as any).lastFollowUpAt ? new Date((client as any).lastFollowUpAt).toISOString() : null}
-          variant="banner"
+          callToBookAt={(client as any).callToBookAt ? new Date((client as any).callToBookAt).toISOString() : null}
         />
       )}
 
