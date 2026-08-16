@@ -10,7 +10,6 @@ import {
   AlertCircle, Phone, Zap, Award,
 } from 'lucide-react'
 
-const MONTHS_FR = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc']
 import Link from 'next/link'
 import { DashboardCharts } from '@/components/dashboard/DashboardCharts'
 import { LeadFollowUpModal } from '@/components/dashboard/LeadFollowUpModal'
@@ -282,7 +281,21 @@ async function getDashboardData(userId: string) {
   })
   const mrrList = [...retainerMrr, ...mensualiseMrr]
 
+  // Top 5 LTV : revenu total encaissé par client (dédupliqué client+montant+jour)
+  const ltvPayments = await prisma.payment.findMany({ where: { confirmed: true }, select: { amount: true, date: true, invoice: { select: { clientId: true, client: { select: { name: true, company: true } } } } } }).catch(() => [])
+  const ltvMap = new Map<string, { name: string; company: string | null; total: number }>()
+  const seenLtv = new Set<string>()
+  for (const p of ltvPayments as any[]) {
+    const cid = p.invoice?.clientId; if (!cid) continue
+    const k = `${cid}|${p.amount}|${new Date(p.date).toISOString().slice(0, 10)}`
+    if (seenLtv.has(k)) continue; seenLtv.add(k)
+    const e = ltvMap.get(cid) ?? { name: p.invoice?.client?.name ?? 'Client', company: p.invoice?.client?.company ?? null, total: 0 }
+    e.total += p.amount; ltvMap.set(cid, e)
+  }
+  const topLtv = [...ltvMap.entries()].map(([id, v]) => ({ id, ...v })).sort((a, b) => b.total - a.total).slice(0, 5)
+
   return {
+    topLtv,
     caMonth: caMonthVal, caMonthRows: caMonth.rows, caYear, trend, contractedThisMonth, contractedRows,
     salesSnapshot,
     activeClientsList: (activeClientsList as any[]).map(c => ({ id: c.id, name: c.name, company: c.company })),
@@ -567,36 +580,7 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      {/* ── Closings mois par mois ── */}
-      {data.closingsByMonth.some(m => m.count > 0) && (
-        <div className="rounded-2xl border border-nv-border bg-nv-card p-4">
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-sm font-semibold text-white flex items-center gap-2"><Award size={15} className="text-primary" /> Closings — 6 derniers mois</p>
-            <Link href="/sales" className="text-xs text-nv-text-muted hover:text-white transition-colors flex items-center gap-1">Pipeline <ArrowRight size={11} /></Link>
-          </div>
-          {(() => {
-            const maxCount = Math.max(1, ...data.closingsByMonth.map(m => m.count))
-            return (
-              <div className="flex items-end justify-between gap-3 h-32">
-                {data.closingsByMonth.map((m, i) => (
-                  <div key={i} className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end">
-                    <span className="text-sm font-bold text-white tabular-nums">{m.count > 0 ? m.count : ''}</span>
-                    {m.amount > 0 && <span className="text-[9px] text-nv-text-faint tabular-nums">{formatCurrency(m.amount)}</span>}
-                    <div className="w-full rounded-t-lg transition-all" style={{
-                      height: `${(m.count / maxCount) * 100}%`,
-                      minHeight: m.count > 0 ? '8px' : '2px',
-                      backgroundColor: m.isCurrent ? '#e8b84b' : 'rgba(232,184,75,0.35)',
-                    }} />
-                    <span className={`text-[11px] ${m.isCurrent ? 'text-primary font-semibold' : 'text-nv-text-faint'}`}>{MONTHS_FR[m.month]}</span>
-                  </div>
-                ))}
-              </div>
-            )
-          })()}
-        </div>
-      )}
-
-      {/* ── Vente ce mois + Clients actifs ── */}
+      {/* ── Vente ce mois + Top 5 LTV ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="rounded-2xl border border-nv-border bg-nv-card p-4">
           <div className="flex items-center gap-2 mb-3">
@@ -620,21 +604,25 @@ export default async function DashboardPage() {
 
         <div className="lg:col-span-2 rounded-2xl border border-nv-border bg-nv-card p-4">
           <div className="flex items-center gap-2 mb-3">
-            <Users size={14} className="text-primary" />
-            <p className="text-sm font-semibold text-white">Clients actifs</p>
-            <span className="text-xs px-2 py-0.5 bg-primary/15 text-primary rounded-full font-medium">{data.activeClientsList.length}</span>
+            <Award size={14} className="text-primary" />
+            <p className="text-sm font-semibold text-white">Top 5 LTV clients</p>
+            <span className="text-[10px] text-nv-text-faint">revenu total encaissé</span>
             <Link href="/clients" className="ml-auto text-xs text-nv-text-muted hover:text-primary transition-colors flex items-center gap-1">Fiches clients <ArrowRight size={11} /></Link>
           </div>
-          {data.activeClientsList.length === 0 ? (
-            <p className="text-xs text-nv-text-faint text-center py-4">Aucun client actif.</p>
+          {data.topLtv.length === 0 ? (
+            <p className="text-xs text-nv-text-faint text-center py-4">Aucun encaissement.</p>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-              {data.activeClientsList.slice(0, 18).map(c => (
-                <Link key={c.id} href={`/clients/${c.id}`} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-nv-border/60 hover:border-primary/30 hover:bg-white/[0.02] transition-colors">
-                  <span className="w-6 h-6 rounded-full bg-primary/15 flex items-center justify-center text-[10px] font-bold text-primary shrink-0">{c.name.charAt(0).toUpperCase()}</span>
-                  <span className="min-w-0"><span className="block text-xs font-medium text-white truncate">{c.name}</span>{c.company && <span className="block text-[10px] text-nv-text-faint truncate">{c.company}</span>}</span>
+            <div className="space-y-1.5">
+              {(() => { const maxLtv = data.topLtv[0]?.total || 1; return data.topLtv.map((c, i) => (
+                <Link key={c.id} href={`/clients/${c.id}`} className="block group">
+                  <div className="flex items-center gap-2.5 mb-1">
+                    <span className="w-5 h-5 rounded-full bg-primary/15 flex items-center justify-center text-[10px] font-bold text-primary shrink-0">{i + 1}</span>
+                    <span className="text-sm font-medium text-white truncate flex-1 group-hover:text-primary transition-colors">{c.name}{c.company && <span className="text-nv-text-faint font-normal"> · {c.company}</span>}</span>
+                    <span className="text-sm font-bold text-primary tabular-nums shrink-0">{formatCurrency(c.total)}</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-nv-dark overflow-hidden ml-7"><div className="h-full rounded-full bg-primary/70" style={{ width: `${Math.max(4, (c.total / maxLtv) * 100)}%` }} /></div>
                 </Link>
-              ))}
+              )) })()}
             </div>
           )}
         </div>
