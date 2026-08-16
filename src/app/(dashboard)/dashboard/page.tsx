@@ -282,11 +282,17 @@ async function getDashboardData(userId: string) {
   const mrrList = [...retainerMrr, ...mensualiseMrr]
 
   // Top 5 LTV : revenu total encaissé par client (dédupliqué client+montant+jour)
-  const ltvPayments = await prisma.payment.findMany({ where: { confirmed: true }, select: { amount: true, date: true, invoice: { select: { clientId: true, client: { select: { name: true, company: true } } } } } }).catch(() => [])
+  const ltvPayments = await prisma.payment.findMany({ where: { confirmed: true }, select: { amount: true, date: true, isUpsell: true, invoice: { select: { clientId: true, client: { select: { name: true, company: true } } } } } }).catch(() => [])
   const ltvMap = new Map<string, { name: string; company: string | null; total: number }>()
   const seenLtv = new Set<string>()
+  let upsellYear = 0, upsellMonth = 0
   for (const p of ltvPayments as any[]) {
     const cid = p.invoice?.clientId; if (!cid) continue
+    // Upsells (produits additionnels) — montant année/mois pour le suivi LTV
+    if (p.isUpsell) {
+      const d = new Date(p.date)
+      if (d.getFullYear() === now.getFullYear()) { upsellYear += p.amount; if (d.getMonth() === now.getMonth()) upsellMonth += p.amount }
+    }
     const k = `${cid}|${p.amount}|${new Date(p.date).toISOString().slice(0, 10)}`
     if (seenLtv.has(k)) continue; seenLtv.add(k)
     const e = ltvMap.get(cid) ?? { name: p.invoice?.client?.name ?? 'Client', company: p.invoice?.client?.company ?? null, total: 0 }
@@ -295,7 +301,7 @@ async function getDashboardData(userId: string) {
   const topLtv = [...ltvMap.entries()].map(([id, v]) => ({ id, ...v })).sort((a, b) => b.total - a.total).slice(0, 5)
 
   return {
-    topLtv,
+    topLtv, upsellYear, upsellMonth,
     caMonth: caMonthVal, caMonthRows: caMonth.rows, caYear, trend, contractedThisMonth, contractedRows,
     salesSnapshot,
     activeClientsList: (activeClientsList as any[]).map(c => ({ id: c.id, name: c.name, company: c.company })),
@@ -603,12 +609,19 @@ export default async function DashboardPage() {
         </div>
 
         <div className="lg:col-span-2 rounded-2xl border border-nv-border bg-nv-card p-4">
-          <div className="flex items-center gap-2 mb-3">
+          <div className="flex items-center gap-2 mb-3 flex-wrap">
             <Award size={14} className="text-primary" />
             <p className="text-sm font-semibold text-white">Top 5 LTV clients</p>
             <span className="text-[10px] text-nv-text-faint">revenu total encaissé</span>
             <Link href="/clients" className="ml-auto text-xs text-nv-text-muted hover:text-primary transition-colors flex items-center gap-1">Fiches clients <ArrowRight size={11} /></Link>
           </div>
+          {(data.upsellYear > 0 || data.upsellMonth > 0) && (
+            <div className="flex items-center gap-3 mb-3 px-3 py-2 rounded-xl bg-violet-500/5 border border-violet-500/25 text-xs">
+              <span className="text-violet-300 font-semibold">Upsells (produits additionnels)</span>
+              <span className="text-nv-text-muted ml-auto">Ce mois <span className="text-white font-bold tabular-nums">{formatCurrency(data.upsellMonth)}</span></span>
+              <span className="text-nv-text-muted">Année <span className="text-white font-bold tabular-nums">{formatCurrency(data.upsellYear)}</span></span>
+            </div>
+          )}
           {data.topLtv.length === 0 ? (
             <p className="text-xs text-nv-text-faint text-center py-4">Aucun encaissement.</p>
           ) : (

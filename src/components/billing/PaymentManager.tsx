@@ -41,6 +41,7 @@ export function PaymentManager({ invoiceId, payments, totalTTC, amountPaid }: Pa
     method: 'VIREMENT',
     reference: '',
     confirmed: true,
+    isUpsell: false,
   })
 
   const handleAdd = async (e: React.FormEvent) => {
@@ -136,6 +137,11 @@ export function PaymentManager({ invoiceId, payments, totalTTC, amountPaid }: Pa
             <input type="checkbox" checked={form.confirmed} onChange={(e) => setForm({ ...form, confirmed: e.target.checked })}
               className="w-4 h-4 rounded border-nv-border bg-nv-dark accent-primary" />
             <span className="text-sm text-nv-text">Paiement confirmé (déjà reçu)</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={form.isUpsell} onChange={(e) => setForm({ ...form, isUpsell: e.target.checked })}
+              className="w-4 h-4 rounded border-nv-border bg-nv-dark accent-[#8b5cf6]" />
+            <span className="text-sm text-nv-text">Produit additionnel (upsell) — compté dans le suivi LTV</span>
           </label>
           <div className="flex justify-end gap-3">
             <Button type="button" variant="outline" onClick={() => setShowModal(false)}>Annuler</Button>

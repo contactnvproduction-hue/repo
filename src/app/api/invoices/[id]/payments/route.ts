@@ -7,7 +7,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!session?.user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   const { id: invoiceId } = await params
 
-  const { amount, date, method, reference, confirmed, notes } = await req.json()
+  const { amount, date, method, reference, confirmed, notes, isUpsell } = await req.json()
   if (!amount || amount <= 0) return NextResponse.json({ error: 'Montant invalide' }, { status: 400 })
 
   const payment = await prisma.payment.create({
@@ -18,8 +18,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       method: method || 'VIREMENT',
       reference,
       confirmed: confirmed ?? false,
+      isUpsell: isUpsell === true,
       notes,
-    },
+    } as any,
   })
 
   // Mettre à jour le montant payé et le statut de la facture
