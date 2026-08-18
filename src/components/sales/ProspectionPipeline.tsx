@@ -597,6 +597,7 @@ function LeadModal({ lead, commercials, settingStatuses, closerStatuses, onClose
 function CloseModal({ lead, admins, commercials, onClose, onDone }: { lead: Lead; admins: Admin[]; commercials: Commercial[]; onClose: () => void; onDone: () => void }) {
   const [commercialId, setCommercialId] = useState(lead.commercialId ?? (commercials[0]?.id ?? ''))
   const [amount, setAmount] = useState(lead.saleMonthlyAmount != null ? String(lead.saleMonthlyAmount) : '')
+  const [duration, setDuration] = useState('12')
   const [message, setMessage] = useState('')
   const [resources, setResources] = useState<Resource[]>([])
   const [resLabel, setResLabel] = useState(''); const [resUrl, setResUrl] = useState('')
@@ -607,7 +608,7 @@ function CloseModal({ lead, admins, commercials, onClose, onDone }: { lead: Lead
   const save = async () => {
     setSaving(true)
     try {
-      const res = await fetch(`/api/leads/${lead.id}/close`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ saleMonthlyAmount: amount, message, resources, taggedAdminIds: tagged, commercialId: commercialId || undefined }) })
+      const res = await fetch(`/api/leads/${lead.id}/close`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ saleMonthlyAmount: amount, durationMonths: duration, message, resources, taggedAdminIds: tagged, commercialId: commercialId || undefined }) })
       if (!res.ok) throw new Error()
       const j = await res.json()
       toast.success(`Signé ✓${j.notified ? ` · ${j.notified} admin(s) notifié(s)` : ''}`)
@@ -621,7 +622,11 @@ function CloseModal({ lead, admins, commercials, onClose, onDone }: { lead: Lead
       <div><label className="text-[11px] text-nv-text-muted block mb-1">Commercial (pour la commission)</label>
         <select className={inp} value={commercialId} onChange={e => setCommercialId(e.target.value)}><option value="">— Aucun —</option>{commercials.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
       </div>
-      <div><label className="text-[11px] text-nv-text-muted block mb-1">Mensualité NETTE signée (€) — base de la commission</label><input className={inp} type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="ex 1000" /><p className="text-[10px] text-nv-text-faint mt-0.5">Le % du commercial se calcule sur ce montant mensuel net, pas sur le total du contrat.</p></div>
+      <div className="grid grid-cols-3 gap-2">
+        <div className="col-span-2"><label className="text-[11px] text-nv-text-muted block mb-1">Montant mensuel contracté (€)</label><input className={inp} type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="ex 1000" /></div>
+        <div><label className="text-[11px] text-nv-text-muted block mb-1">Durée (mois)</label><input className={inp} type="number" value={duration} onChange={e => setDuration(e.target.value)} placeholder="12" /></div>
+      </div>
+      <p className="text-[10px] text-nv-text-faint -mt-1">Contracté du mois = <b className="text-nv-text-muted">{amount && duration ? (Number(amount) * Number(duration)).toLocaleString('fr-FR') : '—'} €</b> (mensualité × durée). Une 1ʳᵉ facture est pré-créée dans la facturation. La commission se calcule sur la mensualité.</p>
       <div><label className="text-[11px] text-nv-text-muted block mb-1">Infos à transmettre</label><textarea className={inp} rows={3} placeholder="Contexte client, attentes, deadlines, accès…" value={message} onChange={e => setMessage(e.target.value)} /></div>
       <div className="space-y-1.5">
         <label className="text-[11px] text-nv-text-muted flex items-center gap-1.5"><Link2 size={11} /> Ressources / liens</label>

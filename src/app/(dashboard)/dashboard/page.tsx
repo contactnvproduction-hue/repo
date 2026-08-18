@@ -15,6 +15,7 @@ import { DashboardCharts } from '@/components/dashboard/DashboardCharts'
 import { LeadFollowUpModal } from '@/components/dashboard/LeadFollowUpModal'
 import { DailyCheckinModal } from '@/components/dashboard/DailyCheckinModal'
 import { NewSignedClientModal } from '@/components/dashboard/NewSignedClientModal'
+import { PendingSignaturePrompt } from '@/components/dashboard/PendingSignaturePrompt'
 import { CaMonthDetail } from '@/components/dashboard/CaMonthDetail'
 import { ContractedMonthDetail } from '@/components/dashboard/ContractedMonthDetail'
 
@@ -183,6 +184,18 @@ async function getDashboardData(userId: string) {
     (prisma as any).lead.findMany({ select: { createdAt: true, rdvBookedAt: true, wonAt: true } }).catch(() => []),
   ])
 
+  // Signatures à comptabiliser : client signé (ici Stephanie Traon) resté sans
+  // retainer → absent du contracté. Nudge one-shot au chargement du dashboard.
+  const pendingSignatures = await (async () => {
+    try {
+      const rows = await (prisma as any).client.findMany({
+        where: { name: { contains: 'traon', mode: 'insensitive' }, retainers: { none: {} } },
+        select: { id: true, name: true, company: true }, take: 3,
+      })
+      return rows.map((c: any) => ({ id: c.id, name: c.name, company: c.company ?? null }))
+    } catch { return [] }
+  })()
+
   const caMonthVal = caMonth.total
   const caLastMonthVal = caLastMonth
   const trend = caLastMonthVal > 0 ? Math.round(((caMonthVal - caLastMonthVal) / caLastMonthVal) * 100) : 0
@@ -301,7 +314,7 @@ async function getDashboardData(userId: string) {
   const topLtv = [...ltvMap.entries()].map(([id, v]) => ({ id, ...v })).sort((a, b) => b.total - a.total).slice(0, 5)
 
   return {
-    topLtv, upsellYear, upsellMonth,
+    topLtv, upsellYear, upsellMonth, pendingSignatures,
     caMonth: caMonthVal, caMonthRows: caMonth.rows, caYear, trend, contractedThisMonth, contractedRows,
     salesSnapshot,
     activeClientsList: (activeClientsList as any[]).map(c => ({ id: c.id, name: c.name, company: c.company })),
@@ -387,6 +400,7 @@ export default async function DashboardPage() {
       <DailyCheckinModal initialDone={data.checkinDone} />
       <LeadFollowUpModal leads={data.leadsFollowUp} />
       {signedToLabel.clients.length > 0 && <NewSignedClientModal clients={signedToLabel.clients} products={signedToLabel.products} />}
+      {data.pendingSignatures.length > 0 && <PendingSignaturePrompt pending={data.pendingSignatures} />}
 
       {/* ── Hero greeting ── */}
       <div className="relative overflow-hidden rounded-2xl border border-nv-border bg-nv-card p-6">

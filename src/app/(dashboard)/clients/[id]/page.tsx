@@ -221,8 +221,8 @@ export default async function ClientDetailPage({ params }: PageProps) {
         </div>
       </div>
 
-      {/* Suivi des appels : double question + historique */}
-      {client.status === 'ACTIF' && (
+      {/* Suivi des appels : double question + historique (toutes les fiches) */}
+      {client.status !== 'ARCHIVÉ' && (
         <CallReminder
           clientId={client.id}
           callToBookAt={(client as any).callToBookAt ? new Date((client as any).callToBookAt).toISOString() : null}

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { findMatchingClient } from '@/lib/client-matching'
+import { materializeContract } from '@/lib/contract-materialize'
 
 const db = prisma as any
 
@@ -15,6 +16,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   try {
     const b = await req.json()
     const saleMonthlyAmount = b.saleMonthlyAmount != null && b.saleMonthlyAmount !== '' ? Number(b.saleMonthlyAmount) : null
+    const durationMonths = b.durationMonths != null && b.durationMonths !== '' ? Math.max(1, Number(b.durationMonths)) : 12
     const message: string = (b.message || '').trim()
     const resources = Array.isArray(b.resources) ? b.resources.filter((r: any) => r?.url) : []
     const taggedIds: string[] = Array.isArray(b.taggedAdminIds) ? b.taggedAdminIds : []
@@ -32,6 +34,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (!clientId) {
       const match = await findMatchingClient(prisma as any, { email: lead.email, fullName: lead.name, company: lead.company })
       if (match) clientId = match.id
+    }
+    // Montant contracté fourni → on garantit une fiche client (créée à la volée si
+    // besoin) pour que le contracté du mois + la facture se reportent toujours.
+    if (!clientId && saleMonthlyAmount && saleMonthlyAmount > 0) {
+      const created = await prisma.client.create({
+        data: { name: lead.name, company: lead.company || null, email: lead.email || null, type: 'PARTICULIER', status: 'ACTIF', source: 'AUTRE' } as any,
+      }).catch(() => null)
+      if (created) { clientId = created.id; await prisma.lead.update({ where: { id }, data: { convertedClientId: created.id } as any }).catch(() => {}) }
+    }
+
+    // Matérialise le contrat : retainer (→ contracté du mois) + 1ʳᵉ facture pré-créée
+    if (clientId && saleMonthlyAmount && saleMonthlyAmount > 0) {
+      await materializeContract({ clientId, monthlyAmount: saleMonthlyAmount, durationMonths }).catch(e => console.error('[close/materialize]', e))
     }
 
     // Report dans la fiche client (note d'onboarding) si un client existe
