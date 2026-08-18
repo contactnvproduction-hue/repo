@@ -135,6 +135,20 @@ export function CallPipeline({
   const selected = months.find(m => m.key === selMonth) ?? months[months.length - 1]
   const maxBar = Math.max(1, ...months.map(m => Math.max(m.nbCalls, m.closingsCount)))
 
+  // Suivi des tours de rendez-vous : le Nᵉ call d'un lead = son RDV « RN ».
+  // Un lead « atteint R2 » s'il a ≥ 2 calls. Taux de conversion entre les tours.
+  const rounds = useMemo(() => {
+    let r1 = 0, r2 = 0, r3 = 0, signedFromR2 = 0
+    for (const l of leads) {
+      const n = l.calls.length
+      const isSigned = l.status?.isClosed || !!l.convertedClientId
+      if (n >= 1) r1++
+      if (n >= 2) { r2++; if (isSigned) signedFromR2++ }
+      if (n >= 3) r3++
+    }
+    return { r1, r2, r3, c12: r1 ? Math.round((r2 / r1) * 100) : 0, c23: r2 ? Math.round((r3 / r2) * 100) : 0, cSign: r2 ? Math.round((signedFromR2 / r2) * 100) : 0 }
+  }, [leads])
+
   // Calls du mois groupés par lead
   const monthByLead = useMemo(() => {
     const map: Record<string, { lead: Lead; calls: Call[] }> = {}
@@ -233,6 +247,41 @@ export function CallPipeline({
           <Ring pct={selected.showupRate} color="#3b82f6" label="Show-up" sub={`${selected.shown}/${selected.contacted} présents`} />
           <Ring pct={selected.qualifRate} color="#8b5cf6" label="Qualification" sub={`${selected.qualified} qualifiés`} />
           <Ring pct={selected.closingRate} color="#10b981" label="Closing" sub={`${selected.signed} signés`} />
+        </div>
+      </div>
+
+      {/* Suivi des tours de RDV : R1 → R2 → R3 + taux de conversion */}
+      <div className="bg-nv-card border border-nv-border rounded-2xl p-4">
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
+          <h3 className="text-sm font-semibold text-white flex items-center gap-2"><Target size={15} className="text-primary" /> Tours de rendez-vous</h3>
+          <span className="text-[10px] text-nv-text-faint ml-auto">Le Nᵉ call d&apos;un lead = son RDV RN</span>
+        </div>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {[
+            { label: 'R1', sub: '1er RDV', n: rounds.r1, color: '#3b82f6' },
+            { label: 'R2', sub: '2e RDV', n: rounds.r2, color: '#8b5cf6' },
+            { label: 'R3', sub: '3e RDV', n: rounds.r3, color: '#a855f7' },
+          ].map((r, i, arr) => (
+            <div key={r.label} className="flex items-center gap-1.5">
+              <div className="rounded-xl border border-nv-border bg-nv-dark px-4 py-2.5 text-center min-w-[84px]">
+                <p className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: r.color }}>{r.label}</p>
+                <p className="text-2xl font-bold text-white tabular-nums leading-tight">{r.n}</p>
+                <p className="text-[9px] text-nv-text-faint">{r.sub}</p>
+              </div>
+              {i < arr.length - 1 && (
+                <div className="flex flex-col items-center px-1">
+                  <span className="text-[9px] text-nv-text-faint">conv.</span>
+                  <span className="text-sm font-bold text-emerald-400 tabular-nums">{i === 0 ? rounds.c12 : rounds.c23}%</span>
+                  <ChevronRight size={12} className="text-nv-text-faint" />
+                </div>
+              )}
+            </div>
+          ))}
+          <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 px-4 py-2.5 text-center min-w-[100px] ml-1">
+            <p className="text-[10px] uppercase tracking-wider text-emerald-400 font-semibold">Signé dès R2+</p>
+            <p className="text-2xl font-bold text-emerald-400 tabular-nums leading-tight">{rounds.cSign}%</p>
+            <p className="text-[9px] text-nv-text-faint">des leads en R2</p>
+          </div>
         </div>
       </div>
 
