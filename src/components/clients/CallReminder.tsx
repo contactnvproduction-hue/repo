@@ -2,53 +2,93 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { PhoneCall, Check, Plus, X } from 'lucide-react'
+import { PhoneCall, Check, Trash2, Loader2, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 
-// Simple reminder de follow-up : « un appel est à booker » avec une date cible.
-// Remplace l'ancien prompt d'appel mensuel.
-export function CallReminder({ clientId, callToBookAt }: { clientId: string; callToBookAt: string | null }) {
+type Call = { id: string; date: string; note: string | null }
+
+// Suivi des appels client — double question :
+// 1) Y a-t-il un call à prévoir ce mois-ci ? oui / non
+// 2) Si oui : a-t-il été booké ? si oui → on renseigne la date (répertoriée).
+export function CallReminder({ clientId, callToBookAt, initialCalls }: { clientId: string; callToBookAt: string | null; initialCalls: Call[] }) {
   const router = useRouter()
-  const [editing, setEditing] = useState(false)
-  const [date, setDate] = useState(callToBookAt ? new Date(callToBookAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10))
+  const [calls, setCalls] = useState<Call[]>(initialCalls)
+  const [step, setStep] = useState<'q1' | 'q2' | 'date'>('q1')
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
   const [saving, setSaving] = useState(false)
 
-  const save = async (value: string | null) => {
+  const setReminder = async (value: string | null) => {
     setSaving(true)
     try {
-      const res = await fetch(`/api/clients/${clientId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ callToBookAt: value }) })
-      if (!res.ok) throw new Error()
-      toast.success(value ? 'Reminder ajouté' : 'Reminder retiré')
-      setEditing(false); router.refresh()
+      await fetch(`/api/clients/${clientId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ callToBookAt: value }) })
+      toast.success(value ? 'Reminder : appel à booker' : 'Ok, pas de call ce mois')
+      setStep('q1'); router.refresh()
     } catch { toast.error('Erreur') } finally { setSaving(false) }
   }
-
-  if (callToBookAt && !editing) {
-    const d = new Date(callToBookAt)
-    return (
-      <div className="bg-violet-500/5 border border-violet-500/30 rounded-xl px-4 py-3 flex items-center gap-3 flex-wrap">
-        <PhoneCall className="w-4 h-4 text-violet-400 shrink-0" />
-        <p className="text-sm text-violet-200 flex-1 min-w-0"><span className="font-semibold">Appel à booker</span><span className="text-nv-text-muted"> — cible : {d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}</span></p>
-        <button onClick={() => setEditing(true)} className="text-xs px-2.5 py-1.5 rounded-lg border border-nv-border text-nv-text-muted hover:text-white transition-colors">Modifier</button>
-        <button onClick={() => save(null)} disabled={saving} className="text-xs px-2.5 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25 transition-colors flex items-center gap-1"><Check size={12} /> Appel booké</button>
-      </div>
-    )
+  const addCall = async () => {
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/clients/${clientId}/calls`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date }) })
+      if (!res.ok) throw new Error()
+      const c = await res.json()
+      setCalls(prev => [{ id: c.id, date: c.date, note: c.note }, ...prev])
+      toast.success('Appel enregistré'); setStep('q1'); router.refresh()
+    } catch { toast.error('Erreur') } finally { setSaving(false) }
+  }
+  const removeCall = async (id: string) => {
+    setCalls(prev => prev.filter(c => c.id !== id))
+    await fetch(`/api/clients/${clientId}/calls?callId=${id}`, { method: 'DELETE' })
   }
 
-  if (editing || !callToBookAt) {
-    return editing ? (
-      <div className="bg-nv-card border border-nv-border rounded-xl px-4 py-3 flex items-center gap-2 flex-wrap">
-        <PhoneCall className="w-4 h-4 text-violet-400 shrink-0" />
-        <span className="text-sm text-nv-text">Booker un appel avant le</span>
-        <input type="date" value={date} onChange={e => setDate(e.target.value)} className="bg-nv-dark border border-nv-border rounded-lg px-2.5 py-1.5 text-sm text-white focus:outline-none focus:border-primary/60" />
-        <button onClick={() => save(date)} disabled={saving} className="text-xs px-3 py-1.5 rounded-lg bg-primary text-nv-black font-medium flex items-center gap-1"><Check size={13} /> Enregistrer</button>
-        <button onClick={() => setEditing(false)} className="p-1.5 text-nv-text-faint hover:text-white"><X size={14} /></button>
+  return (
+    <div className="bg-nv-card border border-nv-border rounded-2xl p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <PhoneCall size={15} className="text-primary" />
+        <h3 className="text-sm font-semibold text-white">Suivi des appels</h3>
+        {callToBookAt && step === 'q1' && <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-300 border border-violet-500/25">Appel à booker</span>}
       </div>
-    ) : (
-      <button onClick={() => setEditing(true)} className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-dashed border-nv-border text-sm text-nv-text-muted hover:text-primary hover:border-primary/40 transition-colors">
-        <Plus size={14} /> Ajouter un reminder « appel à booker »
-      </button>
-    )
-  }
-  return null
+
+      {/* Double question */}
+      {step === 'q1' && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm text-nv-text-muted">Un call à prévoir ce mois-ci ?</span>
+          <button onClick={() => setStep('q2')} className="text-xs px-3 py-1.5 rounded-lg bg-primary/15 border border-primary/30 text-primary font-medium">Oui</button>
+          <button onClick={() => setReminder(null)} disabled={saving} className="text-xs px-3 py-1.5 rounded-lg border border-nv-border text-nv-text-muted hover:text-white">Non</button>
+        </div>
+      )}
+      {step === 'q2' && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm text-nv-text-muted">A-t-il été booké ?</span>
+          <button onClick={() => setStep('date')} className="text-xs px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 font-medium">Oui, renseigner la date</button>
+          <button onClick={() => setReminder(new Date().toISOString())} disabled={saving} className="text-xs px-3 py-1.5 rounded-lg border border-violet-500/30 text-violet-300">Pas encore (reminder)</button>
+          <button onClick={() => setStep('q1')} className="p-1 text-nv-text-faint hover:text-white"><X size={14} /></button>
+        </div>
+      )}
+      {step === 'date' && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm text-nv-text-muted">Date du call</span>
+          <input type="date" value={date} onChange={e => setDate(e.target.value)} className="bg-nv-dark border border-nv-border rounded-lg px-2.5 py-1.5 text-sm text-white focus:outline-none focus:border-primary/60" />
+          <button onClick={addCall} disabled={saving} className="text-xs px-3 py-1.5 rounded-lg bg-primary text-nv-black font-medium flex items-center gap-1">{saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={13} />} Enregistrer</button>
+          <button onClick={() => setStep('q1')} className="p-1 text-nv-text-faint hover:text-white"><X size={14} /></button>
+        </div>
+      )}
+
+      {/* Historique des appels répertoriés */}
+      {calls.length > 0 && (
+        <div className="pt-2 border-t border-nv-border/60">
+          <p className="text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold mb-1.5">Appels ({calls.length})</p>
+          <div className="space-y-1">
+            {calls.map(c => (
+              <div key={c.id} className="flex items-center gap-2 text-xs">
+                <PhoneCall size={11} className="text-nv-text-faint shrink-0" />
+                <span className="text-nv-text">{new Date(c.date).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                {c.note && <span className="text-nv-text-faint truncate">· {c.note}</span>}
+                <button onClick={() => removeCall(c.id)} className="ml-auto p-0.5 text-nv-text-faint hover:text-red-400 shrink-0"><Trash2 size={11} /></button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }

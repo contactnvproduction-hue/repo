@@ -133,9 +133,10 @@ export default async function ClientDetailPage({ params }: PageProps) {
     (async () => { try { return await (prisma as any).signedContract.findMany({ where: { clientId: id }, orderBy: { createdAt: 'desc' }, select: { id: true, shortCode: true, status: true, missionType: true, monthlyAmount: true, totalAmount: true, signedAt: true } }) } catch { return [] } })(),
   ])
 
-  const [clientProgrammingRaw, clientVideos] = await Promise.all([
+  const [clientProgrammingRaw, clientVideos, clientCalls] = await Promise.all([
     (async () => { try { return await (prisma as any).clientProgramming.findUnique({ where: { clientId: id } }) } catch { return null } })(),
     (async () => { try { return await (prisma as any).clientVideo.findMany({ where: { clientId: id }, orderBy: [{ scheduledAt: 'asc' }, { createdAt: 'desc' }] }) } catch { return [] } })(),
+    (async () => { try { return await (prisma as any).clientCall.findMany({ where: { clientId: id }, orderBy: { date: 'desc' } }) } catch { return [] } })(),
   ])
   // Déchiffre les logs des canaux pour l'affichage équipe (fiche client)
   const clientProgramming = clientProgrammingRaw ? (() => {
@@ -220,11 +221,12 @@ export default async function ClientDetailPage({ params }: PageProps) {
         </div>
       </div>
 
-      {/* Reminder de follow-up : appel à booker */}
+      {/* Suivi des appels : double question + historique */}
       {client.status === 'ACTIF' && (
         <CallReminder
           clientId={client.id}
           callToBookAt={(client as any).callToBookAt ? new Date((client as any).callToBookAt).toISOString() : null}
+          initialCalls={(clientCalls as any[]).map(c => ({ id: c.id, date: new Date(c.date).toISOString(), note: c.note ?? null }))}
         />
       )}
 

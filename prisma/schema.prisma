@@ -635,6 +635,18 @@ model ForecastEntry {
   @@map("forecast_entries")
 }
 
+// Appels d'un client (suivi) : chaque call booké est daté et répertorié sur la fiche.
+model ClientCall {
+  id        String   @id @default(cuid())
+  clientId  String
+  date      DateTime
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@index([clientId])
+  @@map("client_calls")
+}
+
 // Indemnités kilométriques : KM renseignés par un membre pour un mois + véhicule.
 // Le montant se calcule via le barème officiel (lib/mileage). Cumul YTD par
 // membre+véhicule pour appliquer la bonne tranche.
