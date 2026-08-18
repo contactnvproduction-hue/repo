@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { Receipt, Plus, AlertTriangle, Clock, CheckCircle2 } from 'lucide-react'
 import { InvoicePdfButton } from '@/components/billing/InvoicePdfButton'
+import { InvoiceRowDelete } from '@/components/billing/InvoiceRowDelete'
 import { ensureMonthlyInvoices } from '@/lib/monthly-invoices'
 
 const statusBadge: Record<string, 'success' | 'warning' | 'danger' | 'info' | 'muted'> = {
@@ -33,14 +34,23 @@ export default async function InvoicesPage() {
     orderBy: { createdAt: 'desc' },
   })
 
-  // Encaissé réel = somme des montants effectivement reçus : on prend le montant
-  // payé (paiements partiels inclus) et, pour les factures marquées PAYÉE sans
-  // amountPaid renseigné (legacy), on retombe sur le TTC. Exclut les annulées.
+  // Encaissé RÉEL = somme des paiements CONFIRMÉS, dédupliqués par (client+montant
+  // +jour) — même source de vérité que le CA encaissé du dashboard (évite le
+  // double comptage des factures récurrentes / legacy).
+  const seenPay = new Set<string>()
+  let encaisse = 0
+  for (const inv of invoices) {
+    for (const p of inv.payments) {
+      if (!p.confirmed) continue
+      const key = `${inv.clientId}|${p.amount}|${new Date(p.date).toISOString().slice(0, 10)}`
+      if (seenPay.has(key)) continue
+      seenPay.add(key)
+      encaisse += p.amount
+    }
+  }
   const stats = {
     total: invoices.length,
-    payées: invoices
-      .filter((i) => i.status !== 'ANNULÉE')
-      .reduce((s, i) => s + Math.max(i.amountPaid || 0, i.status === 'PAYÉE' ? i.totalTTC : 0), 0),
+    payées: encaisse,
     enAttente: invoices.filter((i) => i.status !== 'PAYÉE' && i.status !== 'ANNULÉE').reduce((s, i) => s + (i.totalTTC - i.amountPaid), 0),
     enRetard: invoices.filter((i) => i.status === 'EN_RETARD').length,
   }
@@ -108,8 +118,9 @@ export default async function InvoicesPage() {
                   <div className="col-span-2">
                     <Badge variant={statusBadge[inv.status] || 'muted'}>{statusLabel[inv.status]}</Badge>
                   </div>
-                  <div className="col-span-1">
+                  <div className="col-span-1 flex items-center justify-between gap-1">
                     <p className="text-xs text-nv-text-muted">{inv.dueDate ? formatDate(inv.dueDate) : '—'}</p>
+                    <InvoiceRowDelete invoiceId={inv.id} invoiceNumber={inv.number} />
                   </div>
                 </Link>
               )

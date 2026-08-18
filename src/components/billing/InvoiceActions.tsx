@@ -31,10 +31,10 @@ export function InvoiceActions({ invoiceId, invoiceNumber, status }: { invoiceId
     setDeleting(true)
     try {
       const res = await fetch(`/api/invoices/${invoiceId}`, { method: 'DELETE' })
-      if (!res.ok) throw new Error()
+      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err?.error || 'Erreur') }
       toast.success('Facture supprimée')
       router.push('/invoices')
-    } catch { toast.error('Erreur lors de la suppression') }
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Erreur lors de la suppression') }
     finally { setDeleting(false) }
   }
 

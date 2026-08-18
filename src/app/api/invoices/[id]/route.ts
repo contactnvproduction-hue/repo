@@ -71,9 +71,17 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   if (!['ADMIN', 'MANAGER'].includes(session.user.role)) {
-    return NextResponse.json({ error: 'Permission refusée' }, { status: 403 })
+    return NextResponse.json({ error: 'Suppression réservée aux admins/managers' }, { status: 403 })
   }
   const { id } = await params
-  await prisma.invoice.delete({ where: { id } })
-  return NextResponse.json({ success: true })
+  try {
+    // Nettoie les dépendances explicitement (au cas où une contrainte bloque)
+    await prisma.payment.deleteMany({ where: { invoiceId: id } }).catch(() => {})
+    await prisma.invoiceLine.deleteMany({ where: { invoiceId: id } }).catch(() => {})
+    await prisma.invoice.delete({ where: { id } })
+    return NextResponse.json({ success: true })
+  } catch (e: any) {
+    console.error('[invoice DELETE]', e)
+    return NextResponse.json({ error: e?.message || 'Suppression impossible' }, { status: 500 })
+  }
 }
