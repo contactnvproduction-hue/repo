@@ -14,6 +14,7 @@ type Call = {
   id: string
   leadId: string
   date: string
+  round: string | null
   duration: number | null
   showedUp: boolean
   qualified: boolean
@@ -22,6 +23,14 @@ type Call = {
   followUpDone: boolean
   notes: string | null
 }
+// Rounds de RDV possibles + couleur associée
+const ROUND_DEFS = [
+  { key: 'R1', color: '#3b82f6' },
+  { key: 'R2', color: '#8b5cf6' },
+  { key: 'R3', color: '#a855f7' },
+  { key: 'CLOSING', color: '#10b981' },
+] as const
+const roundColor = (r: string | null) => ROUND_DEFS.find(d => d.key === r)?.color ?? '#6b7280'
 type LeadStatus = { id: string; name: string; color: string; isClosed: boolean; order: number }
 type Lead = {
   id: string; name: string; company: string | null; email: string | null; phone: string | null
@@ -42,16 +51,32 @@ const MONTHS_FR = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juill
 const MONTHS_SHORT = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc']
 const monthKey = (y: number, m: number) => `${y}-${m}`
 
-function CallCheck({ label, checked, color, onToggle, disabled }: { label: string; checked: boolean; color: string; onToggle: () => void; disabled?: boolean }) {
+// Round effectif d'un call : explicite si renseigné, sinon déduit de sa position
+// chronologique dans les calls du lead (1er = R1, 2e = R2, 3e+ = R3).
+function buildEffRounds(leads: Lead[]): Record<string, string> {
+  const map: Record<string, string> = {}
+  for (const l of leads) {
+    const sorted = [...l.calls].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    sorted.forEach((c, i) => { map[c.id] = c.round || (i === 0 ? 'R1' : i === 1 ? 'R2' : 'R3') })
+  }
+  return map
+}
+
+// Contrôle Oui / Non coloré. Oui = vert (par défaut), Non = neutre — ou rouge
+// quand `noColor` est fourni (ex. no-show = mauvais → rouge).
+function YesNo({ label, value, onChange, yesColor = '#10b981', noColor }: { label: string; value: boolean; onChange: (v: boolean) => void; yesColor?: string; noColor?: string }) {
   return (
-    <button type="button" onClick={onToggle} disabled={disabled}
-      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-all disabled:opacity-50 ${checked ? 'border-transparent text-white' : 'border-nv-border bg-nv-dark text-nv-text-muted hover:text-nv-text'}`}
-      style={checked ? { backgroundColor: color } : undefined}>
-      <span className={`w-3.5 h-3.5 rounded-[4px] border flex items-center justify-center ${checked ? 'border-white/70 bg-white/20' : 'border-nv-border-light'}`}>
-        {checked && <Check className="w-2.5 h-2.5" />}
-      </span>
-      {label}
-    </button>
+    <div className="flex items-center gap-2">
+      <span className="text-[11px] text-nv-text-muted w-[68px] shrink-0">{label}</span>
+      <div className="flex rounded-lg overflow-hidden border border-nv-border">
+        <button type="button" onClick={() => onChange(true)}
+          className={`px-3 py-1 text-xs font-semibold transition-colors ${value ? 'text-white' : 'text-nv-text-muted hover:text-nv-text'}`}
+          style={value ? { backgroundColor: yesColor } : undefined}>{value ? '✓ Oui' : 'Oui'}</button>
+        <button type="button" onClick={() => onChange(false)}
+          className={`px-3 py-1 text-xs font-semibold border-l border-nv-border transition-colors ${!value ? (noColor ? 'text-white' : 'text-nv-text bg-nv-border/60') : 'text-nv-text-muted hover:text-nv-text'}`}
+          style={!value && noColor ? { backgroundColor: noColor } : undefined}>{!value ? '✗ Non' : 'Non'}</button>
+      </div>
+    </div>
   )
 }
 
@@ -104,6 +129,8 @@ export function CallPipeline({
 
   // Tous les calls à plat (avec leur lead)
   const allCalls = useMemo(() => leads.flatMap(l => l.calls.map(c => ({ ...c, lead: l }))), [leads])
+  // Round effectif par call (explicite ou déduit de la position)
+  const effRound = useMemo(() => buildEffRounds(leads), [leads])
 
   // Les 6 derniers mois → funnel par LEAD (contacté → présent → qualifié → signé).
   // Le closing se calcule sur l'état « Signé » du lead, pas sur une case par call.
@@ -120,6 +147,13 @@ export function CallPipeline({
       const qualifiedLeads = new Set(monthCalls.filter(c => c.qualified).map(c => c.leadId))
       const signedLeads = new Set(monthCalls.filter(c => c.lead.status?.isClosed || c.lead.convertedClientId).map(c => c.leadId))
       const nContacted = leadIds.size
+      // Tunnel de RDV du mois (basé sur le round effectif de chaque call daté ce mois)
+      const r1 = monthCalls.filter(c => effRound[c.id] === 'R1').length
+      const r2 = monthCalls.filter(c => effRound[c.id] === 'R2').length
+      const r3 = monthCalls.filter(c => effRound[c.id] === 'R3').length
+      // Show-up par round (présents / total du round) — pour colorer clairement
+      const shownR1 = monthCalls.filter(c => effRound[c.id] === 'R1' && c.showedUp).length
+      const shownR2 = monthCalls.filter(c => effRound[c.id] === 'R2' && c.showedUp).length
       return {
         key, year: d.getFullYear(), month: d.getMonth(), isCurrent: i === 5,
         calls: monthCalls, nbCalls: monthCalls.length,
@@ -128,26 +162,15 @@ export function CallPipeline({
         qualifRate: nContacted ? Math.round((qualifiedLeads.size / nContacted) * 100) : 0,
         closingRate: nContacted ? Math.round((signedLeads.size / nContacted) * 100) : 0,
         closingsCount: signedLeads.size, closingsAmount: amountMap[key] ?? 0,
+        r1, r2, r3, shownR1, shownR2,
+        convR12: r1 ? Math.round((r2 / r1) * 100) : 0,
+        convR23: r2 ? Math.round((r3 / r2) * 100) : 0,
       }
     })
-  }, [allCalls, closings6m, now])
+  }, [allCalls, effRound, closings6m, now])
 
   const selected = months.find(m => m.key === selMonth) ?? months[months.length - 1]
   const maxBar = Math.max(1, ...months.map(m => Math.max(m.nbCalls, m.closingsCount)))
-
-  // Suivi des tours de rendez-vous : le Nᵉ call d'un lead = son RDV « RN ».
-  // Un lead « atteint R2 » s'il a ≥ 2 calls. Taux de conversion entre les tours.
-  const rounds = useMemo(() => {
-    let r1 = 0, r2 = 0, r3 = 0, signedFromR2 = 0
-    for (const l of leads) {
-      const n = l.calls.length
-      const isSigned = l.status?.isClosed || !!l.convertedClientId
-      if (n >= 1) r1++
-      if (n >= 2) { r2++; if (isSigned) signedFromR2++ }
-      if (n >= 3) r3++
-    }
-    return { r1, r2, r3, c12: r1 ? Math.round((r2 / r1) * 100) : 0, c23: r2 ? Math.round((r3 / r2) * 100) : 0, cSign: r2 ? Math.round((signedFromR2 / r2) * 100) : 0 }
-  }, [leads])
 
   // Calls du mois groupés par lead
   const monthByLead = useMemo(() => {
@@ -168,11 +191,14 @@ export function CallPipeline({
     setLeads(prev => prev.map(l => ({ ...l, calls: l.calls.filter(c => c.id !== callId) })))
     await fetch(`/api/lead-calls/${callId}`, { method: 'DELETE' }).catch(() => {})
   }
-  const addCall = async (leadId: string, dateISO: string) => {
-    const res = await fetch('/api/lead-calls', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leadId, date: dateISO, showedUp: true }) })
+  const addCall = async (leadId: string, dateISO: string, round?: string) => {
+    // Round par défaut : déduit du nombre de RDV déjà présents (R1, R2, R3…)
+    const existing = leads.find(l => l.id === leadId)?.calls.length ?? 0
+    const useRound = round ?? `R${Math.min(existing + 1, 3)}`
+    const res = await fetch('/api/lead-calls', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leadId, date: dateISO, showedUp: true, round: useRound }) })
     if (!res.ok) { toast.error('Erreur'); return }
     const call = await res.json()
-    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, calls: [{ ...call, leadId, notes: null }, ...l.calls] } : l))
+    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, calls: [{ ...call, leadId, notes: call.notes ?? null, round: call.round ?? useRound }, ...l.calls] } : l))
     const d = new Date(dateISO); setSelMonth(monthKey(d.getFullYear(), d.getMonth()))
   }
   const setStatus = async (leadId: string, statusId: string) => {
@@ -250,37 +276,51 @@ export function CallPipeline({
         </div>
       </div>
 
-      {/* Suivi des tours de RDV : R1 → R2 → R3 + taux de conversion */}
+      {/* Tunnel de RDV du mois sélectionné : R1 → R2 → R3 + conversions */}
       <div className="bg-nv-card border border-nv-border rounded-2xl p-4">
         <div className="flex items-center gap-2 mb-3 flex-wrap">
-          <h3 className="text-sm font-semibold text-white flex items-center gap-2"><Target size={15} className="text-primary" /> Tours de rendez-vous</h3>
-          <span className="text-[10px] text-nv-text-faint ml-auto">Le Nᵉ call d&apos;un lead = son RDV RN</span>
+          <h3 className="text-sm font-semibold text-white flex items-center gap-2"><Target size={15} className="text-primary" /> Tunnel de RDV — <span className="capitalize">{MONTHS_FR[selected.month].toLowerCase()} {selected.year}</span></h3>
+          <span className="text-[10px] text-nv-text-faint ml-auto">RDV datés ce mois-ci, par round</span>
         </div>
         <div className="flex items-center gap-1.5 flex-wrap">
           {[
-            { label: 'R1', sub: '1er RDV', n: rounds.r1, color: '#3b82f6' },
-            { label: 'R2', sub: '2e RDV', n: rounds.r2, color: '#8b5cf6' },
-            { label: 'R3', sub: '3e RDV', n: rounds.r3, color: '#a855f7' },
+            { label: 'R1', sub: `${selected.shownR1}/${selected.r1} présents`, n: selected.r1, color: '#3b82f6' },
+            { label: 'R2', sub: `${selected.shownR2}/${selected.r2} présents`, n: selected.r2, color: '#8b5cf6' },
+            { label: 'R3', sub: '3e RDV', n: selected.r3, color: '#a855f7' },
           ].map((r, i, arr) => (
             <div key={r.label} className="flex items-center gap-1.5">
-              <div className="rounded-xl border border-nv-border bg-nv-dark px-4 py-2.5 text-center min-w-[84px]">
+              <div className="rounded-xl border border-nv-border bg-nv-dark px-4 py-2.5 text-center min-w-[92px]">
                 <p className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: r.color }}>{r.label}</p>
                 <p className="text-2xl font-bold text-white tabular-nums leading-tight">{r.n}</p>
                 <p className="text-[9px] text-nv-text-faint">{r.sub}</p>
               </div>
-              {i < arr.length - 1 && (
-                <div className="flex flex-col items-center px-1">
-                  <span className="text-[9px] text-nv-text-faint">conv.</span>
-                  <span className="text-sm font-bold text-emerald-400 tabular-nums">{i === 0 ? rounds.c12 : rounds.c23}%</span>
-                  <ChevronRight size={12} className="text-nv-text-faint" />
-                </div>
-              )}
+              {i < arr.length - 1 && (() => {
+                const conv = i === 0 ? selected.convR12 : selected.convR23
+                const has = (i === 0 ? selected.r1 : selected.r2) > 0
+                return (
+                  <div className="flex flex-col items-center px-1">
+                    <span className="text-[9px] text-nv-text-faint">{arr[i].label}→{arr[i + 1].label}</span>
+                    <span className={`text-sm font-bold tabular-nums ${!has ? 'text-nv-text-faint' : conv >= 50 ? 'text-emerald-400' : conv >= 25 ? 'text-amber-400' : 'text-red-400'}`}>{has ? `${conv}%` : '—'}</span>
+                    <ChevronRight size={12} className="text-nv-text-faint" />
+                  </div>
+                )
+              })()}
             </div>
           ))}
-          <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 px-4 py-2.5 text-center min-w-[100px] ml-1">
-            <p className="text-[10px] uppercase tracking-wider text-emerald-400 font-semibold">Signé dès R2+</p>
-            <p className="text-2xl font-bold text-emerald-400 tabular-nums leading-tight">{rounds.cSign}%</p>
-            <p className="text-[9px] text-nv-text-faint">des leads en R2</p>
+        </div>
+
+        {/* Conversion R1 → R2 mois par mois */}
+        <div className="mt-4 pt-3 border-t border-nv-border/60">
+          <p className="text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold mb-2">Conversion R1 → R2 — mois par mois</p>
+          <div className="grid grid-cols-6 gap-1.5">
+            {months.map(m => (
+              <button key={`c-${m.key}`} onClick={() => setSelMonth(m.key)}
+                className={`rounded-lg border px-1.5 py-2 text-center transition-all ${m.key === selMonth ? 'border-primary bg-primary/10' : 'border-nv-border bg-nv-dark hover:border-nv-border-light'}`}>
+                <p className="text-[9px] font-semibold capitalize text-nv-text-muted">{MONTHS_SHORT[m.month]}</p>
+                <p className={`text-base font-bold tabular-nums leading-tight ${m.r1 === 0 ? 'text-nv-text-faint' : m.convR12 >= 50 ? 'text-emerald-400' : m.convR12 >= 25 ? 'text-amber-400' : 'text-red-400'}`}>{m.r1 ? `${m.convR12}%` : '—'}</p>
+                <p className="text-[8px] text-nv-text-faint tabular-nums">{m.r1}→{m.r2}</p>
+              </button>
+            ))}
           </div>
         </div>
       </div>
@@ -307,7 +347,7 @@ export function CallPipeline({
                   <ChevronRight size={14} className="text-nv-text-faint shrink-0" />
                 </button>
                 <div className="divide-y divide-nv-border/50">
-                  {calls.map(c => <CallRow key={c.id} c={c} onPatch={patchCall} onDelete={deleteCall} />)}
+                  {calls.map(c => <CallRow key={c.id} c={c} effRound={effRound[c.id] ?? 'R1'} onPatch={patchCall} onDelete={deleteCall} />)}
                 </div>
               </div>
             ))}
@@ -348,7 +388,7 @@ export function CallPipeline({
       {/* Modales */}
       {openLead && typeof document !== 'undefined' && createPortal(
         <LeadDetail lead={openLead} statuses={sortedStatuses} commercials={commercials} onClose={() => setOpenLeadId(null)}
-          onAddCall={(dateISO) => addCall(openLead.id, dateISO)} onPatchCall={patchCall} onDeleteCall={deleteCall}
+          onAddCall={(dateISO, round) => addCall(openLead.id, dateISO, round)} onPatchCall={patchCall} onDeleteCall={deleteCall}
           onSetStatus={(sid) => setStatus(openLead.id, sid)} closedStatusId={closedStatusId} onSigned={() => router.refresh()} />, document.body)}
       {showNewLead && typeof document !== 'undefined' && createPortal(<NewLeadModal onClose={() => setShowNewLead(false)} onCreated={() => router.refresh()} />, document.body)}
       {showReclose && typeof document !== 'undefined' && createPortal(<RecloseModal clients={clients} onClose={() => setShowReclose(false)} onDone={() => router.refresh()} />, document.body)}
@@ -358,11 +398,12 @@ export function CallPipeline({
   )
 }
 
-// ── Ligne de call (date éditable + checkboxes + notes) ──
-function CallRow({ c, onPatch, onDelete }: { c: Call; onPatch: (id: string, p: Partial<Call>) => void; onDelete: (id: string) => void }) {
+// ── Ligne de call : round (R1/R2/R3/Closing) + Oui/Non colorés + notes ──
+function CallRow({ c, effRound, onPatch, onDelete }: { c: Call; effRound: string; onPatch: (id: string, p: Partial<Call>) => void; onDelete: (id: string) => void }) {
+  const activeRound = c.round ?? effRound
   return (
-    <div className="p-3 bg-nv-card">
-      <div className="flex items-center justify-between mb-2">
+    <div className="p-3 bg-nv-card space-y-2.5">
+      <div className="flex items-center justify-between">
         <label className="flex items-center gap-1.5 text-xs text-nv-text-muted cursor-pointer" title="Modifier la date du call">
           <Clock size={11} className="text-nv-text-faint shrink-0" />
           <input type="datetime-local" value={toLocalInput(c.date)}
@@ -371,25 +412,38 @@ function CallRow({ c, onPatch, onDelete }: { c: Call; onPatch: (id: string, p: P
         </label>
         <button onClick={() => onDelete(c.id)} className="p-1 text-nv-text-faint hover:text-red-400 transition-colors"><Trash2 size={13} /></button>
       </div>
-      <div className="flex flex-wrap gap-1.5">
-        <CallCheck label="Présent" checked={c.showedUp} color="#3b82f6" onToggle={() => onPatch(c.id, { showedUp: !c.showedUp })} />
-        <CallCheck label="Qualifié" checked={c.qualified} color="#8b5cf6" onToggle={() => onPatch(c.id, { qualified: !c.qualified })} />
-        <CallCheck label="Follow-up" checked={c.followUpNeeded} color="#f59e0b" onToggle={() => onPatch(c.id, { followUpNeeded: !c.followUpNeeded })} />
-        {c.followUpNeeded && <CallCheck label="FU fait" checked={c.followUpDone} color="#10b981" onToggle={() => onPatch(c.id, { followUpDone: !c.followUpDone })} />}
+
+      {/* Round du RDV (boutons radio) */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <span className="text-[11px] text-nv-text-muted w-[68px] shrink-0">Round</span>
+        {ROUND_DEFS.map(r => (
+          <button key={r.key} type="button" onClick={() => onPatch(c.id, { round: r.key })}
+            className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${activeRound === r.key ? 'text-white border-transparent' : 'border-nv-border text-nv-text-muted hover:text-nv-text'}`}
+            style={activeRound === r.key ? { backgroundColor: r.color } : undefined}>
+            {r.key === 'CLOSING' ? 'Closing' : r.key}
+          </button>
+        ))}
+        {!c.round && <span className="text-[9px] text-nv-text-faint" title="Déduit de l'ordre des RDV — clique pour fixer">auto</span>}
       </div>
-      <p className="text-[10px] text-nv-text-faint mt-1.5">Le closing se calcule à partir du statut « Signé » du lead — marquez-le signé dans sa fiche.</p>
+
+      {/* Questions Oui / Non (couleurs claires) */}
+      <YesNo label="Présent ?" value={c.showedUp} onChange={v => onPatch(c.id, { showedUp: v })} yesColor="#10b981" noColor="#ef4444" />
+      <YesNo label="Qualifié ?" value={c.qualified} onChange={v => onPatch(c.id, { qualified: v })} yesColor="#8b5cf6" />
+      <YesNo label="Closé ?" value={c.closed} onChange={v => onPatch(c.id, { closed: v })} yesColor="#10b981" noColor="#ef4444" />
+
       <textarea defaultValue={c.notes ?? ''} onBlur={e => e.target.value !== (c.notes ?? '') && onPatch(c.id, { notes: e.target.value })}
-        rows={1} placeholder="Notes…" className="w-full mt-2 bg-nv-dark border border-nv-border rounded-lg px-2.5 py-1.5 text-xs text-nv-text placeholder-nv-text-faint focus:outline-none focus:border-primary/50 resize-none" />
+        rows={1} placeholder="Notes du RDV…" className="w-full bg-nv-dark border border-nv-border rounded-lg px-2.5 py-1.5 text-xs text-nv-text placeholder-nv-text-faint focus:outline-none focus:border-primary/50 resize-none" />
     </div>
   )
 }
 
 // ── Fiche lead ──
 function LeadDetail({ lead, statuses, commercials, onClose, onAddCall, onPatchCall, onDeleteCall, onSetStatus, closedStatusId, onSigned }: {
-  lead: Lead; statuses: LeadStatus[]; commercials: Commercial[]; onClose: () => void; onAddCall: (dateISO: string) => void
+  lead: Lead; statuses: LeadStatus[]; commercials: Commercial[]; onClose: () => void; onAddCall: (dateISO: string, round?: string) => void
   onPatchCall: (id: string, p: Partial<Call>) => void; onDeleteCall: (id: string) => void
   onSetStatus: (sid: string) => void; closedStatusId?: string; onSigned: () => void
 }) {
+  const effRounds = buildEffRounds([lead])
   const [signing, setSigning] = useState(false)
   const [closerId, setCloserId] = useState('')
   const [monthlyAmount, setMonthlyAmount] = useState('')
@@ -435,12 +489,12 @@ function LeadDetail({ lead, statuses, commercials, onClose, onAddCall, onPatchCa
           </div>
           <div>
             <div className="flex items-center justify-between mb-2">
-              <p className="text-[11px] uppercase tracking-wider text-nv-text-faint font-semibold flex items-center gap-1.5"><Phone size={12} /> Calls ({lead.calls.length})</p>
-              <button onClick={() => onAddCall(new Date().toISOString())} className="flex items-center gap-1 text-xs text-primary hover:text-primary-light transition-colors font-medium"><Plus size={12} /> Ajouter</button>
+              <p className="text-[11px] uppercase tracking-wider text-nv-text-faint font-semibold flex items-center gap-1.5"><Phone size={12} /> Rendez-vous ({lead.calls.length})</p>
+              <button onClick={() => onAddCall(new Date().toISOString(), `R${Math.min(lead.calls.length + 1, 3)}`)} className="flex items-center gap-1 text-xs text-primary hover:text-primary-light transition-colors font-medium"><Plus size={12} /> Ajouter un RDV</button>
             </div>
-            {lead.calls.length === 0 && <p className="text-xs text-nv-text-faint text-center py-6 border border-dashed border-nv-border rounded-xl">Aucun call.</p>}
+            {lead.calls.length === 0 && <p className="text-xs text-nv-text-faint text-center py-6 border border-dashed border-nv-border rounded-xl">Aucun RDV. Ajoute un R1 pour commencer.</p>}
             <div className="space-y-2 border border-nv-border rounded-xl overflow-hidden divide-y divide-nv-border/50">
-              {lead.calls.map(c => <CallRow key={c.id} c={c} onPatch={onPatchCall} onDelete={onDeleteCall} />)}
+              {lead.calls.map(c => <CallRow key={c.id} c={c} effRound={effRounds[c.id] ?? 'R1'} onPatch={onPatchCall} onDelete={onDeleteCall} />)}
             </div>
           </div>
           {!(lead.status?.isClosed || lead.convertedClientId) && (

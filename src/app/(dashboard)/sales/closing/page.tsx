@@ -33,7 +33,7 @@ export default async function ClosingPage() {
     createdAt: l.createdAt.toISOString(),
     status: l.status ? { id: l.status.id, name: l.status.name, color: l.status.color, isClosed: l.status.isClosed, order: l.status.order } : null,
     calls: l.calls.map((c: any) => ({
-      id: c.id, leadId: l.id, date: c.date.toISOString(), duration: c.duration,
+      id: c.id, leadId: l.id, date: c.date.toISOString(), duration: c.duration, round: c.round ?? null,
       showedUp: c.showedUp, qualified: c.qualified,
       closed: c.closed ?? false, followUpNeeded: c.followUpNeeded ?? false, followUpDone: c.followUpDone ?? false,
       notes: c.notes,
