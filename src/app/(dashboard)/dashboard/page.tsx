@@ -196,6 +196,14 @@ async function getDashboardData(userId: string) {
     } catch { return [] }
   })()
 
+  // Contracté de l'année = valeur totale des contrats signés cette année (mensualité × durée)
+  const contractedThisYear = await (async () => {
+    try {
+      const rows = await prisma.clientRetainer.findMany({ where: { createdAt: { gte: startOfYear } }, select: { monthlyAmount: true, durationMonths: true } })
+      return rows.reduce((s, r) => s + r.monthlyAmount * r.durationMonths, 0)
+    } catch { return 0 }
+  })()
+
   const caMonthVal = caMonth.total
   const caLastMonthVal = caLastMonth
   const trend = caLastMonthVal > 0 ? Math.round(((caMonthVal - caLastMonthVal) / caLastMonthVal) * 100) : 0
@@ -315,7 +323,7 @@ async function getDashboardData(userId: string) {
 
   return {
     topLtv, upsellYear, upsellMonth, pendingSignatures,
-    caMonth: caMonthVal, caMonthRows: caMonth.rows, caYear, trend, contractedThisMonth, contractedRows,
+    caMonth: caMonthVal, caMonthRows: caMonth.rows, caYear, trend, contractedThisMonth, contractedThisYear, contractedRows,
     salesSnapshot,
     activeClientsList: (activeClientsList as any[]).map(c => ({ id: c.id, name: c.name, company: c.company })),
     activeClients, activeProjects, pendingInvoices,
@@ -464,16 +472,17 @@ export default async function DashboardPage() {
         </Link>
       )}
 
-      {/* ── Vue chiffre d'affaires ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* ── Vue chiffre d'affaires : collecté (réel) vs contracté (engagé) ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <CaMonthDetail rows={data.caMonthRows}>
           <StatCard title="Collecté ce mois" value={formatCurrency(data.caMonth)} icon={TrendingUp} color="primary" subtitle={data.trend !== 0 ? `${data.trend > 0 ? '▲' : '▼'} ${Math.abs(data.trend)}% vs mois dernier` : 'voir le détail'} />
         </CaMonthDetail>
         <ContractedMonthDetail rows={data.contractedRows}>
           <StatCard title="Contracté ce mois" value={formatCurrency(data.contractedThisMonth)} icon={Briefcase} color="success" subtitle="contrats signés × durée" />
         </ContractedMonthDetail>
-        <StatCard title="MRR actuel" value={formatCurrency(data.currentMRR)} icon={RepeatIcon} color="warning" subtitle="récurrent / mois" />
         <StatCard title="Collecté cette année" value={formatCurrency(data.caYear)} icon={TrendingUp} color="primary" subtitle={`année ${new Date().getFullYear()}`} />
+        <StatCard title="Contracté cette année" value={formatCurrency(data.contractedThisYear)} icon={Briefcase} color="success" subtitle={`contrats ${new Date().getFullYear()} × durée`} />
+        <StatCard title="MRR actuel" value={formatCurrency(data.currentMRR)} icon={RepeatIcon} color="warning" subtitle="récurrent / mois" />
       </div>
 
       {/* ── KPIs ── */}

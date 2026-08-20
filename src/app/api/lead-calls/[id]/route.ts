@@ -5,6 +5,7 @@ import { z } from 'zod'
 
 const schema = z.object({
   date: z.string().optional(),
+  round: z.string().optional().nullable(),
   duration: z.number().int().optional().nullable(),
   showedUp: z.boolean().optional(),
   qualified: z.boolean().optional(),

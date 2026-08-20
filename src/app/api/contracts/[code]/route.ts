@@ -104,13 +104,8 @@ export async function PATCH(
           },
         })
       }
-      // Récurrence simplifiée : coche « mensualisé » sur la fiche client avec le
-      // montant du contrat → une facture est générée chaque mois (sans notion de
-      // durée d'engagement, qui reste purement contractuelle).
-      await prisma.client.update({
-        where: { id: client.id },
-        data: { mensualise: true, mensualiteAmount: contract.monthlyAmount, mensualiteFrequency: 'MENSUEL' } as any,
-      }).catch(() => {})
+      // NB : contrat à durée fixe → on ne coche PAS « mensualisé » (réservé au
+      // récurrent manuel sans engagement). On pré-crée les N factures ci-dessous.
     }
 
     // ── 3. Créer le projet ────────────────────────────────────────────────────
@@ -177,34 +172,33 @@ export async function PATCH(
       // Facture(s) déjà créées → on ne recrée pas
       invoices.push(existingInvoice)
     } else if (contract.missionType === 'MRR' && contract.monthlyAmount) {
+      // Durée fixe engagée → on pré-crée une facture par mois (prévisionnel complet)
       const ttc = contract.monthlyAmount
       const ht = Math.round((ttc / 1.2) * 100) / 100
-      const inv = await prisma.invoice.create({
-        data: {
-          clientId: client.id,
-          projectId: project.id,
-          number: `${prefix}-${fmt(counter++)}`,
-          type: 'TOTALE',
-          status: 'EN_ATTENTE',
-          totalHT: ht,
-          totalTVA: ttc - ht,
-          totalTTC: ttc,
-          issueDate: new Date(),
-          dueDate: new Date(Date.now() + 15 * 86_400_000),
-          notes: `Mensualité 1/${contract.durationMonths} — Contrat ${code}`,
-          lines: {
-            create: [{
-              description: delivrablesSummary,
-              quantity: 1,
-              unitPrice: ht,
-              vatRate: 20,
-              total: ht,
-              order: 0,
-            }],
+      const nbMonths = Math.max(1, contract.durationMonths || 1)
+      const baseStart = contract.startDate ? new Date(String(contract.startDate).slice(0, 7) + '-01') : new Date()
+      for (let i = 0; i < nbMonths; i++) {
+        const issue = new Date(baseStart.getFullYear(), baseStart.getMonth() + i, Math.min(baseStart.getDate(), 28))
+        const inv = await prisma.invoice.create({
+          data: {
+            clientId: client.id,
+            projectId: project.id,
+            number: `${prefix}-${fmt(counter++)}`,
+            type: 'TOTALE',
+            status: 'EN_ATTENTE',
+            totalHT: ht,
+            totalTVA: ttc - ht,
+            totalTTC: ttc,
+            issueDate: issue,
+            dueDate: new Date(issue.getTime() + 15 * 86_400_000),
+            notes: `Mensualité ${i + 1}/${nbMonths} — Contrat ${code}`,
+            lines: {
+              create: [{ description: delivrablesSummary, quantity: 1, unitPrice: ht, vatRate: 20, total: ht, order: 0 }],
+            },
           },
-        },
-      })
-      invoices.push(inv)
+        })
+        invoices.push(inv)
+      }
     } else if (contract.missionType === 'PONCTUEL' && contract.totalAmount) {
       const pct = contract.depositPercent || 30
       const depTTC = Math.round(contract.totalAmount * pct / 100 * 100) / 100

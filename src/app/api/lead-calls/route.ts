@@ -6,6 +6,7 @@ import { z } from 'zod'
 const schema = z.object({
   leadId: z.string(),
   date: z.string(),
+  round: z.string().optional().nullable(),
   duration: z.number().int().optional().nullable(),
   showedUp: z.boolean().default(false),
   qualified: z.boolean().default(false),

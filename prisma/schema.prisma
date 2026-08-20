@@ -990,6 +990,7 @@ model LeadCall {
   id             String   @id @default(cuid())
   leadId         String
   date           DateTime
+  round          String?  // type de RDV : R1, R2, R3, CLOSING, SUIVI
   duration       Int?
   showedUp       Boolean  @default(false) // le prospect s'est présenté au call
   qualified      Boolean  @default(false) // prospect qualifié

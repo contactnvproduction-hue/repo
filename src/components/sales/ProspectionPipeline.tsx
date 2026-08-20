@@ -22,8 +22,10 @@ type Lead = {
   closerStatusId: string | null; closerStatus: CloserStatus | null
   followUpDate: string | null; rdvBookedAt: string | null; rdvDate: string | null
   saleMonthlyAmount: number | null; wonAt: string | null; lostAt: string | null
-  convertedClientId: string | null; closingNotes: string | null; isExistingClient: boolean; resources: Resource[]; annotations: Note[]; calls: { date: string; showedUp: boolean }[]; createdAt: string
+  convertedClientId: string | null; closingNotes: string | null; isExistingClient: boolean; resources: Resource[]; annotations: Note[]; calls: LeadCallT[]; createdAt: string
 }
+type LeadCallT = { id: string; date: string; showedUp: boolean; qualified: boolean; notes: string | null; round: string | null }
+const ROUNDS = ['R1', 'R2', 'R3', 'CLOSING', 'SUIVI'] as const
 type Settings = { commissionPerBookedCall: number; commissionPercent: number }
 
 const eur = (n: number) => `${Math.round(n).toLocaleString('fr-FR')} €`
@@ -274,6 +276,8 @@ function StatsView({ leads: allLeads, commercials, settings }: { leads: Lead[]; 
   const leads = sel ? allLeads.filter(l => l.commercialId === sel) : allLeads
   // RDV = nombre de calls datés dans le mois (fallback rdvBookedAt si aucun call renseigné)
   const bookedInMonth = (ls: Lead[], y: number, m: number) => ls.reduce((s, l) => s + (l.calls.length ? l.calls.filter(c => inMonth(c.date, y, m)).length : (inMonth(l.rdvBookedAt, y, m) ? 1 : 0)), 0)
+  // Nombre de RDV d'un round donné (R1/R2/R3) datés dans le mois
+  const roundInMonth = (ls: Lead[], y: number, m: number, r: string) => ls.reduce((s, l) => s + l.calls.filter(c => c.round === r && inMonth(c.date, y, m)).length, 0)
   const months = Array.from({ length: 6 }, (_, i) => {
     const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1); const y = d.getFullYear(), m = d.getMonth()
     const gen = leads.filter(l => inMonth(l.createdAt, y, m)).length
@@ -283,7 +287,10 @@ function StatsView({ leads: allLeads, commercials, settings }: { leads: Lead[]; 
     const conversion = rdv > 0 ? Math.round((ventes.length / rdv) * 100) : 0
     const panier = ventes.length > 0 ? Math.round(caSigned / ventes.length) : 0 // panier moyen du mois
     const commission = rdv * settings.commissionPerBookedCall + caSigned * (settings.commissionPercent / 100)
-    return { m, y, gen, rdv, ventes: ventes.length, conversion, panier, caSigned, commission, isCurrent: i === 5 }
+    const r1 = roundInMonth(leads, y, m, 'R1'), r2 = roundInMonth(leads, y, m, 'R2'), r3 = roundInMonth(leads, y, m, 'R3')
+    const convR12 = r1 > 0 ? Math.round((r2 / r1) * 100) : 0
+    const convR23 = r2 > 0 ? Math.round((r3 / r2) * 100) : 0
+    return { m, y, gen, rdv, ventes: ventes.length, conversion, panier, caSigned, commission, r1, r2, r3, convR12, convR23, isCurrent: i === 5 }
   })
   const totalToPay = commercials.map(c => {
     const mine = allLeads.filter(l => l.commercialId === c.id)
@@ -343,6 +350,31 @@ function StatsView({ leads: allLeads, commercials, settings }: { leads: Lead[]; 
           ))}
         </div>
       </div>
+      {/* Tunnel de RDV — R1 → R2 → R3 mois par mois (basé sur les rounds renseignés) */}
+      <div className="bg-nv-card border border-nv-border rounded-xl overflow-hidden">
+        <div className="px-4 py-2.5 border-b border-nv-border bg-nv-dark/40 flex items-center gap-2">
+          <PhoneCall size={14} className="text-primary" />
+          <h3 className="text-sm font-semibold text-white">Tunnel de RDV — mois par mois</h3>
+          <span className="text-[10px] text-nv-text-faint ml-auto">conversion entre chaque round</span>
+        </div>
+        <div className="grid grid-cols-[70px_repeat(5,1fr)] gap-2 px-4 py-2 text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold border-b border-nv-border bg-nv-dark/40 text-right">
+          <span className="text-left">Mois</span><span>R1</span><span>R2</span><span>R3</span><span>R1→R2</span><span>R2→R3</span>
+        </div>
+        <div className="divide-y divide-nv-border/50">
+          {months.map(mo => (
+            <div key={`t-${mo.y}-${mo.m}`} className={`grid grid-cols-[70px_repeat(5,1fr)] gap-2 px-4 py-2.5 text-right text-sm tabular-nums ${mo.isCurrent ? 'bg-primary/5' : ''}`}>
+              <span className={`text-left font-medium ${mo.isCurrent ? 'text-primary' : 'text-white'}`}>{MONTHS[mo.m]} {String(mo.y).slice(2)}</span>
+              <span className="text-sky-300">{mo.r1}</span>
+              <span className="text-violet-300">{mo.r2}</span>
+              <span className="text-fuchsia-300">{mo.r3}</span>
+              <span className={mo.convR12 >= 50 ? 'text-emerald-400 font-semibold' : 'text-nv-text-muted'}>{mo.r1 > 0 ? `${mo.convR12}%` : '—'}</span>
+              <span className={mo.convR23 >= 50 ? 'text-emerald-400 font-semibold' : 'text-nv-text-muted'}>{mo.r2 > 0 ? `${mo.convR23}%` : '—'}</span>
+            </div>
+          ))}
+        </div>
+        <p className="px-4 py-2 text-[10px] text-nv-text-faint border-t border-nv-border">Renseigne le round (R1/R2/R3) de chaque RDV dans la fiche du lead pour alimenter ce tunnel.</p>
+      </div>
+
       <div className="bg-nv-card border border-nv-border rounded-xl p-4">
         <h3 className="text-sm font-semibold text-white flex items-center gap-2 mb-3"><Coins size={15} className="text-primary" /> Total des commissions à verser</h3>
         {totalToPay.length === 0 ? <p className="text-xs text-nv-text-faint">Aucune commission pour l&apos;instant.</p> : (
@@ -458,6 +490,81 @@ function StatusManager({ statuses, onClose, onChange }: { statuses: SettingStatu
   )
 }
 
+// Gestion des rendez-vous d'un lead : planifie R1/R2/R3/closing, présence
+// (show-up vert/rouge), qualifié, notes → nourrit la data commerciale mensuelle.
+function CallManager({ lead }: { lead: Lead }) {
+  const router = useRouter()
+  const [calls, setCalls] = useState<LeadCallT[]>(lead.calls || [])
+  const [round, setRound] = useState<string>('R1')
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
+  const [showedUp, setShowedUp] = useState(true)
+  const [qualified, setQualified] = useState(false)
+  const [note, setNote] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const add = async () => {
+    setSaving(true)
+    try {
+      const res = await fetch('/api/lead-calls', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leadId: lead.id, date: new Date(date).toISOString(), round, showedUp, qualified, notes: note.trim() || undefined }) })
+      if (!res.ok) throw new Error()
+      const c = await res.json()
+      setCalls(prev => [...prev, { id: c.id, date: c.date, showedUp: !!c.showedUp, qualified: !!c.qualified, notes: c.notes ?? null, round: c.round ?? round }].sort((a, b) => a.date.localeCompare(b.date)))
+      setNote(''); toast.success('RDV enregistré'); router.refresh()
+    } catch { toast.error('Erreur') } finally { setSaving(false) }
+  }
+  const patch = async (id: string, data: Partial<LeadCallT>) => {
+    setCalls(prev => prev.map(c => c.id === id ? { ...c, ...data } : c))
+    await fetch(`/api/lead-calls/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).catch(() => {})
+    router.refresh()
+  }
+  const del = async (id: string) => {
+    setCalls(prev => prev.filter(c => c.id !== id))
+    await fetch(`/api/lead-calls/${id}`, { method: 'DELETE' }).catch(() => {})
+    router.refresh()
+  }
+  const badge = (r: string | null) => {
+    const map: Record<string, string> = { R1: 'bg-sky-500/15 text-sky-300 border-sky-500/30', R2: 'bg-violet-500/15 text-violet-300 border-violet-500/30', R3: 'bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/30', CLOSING: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30', SUIVI: 'bg-nv-border/40 text-nv-text-muted border-nv-border' }
+    return map[r || ''] || 'bg-nv-border/40 text-nv-text-muted border-nv-border'
+  }
+
+  return (
+    <div className="rounded-xl border border-nv-border p-3 space-y-2.5">
+      <p className="text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold flex items-center gap-1.5"><PhoneCall size={11} /> Rendez-vous ({calls.length})</p>
+
+      {/* Historique des RDV */}
+      <div className="space-y-1.5">
+        {calls.map(c => (
+          <div key={c.id} className="flex items-center gap-1.5 text-xs bg-nv-black border border-nv-border/60 rounded-lg px-2 py-1.5">
+            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${badge(c.round)}`}>{c.round || 'RDV'}</span>
+            <span className="text-nv-text tabular-nums">{new Date(c.date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}</span>
+            {/* Présence : vert = présent, rouge = absent */}
+            <button onClick={() => patch(c.id, { showedUp: !c.showedUp })} title="Présence (show-up)" className={`text-[9px] font-semibold px-1.5 py-0.5 rounded border ${c.showedUp ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' : 'bg-red-500/15 text-red-300 border-red-500/30'}`}>{c.showedUp ? 'Présent' : 'Absent'}</button>
+            {/* Qualifié */}
+            <button onClick={() => patch(c.id, { qualified: !c.qualified })} title="Prospect qualifié" className={`text-[9px] font-semibold px-1.5 py-0.5 rounded border ${c.qualified ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' : 'border-nv-border text-nv-text-faint'}`}>Qualifié</button>
+            {c.notes && <span className="text-nv-text-faint truncate flex-1" title={c.notes}>· {c.notes}</span>}
+            <button onClick={() => del(c.id)} className="ml-auto p-0.5 text-nv-text-faint hover:text-red-400 shrink-0"><Trash2 size={11} /></button>
+          </div>
+        ))}
+        {calls.length === 0 && <p className="text-[11px] text-nv-text-faint">Aucun RDV planifié.</p>}
+      </div>
+
+      {/* Ajout d'un RDV */}
+      <div className="pt-2 border-t border-nv-border/60 space-y-1.5">
+        <div className="flex gap-1.5">
+          <select value={round} onChange={e => setRound(e.target.value)} className={`${inp} w-24`}>{ROUNDS.map(r => <option key={r} value={r}>{r}</option>)}</select>
+          <input type="date" value={date} onChange={e => setDate(e.target.value)} className={`${inp} flex-1`} />
+        </div>
+        <input value={note} onChange={e => setNote(e.target.value)} placeholder="Note du RDV (contexte, objections…)" className={inp} />
+        <div className="flex items-center gap-3 flex-wrap">
+          <label className="flex items-center gap-1.5 text-[11px] text-nv-text-muted cursor-pointer"><input type="checkbox" checked={showedUp} onChange={e => setShowedUp(e.target.checked)} className="w-3.5 h-3.5 accent-emerald-500" /> Présent</label>
+          <label className="flex items-center gap-1.5 text-[11px] text-nv-text-muted cursor-pointer"><input type="checkbox" checked={qualified} onChange={e => setQualified(e.target.checked)} className="w-3.5 h-3.5 accent-amber-500" /> Qualifié</label>
+          <button onClick={add} disabled={saving} className="ml-auto text-xs px-3 py-1.5 rounded-lg bg-primary text-nv-black font-medium flex items-center gap-1 disabled:opacity-60">{saving ? <Loader2 size={12} className="animate-spin" /> : <Plus size={13} />} Planifier</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function LeadModal({ lead, commercials, settingStatuses, closerStatuses, onClose, onPatch, onDelete, onOpenClose }: {
   lead: Lead; commercials: Commercial[]; settingStatuses: SettingStatus[]; closerStatuses: CloserStatus[]; onClose: () => void
   onPatch: (id: string, patch: any, optimistic?: Partial<Lead>) => void; onDelete: (id: string) => void; onOpenClose: () => void
@@ -568,6 +675,8 @@ function LeadModal({ lead, commercials, settingStatuses, closerStatuses, onClose
           <button onClick={() => onPatch(lead.id, { lostAt: nowIso() })} className="w-full text-xs py-1.5 rounded-lg border border-nv-border text-nv-text-muted hover:text-red-400 hover:border-red-500/30 transition-colors">Marquer perdu</button>
         )}
       </div>
+
+      <CallManager lead={lead} />
 
       <div className="rounded-xl border border-nv-border p-3 space-y-2">
         <p className="text-[10px] uppercase tracking-wider text-nv-text-faint font-semibold flex items-center gap-1.5"><Link2 size={11} /> Ressources</p>
