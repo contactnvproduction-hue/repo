@@ -35,8 +35,11 @@ type LeadStatus = { id: string; name: string; color: string; isClosed: boolean; 
 type Lead = {
   id: string; name: string; company: string | null; email: string | null; phone: string | null
   statusId: string | null; status: LeadStatus | null; convertedClientId: string | null
+  wonAt: string | null; saleMonthlyAmount: number | null
   calls: Call[]; createdAt: string
 }
+// Un lead est « signé » une seule fois (état par lead, jamais par nombre d'appels).
+const isSignedLead = (l: Lead) => !!(l.wonAt || l.convertedClientId)
 type ClientLite = { id: string; name: string; company: string | null }
 type Commercial = { id: string; name: string }
 type MonthClosing = { year: number; month: number; count: number; amount: number; isCurrent: boolean }
@@ -124,7 +127,6 @@ export function CallPipeline({
   const [savingScript, setSavingScript] = useState(false)
 
   const openLead = leads.find(l => l.id === openLeadId) ?? null
-  const sortedStatuses = [...statuses].sort((a, b) => a.order - b.order)
   const closedStatusId = statuses.find(s => s.isClosed)?.id
 
   // Tous les calls à plat (avec leur lead)
@@ -145,7 +147,8 @@ export function CallPipeline({
       const leadIds = new Set(monthCalls.map(c => c.leadId))
       const shownLeads = new Set(monthCalls.filter(c => c.showedUp).map(c => c.leadId))
       const qualifiedLeads = new Set(monthCalls.filter(c => c.qualified).map(c => c.leadId))
-      const signedLeads = new Set(monthCalls.filter(c => c.lead.status?.isClosed || c.lead.convertedClientId).map(c => c.leadId))
+      // Signé = état par lead (wonAt / client converti), compté une seule fois
+      const signedLeads = new Set(monthCalls.filter(c => isSignedLead(c.lead)).map(c => c.leadId))
       const nContacted = leadIds.size
       // Tunnel de RDV du mois (basé sur le round effectif de chaque call daté ce mois)
       const r1 = monthCalls.filter(c => effRound[c.id] === 'R1').length
@@ -325,32 +328,39 @@ export function CallPipeline({
         </div>
       </div>
 
-      {/* Calls du mois */}
+      {/* RDV du mois — résumé compact par lead (détail éditable dans la fiche) */}
       <div className="bg-nv-card border border-nv-border rounded-2xl p-4">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-white flex items-center gap-2"><Phone size={15} className="text-primary" /> Calls de {MONTHS_FR[selected.month].toLowerCase()} ({selected.nbCalls})</h3>
-          <button onClick={() => setShowAddCall(true)} className="flex items-center gap-1 text-xs text-primary hover:text-primary-light font-medium"><Plus size={12} /> Ajouter un call</button>
+          <h3 className="text-sm font-semibold text-white flex items-center gap-2"><Phone size={15} className="text-primary" /> RDV de {MONTHS_FR[selected.month].toLowerCase()} ({selected.nbCalls})</h3>
+          <button onClick={() => setShowAddCall(true)} className="flex items-center gap-1 text-xs text-primary hover:text-primary-light font-medium"><Plus size={12} /> Ajouter un RDV</button>
         </div>
         {monthByLead.length === 0 ? (
-          <p className="text-xs text-nv-text-faint text-center py-8">Aucun call ce mois-ci. Ajoutez-en un (vous pouvez dater un call passé).</p>
+          <p className="text-xs text-nv-text-faint text-center py-8">Aucun RDV ce mois-ci. Ajoutez-en un (vous pouvez dater un RDV passé).</p>
         ) : (
-          <div className="space-y-3">
-            {monthByLead.map(({ lead, calls }) => (
-              <div key={lead.id} className="border border-nv-border rounded-xl overflow-hidden">
-                <button onClick={() => setOpenLeadId(lead.id)} className="w-full flex items-center gap-2 px-3 py-2 bg-nv-dark hover:bg-white/[0.02] transition-colors">
+          <div className="space-y-1.5">
+            {monthByLead.map(({ lead, calls }) => {
+              const signed = isSignedLead(lead)
+              const sorted = [...calls].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+              return (
+                <button key={lead.id} onClick={() => setOpenLeadId(lead.id)} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl border border-nv-border bg-nv-dark hover:border-nv-border-light transition-colors text-left">
                   <span className="w-7 h-7 rounded-lg bg-primary/10 text-primary text-xs font-bold flex items-center justify-center shrink-0">{lead.name.charAt(0).toUpperCase()}</span>
-                  <div className="min-w-0 flex-1 text-left">
-                    <p className="text-sm font-semibold text-white truncate">{lead.name}</p>
-                    {lead.company && <p className="text-[10px] text-nv-text-faint truncate">{lead.company}</p>}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-white truncate">{lead.name}{lead.company && <span className="text-[11px] text-nv-text-faint font-normal"> · {lead.company}</span>}</p>
+                    {/* Chips compacts : round + présence (vert présent / rouge absent) */}
+                    <div className="flex items-center gap-1 mt-1 flex-wrap">
+                      {sorted.map(c => (
+                        <span key={c.id} className="inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded border" style={{ borderColor: `${roundColor(effRound[c.id] ?? 'R1')}66`, color: roundColor(effRound[c.id] ?? 'R1') }}>
+                          {(effRound[c.id] ?? 'R1') === 'CLOSING' ? 'Closing' : (effRound[c.id] ?? 'R1')}
+                          <span className={`w-1.5 h-1.5 rounded-full ${c.showedUp ? 'bg-emerald-400' : 'bg-red-400'}`} title={c.showedUp ? 'Présent' : 'Absent'} />
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                  {lead.status && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0" style={{ backgroundColor: `${lead.status.color}22`, color: lead.status.color }}>{lead.status.name}</span>}
+                  {signed && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 shrink-0">Signé ✓</span>}
                   <ChevronRight size={14} className="text-nv-text-faint shrink-0" />
                 </button>
-                <div className="divide-y divide-nv-border/50">
-                  {calls.map(c => <CallRow key={c.id} c={c} effRound={effRound[c.id] ?? 'R1'} onPatch={patchCall} onDelete={deleteCall} />)}
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
@@ -365,19 +375,18 @@ export function CallPipeline({
         {leadsOpen && (
           <div className="divide-y divide-nv-border/60 border-t border-nv-border max-h-96 overflow-y-auto">
             {leads.map(lead => {
-              const isSigned = lead.status?.isClosed || !!lead.convertedClientId
+              const signed = isSignedLead(lead)
               return (
                 <button key={lead.id} onClick={() => setOpenLeadId(lead.id)} className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-white/[0.02] transition-colors text-left">
                   <span className="w-8 h-8 rounded-lg bg-primary/10 text-primary text-xs font-bold flex items-center justify-center shrink-0">{lead.name.charAt(0).toUpperCase()}</span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-medium text-white truncate">{lead.name}</p>
-                      {isSigned && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 font-bold uppercase">Signé</span>}
+                      {signed && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 font-bold uppercase">Signé</span>}
                     </div>
                     {lead.company && <p className="text-xs text-nv-text-muted truncate">{lead.company}</p>}
                   </div>
-                  <span className="text-xs text-nv-text-faint tabular-nums shrink-0">{lead.calls.length} calls</span>
-                  {lead.status && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0" style={{ backgroundColor: `${lead.status.color}22`, color: lead.status.color }}>{lead.status.name}</span>}
+                  <span className="text-xs text-nv-text-faint tabular-nums shrink-0">{lead.calls.length} RDV</span>
                 </button>
               )
             })}
@@ -387,7 +396,7 @@ export function CallPipeline({
 
       {/* Modales */}
       {openLead && typeof document !== 'undefined' && createPortal(
-        <LeadDetail lead={openLead} statuses={sortedStatuses} commercials={commercials} onClose={() => setOpenLeadId(null)}
+        <LeadDetail lead={openLead} commercials={commercials} onClose={() => setOpenLeadId(null)}
           onAddCall={(dateISO, round) => addCall(openLead.id, dateISO, round)} onPatchCall={patchCall} onDeleteCall={deleteCall}
           onSetStatus={(sid) => setStatus(openLead.id, sid)} closedStatusId={closedStatusId} onSigned={() => router.refresh()} />, document.body)}
       {showNewLead && typeof document !== 'undefined' && createPortal(<NewLeadModal onClose={() => setShowNewLead(false)} onCreated={() => router.refresh()} />, document.body)}
@@ -426,10 +435,9 @@ function CallRow({ c, effRound, onPatch, onDelete }: { c: Call; effRound: string
         {!c.round && <span className="text-[9px] text-nv-text-faint" title="Déduit de l'ordre des RDV — clique pour fixer">auto</span>}
       </div>
 
-      {/* Questions Oui / Non (couleurs claires) */}
+      {/* Questions Oui / Non (couleurs claires) — le closing est par lead, pas par RDV */}
       <YesNo label="Présent ?" value={c.showedUp} onChange={v => onPatch(c.id, { showedUp: v })} yesColor="#10b981" noColor="#ef4444" />
       <YesNo label="Qualifié ?" value={c.qualified} onChange={v => onPatch(c.id, { qualified: v })} yesColor="#8b5cf6" />
-      <YesNo label="Closé ?" value={c.closed} onChange={v => onPatch(c.id, { closed: v })} yesColor="#10b981" noColor="#ef4444" />
 
       <textarea defaultValue={c.notes ?? ''} onBlur={e => e.target.value !== (c.notes ?? '') && onPatch(c.id, { notes: e.target.value })}
         rows={1} placeholder="Notes du RDV…" className="w-full bg-nv-dark border border-nv-border rounded-lg px-2.5 py-1.5 text-xs text-nv-text placeholder-nv-text-faint focus:outline-none focus:border-primary/50 resize-none" />
@@ -438,12 +446,13 @@ function CallRow({ c, effRound, onPatch, onDelete }: { c: Call; effRound: string
 }
 
 // ── Fiche lead ──
-function LeadDetail({ lead, statuses, commercials, onClose, onAddCall, onPatchCall, onDeleteCall, onSetStatus, closedStatusId, onSigned }: {
-  lead: Lead; statuses: LeadStatus[]; commercials: Commercial[]; onClose: () => void; onAddCall: (dateISO: string, round?: string) => void
+function LeadDetail({ lead, commercials, onClose, onAddCall, onPatchCall, onDeleteCall, onSetStatus, closedStatusId, onSigned }: {
+  lead: Lead; commercials: Commercial[]; onClose: () => void; onAddCall: (dateISO: string, round?: string) => void
   onPatchCall: (id: string, p: Partial<Call>) => void; onDeleteCall: (id: string) => void
   onSetStatus: (sid: string) => void; closedStatusId?: string; onSigned: () => void
 }) {
   const effRounds = buildEffRounds([lead])
+  const signed = isSignedLead(lead)
   const [signing, setSigning] = useState(false)
   const [closerId, setCloserId] = useState('')
   const [monthlyAmount, setMonthlyAmount] = useState('')
@@ -451,8 +460,8 @@ function LeadDetail({ lead, statuses, commercials, onClose, onAddCall, onPatchCa
     setSigning(true)
     try {
       if (closedStatusId) onSetStatus(closedStatusId)
-      // Attribue le close au commercial + montant → alimente le récap commercial
-      // (wonAt + commercialId + saleMonthlyAmount lus par le dashboard commercial).
+      // Le « signé » est un état du LEAD (wonAt), compté une seule fois quel que
+      // soit le nombre de RDV. Alimente le taux de closing + le récap commercial.
       await fetch(`/api/leads/${lead.id}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -463,6 +472,13 @@ function LeadDetail({ lead, statuses, commercials, onClose, onAddCall, onPatchCa
       }).catch(() => {})
       await fetch('/api/closings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leadId: lead.id, clientName: lead.name, type: 'NEW', commercialId: closerId || null, amount: monthlyAmount || null, missionType: 'MRR' }) })
       toast.success(`${lead.name} signé — closing enregistré 🎉`); onSigned(); onClose()
+    } catch { toast.error('Erreur') } finally { setSigning(false) }
+  }
+  const unsign = async () => {
+    setSigning(true)
+    try {
+      await fetch(`/api/leads/${lead.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wonAt: null }) }).catch(() => {})
+      toast.success('Signature annulée'); onSigned(); onClose()
     } catch { toast.error('Erreur') } finally { setSigning(false) }
   }
   return (
@@ -478,16 +494,6 @@ function LeadDetail({ lead, statuses, commercials, onClose, onAddCall, onPatchCa
         </div>
         <div className="p-5 space-y-5">
           <div>
-            <p className="text-[11px] uppercase tracking-wider text-nv-text-faint font-semibold mb-2">Statut</p>
-            <div className="flex flex-wrap gap-1.5">
-              {statuses.map(s => (
-                <button key={s.id} onClick={() => onSetStatus(s.id)} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${lead.statusId === s.id ? 'text-nv-black' : 'bg-nv-card text-nv-text-muted hover:text-nv-text'}`} style={lead.statusId === s.id ? { backgroundColor: s.color } : undefined}>
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: lead.statusId === s.id ? '#000' : s.color }} />{s.name}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div>
             <div className="flex items-center justify-between mb-2">
               <p className="text-[11px] uppercase tracking-wider text-nv-text-faint font-semibold flex items-center gap-1.5"><Phone size={12} /> Rendez-vous ({lead.calls.length})</p>
               <button onClick={() => onAddCall(new Date().toISOString(), `R${Math.min(lead.calls.length + 1, 3)}`)} className="flex items-center gap-1 text-xs text-primary hover:text-primary-light transition-colors font-medium"><Plus size={12} /> Ajouter un RDV</button>
@@ -497,9 +503,18 @@ function LeadDetail({ lead, statuses, commercials, onClose, onAddCall, onPatchCa
               {lead.calls.map(c => <CallRow key={c.id} c={c} effRound={effRounds[c.id] ?? 'R1'} onPatch={onPatchCall} onDelete={onDeleteCall} />)}
             </div>
           </div>
-          {!(lead.status?.isClosed || lead.convertedClientId) && (
+          {/* Closing — état par lead (compté une seule fois dans le taux de closing) */}
+          {signed ? (
+            <div className="space-y-2 rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3">
+              <p className="text-sm font-semibold text-emerald-300 flex items-center gap-2"><Sparkles size={15} /> Lead signé{lead.saleMonthlyAmount ? ` · ${eur(lead.saleMonthlyAmount)}/mois` : ''}</p>
+              <p className="text-[10px] text-nv-text-faint">Compté une fois dans le taux de closing du mois.</p>
+              <button onClick={unsign} disabled={signing} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-nv-border text-nv-text-muted hover:text-red-400 hover:border-red-500/30 transition-colors text-xs disabled:opacity-60">
+                {signing ? <Loader2 size={14} className="animate-spin" /> : <X size={13} />} Annuler la signature
+              </button>
+            </div>
+          ) : (
             <div className="space-y-2 rounded-xl border border-emerald-500/25 p-3">
-              <p className="text-[11px] uppercase tracking-wider text-nv-text-faint font-semibold">Closing — attribution</p>
+              <p className="text-[11px] uppercase tracking-wider text-nv-text-faint font-semibold">Ça a closé ? — attribution</p>
               <div className="grid grid-cols-2 gap-2">
                 <select value={closerId} onChange={e => setCloserId(e.target.value)} className="w-full bg-nv-black border border-nv-border rounded-lg px-2.5 py-2 text-sm text-white focus:outline-none focus:border-primary/60">
                   <option value="">— Commercial —</option>

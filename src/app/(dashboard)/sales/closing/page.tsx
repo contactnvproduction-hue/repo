@@ -30,6 +30,8 @@ export default async function ClosingPage() {
   const pipelineLeads = leads.map(l => ({
     id: l.id, name: l.name, company: l.company, email: l.email, phone: l.phone,
     statusId: l.statusId, convertedClientId: l.convertedClientId,
+    wonAt: l.wonAt ? l.wonAt.toISOString() : null,
+    saleMonthlyAmount: l.saleMonthlyAmount ?? null,
     createdAt: l.createdAt.toISOString(),
     status: l.status ? { id: l.status.id, name: l.status.name, color: l.status.color, isClosed: l.status.isClosed, order: l.status.order } : null,
     calls: l.calls.map((c: any) => ({
