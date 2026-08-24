@@ -16,12 +16,26 @@ export async function GET() {
   return NextResponse.json(entries)
 }
 
-// Lancer le timer d'une personne (idempotent : renvoie l'entrée en cours si déjà lancée)
+// Lancer le timer d'une personne (idempotent : renvoie l'entrée en cours si déjà
+// lancée) OU enregistrer un pointage complet saisi à la main (durationSec fourni).
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   const b = await req.json().catch(() => ({}))
   if (!b.userId) return NextResponse.json({ error: 'userId requis' }, { status: 400 })
+
+  // Pointage manuel : durée fournie → entrée déjà terminée (pas de chrono)
+  if (b.durationSec != null && b.durationSec !== '') {
+    const dur = Math.max(0, Math.round(Number(b.durationSec)))
+    if (!dur) return NextResponse.json({ error: 'durée invalide' }, { status: 400 })
+    const start = b.startAt ? new Date(b.startAt) : new Date()
+    const end = new Date(start.getTime() + dur * 1000)
+    const entry = await db.timeEntry.create({
+      data: { userId: b.userId, userName: b.userName ?? null, startAt: start, endAt: end, durationSec: dur, pole: b.pole || null, task: b.task || null },
+    })
+    return NextResponse.json(entry, { status: 201 })
+  }
+
   const open = await db.timeEntry.findFirst({ where: { userId: b.userId, endAt: null } }).catch(() => null)
   if (open) return NextResponse.json(open)
   const entry = await db.timeEntry.create({ data: { userId: b.userId, userName: b.userName ?? null, startAt: new Date() } })

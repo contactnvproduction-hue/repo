@@ -48,6 +48,7 @@ export function TimeTracker({ people, initialEntries, initialPoles }: { people: 
   const [tick, setTick] = useState(Date.now())
   const [stopFor, setStopFor] = useState<Entry | null>(null)
   const [showPoles, setShowPoles] = useState(false)
+  const [showManual, setShowManual] = useState(false)
   const [busy, setBusy] = useState(false)
 
   const savePoles = async (next: string[]) => {
@@ -90,6 +91,18 @@ export function TimeTracker({ people, initialEntries, initialPoles }: { people: 
     setEntries(list => list.filter(e => e.id !== id))
     await fetch(`/api/ceo/time?id=${id}`, { method: 'DELETE' })
   }
+  // Ajout manuel d'un pointage complet (personne, catégorie, tâche, durée, date)
+  const addManual = async (userId: string, pole: string, task: string, durationSec: number, dateStr: string) => {
+    setBusy(true)
+    try {
+      const startAt = new Date(`${dateStr}T09:00:00`).toISOString()
+      const res = await fetch('/api/ceo/time', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId, userName: nameOf(userId), pole, task, durationSec, startAt }) })
+      if (!res.ok) throw new Error()
+      const e = await res.json()
+      setEntries(list => [e, ...list])
+      setShowManual(false); toast.success(`Pointage ajouté · ${fmtDur(e.durationSec)}`)
+    } catch { toast.error('Erreur') } finally { setBusy(false) }
+  }
 
   // Résumé de la personne sélectionnée pour la période
   const from = periodStart(period)
@@ -108,7 +121,8 @@ export function TimeTracker({ people, initialEntries, initialPoles }: { people: 
       <div className="px-4 py-3 border-b border-nv-border bg-nv-dark/40 flex items-center gap-2">
         <Clock size={15} className="text-primary" />
         <h2 className="text-sm font-semibold text-white">Pointage — temps de travail</h2>
-        <button onClick={() => setShowPoles(true)} className="ml-auto text-xs px-2.5 py-1 rounded-lg border border-nv-border text-nv-text-muted hover:text-white transition-colors flex items-center gap-1.5"><Tag size={12} /> Catégories</button>
+        <button onClick={() => setShowManual(true)} className="ml-auto text-xs px-2.5 py-1 rounded-lg bg-primary/15 border border-primary/30 text-primary hover:bg-primary/25 transition-colors flex items-center gap-1.5"><Plus size={12} /> Ajouter un pointage</button>
+        <button onClick={() => setShowPoles(true)} className="text-xs px-2.5 py-1 rounded-lg border border-nv-border text-nv-text-muted hover:text-white transition-colors flex items-center gap-1.5"><Tag size={12} /> Catégories</button>
       </div>
 
       <div className="p-4 space-y-4">
@@ -200,6 +214,7 @@ export function TimeTracker({ people, initialEntries, initialPoles }: { people: 
 
       {stopFor && <StopModal poles={poles} onClose={() => setStopFor(null)} onConfirm={confirmStop} busy={busy} elapsed={Math.max(0, Math.floor((Date.now() - new Date(stopFor.startAt).getTime()) / 1000))} />}
       {showPoles && <PolesManager poles={poles} onClose={() => setShowPoles(false)} onSave={savePoles} />}
+      {showManual && <ManualEntryModal people={people} poles={poles} defaultUserId={selfId} busy={busy} onClose={() => setShowManual(false)} onAdd={addManual} />}
     </div>
   )
 }
@@ -230,6 +245,84 @@ function StopModal({ poles, onClose, onConfirm, busy, elapsed }: { poles: string
         </div>
         <button onClick={() => onConfirm(pole, task)} disabled={busy} className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-primary text-nv-black rounded-lg font-medium disabled:opacity-60">
           {busy ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Enregistrer le pointage
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// Saisie manuelle d'un pointage : personne, catégorie, tâche, durée (h/min), date.
+function ManualEntryModal({ people, poles, defaultUserId, busy, onClose, onAdd }: {
+  people: Person[]; poles: string[]; defaultUserId: string; busy: boolean
+  onClose: () => void; onAdd: (userId: string, pole: string, task: string, durationSec: number, dateStr: string) => void
+}) {
+  const [userId, setUserId] = useState(defaultUserId || people[0]?.id || '')
+  const [pole, setPole] = useState('')
+  const [task, setTask] = useState('')
+  const [hours, setHours] = useState('')
+  const [minutes, setMinutes] = useState('')
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
+  const inp = 'w-full bg-nv-black border border-nv-border rounded-lg px-3 py-2 text-sm text-white placeholder-nv-text-faint focus:outline-none focus:border-primary/60'
+  const durationSec = (Number(hours) || 0) * 3600 + (Number(minutes) || 0) * 60
+  const submit = () => {
+    if (!userId) { toast.error('Choisis qui pointe'); return }
+    if (durationSec <= 0) { toast.error('Renseigne une durée'); return }
+    onAdd(userId, pole, task.trim(), durationSec, date)
+  }
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)' }} onClick={onClose}>
+      <div className="w-full max-w-sm bg-nv-dark border border-nv-border rounded-2xl p-5 space-y-3 max-h-[88vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-semibold text-white flex items-center gap-2"><Plus size={16} className="text-primary" /> Ajouter un pointage</h3>
+          <button onClick={onClose}><X size={16} className="text-nv-text-muted" /></button>
+        </div>
+
+        {/* Qui */}
+        <div>
+          <label className="text-[11px] text-nv-text-muted block mb-1.5">Qui a travaillé ?</label>
+          <div className="flex flex-wrap gap-1.5">
+            {people.map(p => (
+              <button key={p.id} onClick={() => setUserId(p.id)} className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${userId === p.id ? 'border-primary bg-primary/10 text-primary' : 'border-nv-border text-nv-text-muted hover:text-white'}`}>{p.name}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* Catégorie */}
+        <div>
+          <label className="text-[11px] text-nv-text-muted block mb-1.5">Catégorie de tâche</label>
+          <div className="flex flex-wrap gap-1.5">
+            {poles.map(p => (
+              <button key={p} onClick={() => setPole(p)} className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${pole === p ? 'text-nv-black font-medium' : 'border-nv-border text-nv-text-muted hover:text-nv-text'}`}
+                style={pole === p ? { backgroundColor: colorOf(p), borderColor: colorOf(p) } : {}}>{p}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* Durée + date */}
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-[11px] text-nv-text-muted block mb-1">Durée</label>
+            <div className="flex items-center gap-1.5">
+              <input type="number" min="0" className={inp} placeholder="h" value={hours} onChange={e => setHours(e.target.value)} />
+              <span className="text-xs text-nv-text-faint">h</span>
+              <input type="number" min="0" max="59" className={inp} placeholder="min" value={minutes} onChange={e => setMinutes(e.target.value)} />
+              <span className="text-xs text-nv-text-faint">min</span>
+            </div>
+          </div>
+          <div>
+            <label className="text-[11px] text-nv-text-muted block mb-1">Date</label>
+            <input type="date" className={`${inp} [color-scheme:dark]`} value={date} onChange={e => setDate(e.target.value)} />
+          </div>
+        </div>
+
+        {/* Tâche */}
+        <div>
+          <label className="text-[11px] text-nv-text-muted block mb-1">Tâche réalisée</label>
+          <textarea className={`${inp} resize-none`} rows={2} placeholder="Ex : montage vidéo Yanis, prospection, réunion client…" value={task} onChange={e => setTask(e.target.value)} />
+        </div>
+
+        <button onClick={submit} disabled={busy} className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-primary text-nv-black rounded-lg font-medium disabled:opacity-60">
+          {busy ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Enregistrer{durationSec > 0 ? ` · ${fmtDur(durationSec)}` : ''}
         </button>
       </div>
     </div>
