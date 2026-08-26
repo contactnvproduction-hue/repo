@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { findMatchingClient } from '@/lib/client-matching'
 import { materializeContract } from '@/lib/contract-materialize'
+import { ensureClosingEvent } from '@/lib/signature'
 
 const db = prisma as any
 
@@ -44,9 +45,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       if (created) { clientId = created.id; await prisma.lead.update({ where: { id }, data: { convertedClientId: created.id } as any }).catch(() => {}) }
     }
 
-    // Matérialise le contrat : retainer (→ contracté du mois) + 1ʳᵉ facture pré-créée
+    // Matérialise le contrat (retainer + N factures) + inscrit au registre contracté
     if (clientId && saleMonthlyAmount && saleMonthlyAmount > 0) {
       await materializeContract({ clientId, monthlyAmount: saleMonthlyAmount, durationMonths }).catch(e => console.error('[close/materialize]', e))
+      await ensureClosingEvent({ clientId, clientName: lead.name, leadId: id, missionType: 'MRR', amount: saleMonthlyAmount, durationMonths, commercialId, type: 'NEW' }).catch(e => console.error('[close/closingEvent]', e))
     }
 
     // Report dans la fiche client (note d'onboarding) si un client existe

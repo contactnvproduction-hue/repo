@@ -14,21 +14,45 @@ export async function materializeContract(opts: {
   monthlyAmount: number
   durationMonths?: number
   description?: string
+  missionType?: string
+  totalAmount?: number
 }) {
   const { clientId } = opts
-  const monthlyAmount = Number(opts.monthlyAmount)
-  const durationMonths = Math.max(1, Number(opts.durationMonths) || 12)
-  const description = opts.description?.trim() || 'Retainer mensuel'
-  if (!clientId || !monthlyAmount || monthlyAmount <= 0) return { retainer: null, invoices: [] }
-
   const now = new Date()
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+  const description = opts.description?.trim() || (opts.missionType === 'PONCTUEL' ? 'Prestation ponctuelle' : 'Retainer mensuel')
 
-  // ── 1. Retainer (idempotent DANS LE MOIS : client + montant + desc + ce mois).
-  // Un re-signature un autre mois recrée un retainer → recompté dans le contracté
-  // de ce mois-là ; deux soumissions le même mois ne créent qu'un seul retainer.
+  // ── PONCTUEL : une seule facture du montant total, pas de retainer ──────────
+  if (opts.missionType === 'PONCTUEL') {
+    const total = Number(opts.totalAmount ?? opts.monthlyAmount)
+    if (!clientId || !total || total <= 0) return { retainer: null, invoices: [] }
+    const mEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59)
+    const existing = await prisma.invoice.findFirst({ where: { clientId, totalTTC: total, issueDate: { gte: monthStart, lte: mEnd } } }).catch(() => null)
+    if (existing) return { retainer: null, invoices: [existing] }
+    const settings = await prisma.agencySetting.findFirst()
+    const prefix = settings?.invoicePrefix ?? 'FAC'
+    const counter = settings?.invoiceCounter ?? 1
+    const ht = Math.round((total / 1.2) * 100) / 100
+    const inv = await prisma.invoice.create({
+      data: {
+        clientId, number: `${prefix}-${String(counter).padStart(4, '0')}`, type: 'TOTALE', status: 'EN_ATTENTE',
+        totalHT: ht, totalTVA: total - ht, totalTTC: total, issueDate: new Date(), dueDate: new Date(Date.now() + 15 * 86_400_000),
+        notes: 'Prestation ponctuelle — Signature', lines: { create: [{ description, quantity: 1, unitPrice: ht, vatRate: 20, total: ht, order: 0 }] },
+      },
+    })
+    if (settings) await prisma.agencySetting.update({ where: { id: settings.id }, data: { invoiceCounter: counter + 1 } }).catch(() => {})
+    return { retainer: null, invoices: [inv] }
+  }
+
+  const monthlyAmount = Number(opts.monthlyAmount)
+  const durationMonths = Math.max(1, Number(opts.durationMonths) || 12)
+  if (!clientId || !monthlyAmount || monthlyAmount <= 0) return { retainer: null, invoices: [] }
+
+  // ── 1. Retainer (idempotent : client + montant + desc). Sert au MRR / factures.
+  // Le contracté n'est PLUS basé sur les retainers mais sur les ClosingEvents, donc
+  // pas de duplication au re-matérialiser (le backfill peut tourner en boucle).
   let retainer = await db.clientRetainer.findFirst({
-    where: { clientId, monthlyAmount, description, createdAt: { gte: monthStart } },
+    where: { clientId, monthlyAmount, description },
   }).catch(() => null)
   if (!retainer) {
     retainer = await db.clientRetainer.create({

@@ -1,5 +1,7 @@
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { contractedValue } from '@/lib/signature'
+import { backfillSignatures } from '@/lib/backfill-signatures'
 import { formatCurrency, daysUntil, isOverdue } from '@/lib/utils'
 import { StatCard } from '@/components/ui/stat-card'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -95,6 +97,8 @@ async function collectedDedup(where: any): Promise<number> {
 }
 
 async function getDashboardData(userId: string) {
+  // Rattrape les signatures sans facture/contracté avant de calculer (idempotent)
+  await backfillSignatures(prisma as any).catch(() => {})
   const now = new Date()
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
   const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59)
@@ -106,7 +110,7 @@ async function getDashboardData(userId: string) {
     caMonth, caLastMonth, caYear, activeClients, activeProjects, pendingInvoices,
     urgentTasks, recentProjects, overdueInvoices, prospectsToRelance, monthlyPayments,
     leadCalls, leadsFollowUp, allRetainers, upcomingCeoMeetings, todayCheckin,
-    upcomingBilans, allClientInvoices, recentClosings, contractedRetainers,
+    upcomingBilans, allClientInvoices, recentClosings, contractedEvents,
     activeClientsList, salesLeads,
   ] = await Promise.all([
     getMonthCollection(startOfMonth, endOfMonth),
@@ -177,8 +181,9 @@ async function getDashboardData(userId: string) {
         return await (prisma as any).closingEvent.findMany({ where: { date: { gte: start } }, select: { date: true, amount: true, type: true } })
       } catch { return [] }
     })(),
-    // Contrats (retainers) signés ce mois → CA contracté du mois (mensualité × durée)
-    prisma.clientRetainer.findMany({ where: { createdAt: { gte: startOfMonth } }, select: { monthlyAmount: true, durationMonths: true, createdAt: true, client: { select: { name: true } } } }),
+    // Signatures du mois (registre ClosingEvent) → contracté du mois. Couvre MRR
+    // (mensualité × durée) ET ponctuel (montant total), tous chemins de signature.
+    (prisma as any).closingEvent.findMany({ where: { date: { gte: startOfMonth } }, select: { amount: true, missionType: true, durationMonths: true, date: true, clientName: true } }).catch(() => []),
     // Clients réellement actifs (fiches) + activité de vente du mois
     prisma.client.findMany({ where: { status: 'ACTIF' }, select: { id: true, name: true, company: true, createdAt: true }, orderBy: { createdAt: 'desc' } }),
     (prisma as any).lead.findMany({ select: { createdAt: true, rdvBookedAt: true, wonAt: true } }).catch(() => []),
@@ -196,27 +201,27 @@ async function getDashboardData(userId: string) {
     } catch { return [] }
   })()
 
-  // Contracté de l'année = valeur totale des contrats signés cette année (mensualité × durée)
+  // Contracté de l'année = valeur totale des contrats signés cette année (ClosingEvents)
   const contractedThisYear = await (async () => {
     try {
-      const rows = await prisma.clientRetainer.findMany({ where: { createdAt: { gte: startOfYear } }, select: { monthlyAmount: true, durationMonths: true } })
-      return rows.reduce((s, r) => s + r.monthlyAmount * r.durationMonths, 0)
+      const rows = await (prisma as any).closingEvent.findMany({ where: { date: { gte: startOfYear } }, select: { amount: true, missionType: true, durationMonths: true } })
+      return rows.reduce((s: number, e: any) => s + contractedValue(e), 0)
     } catch { return 0 }
   })()
 
   const caMonthVal = caMonth.total
   const caLastMonthVal = caLastMonth
   const trend = caLastMonthVal > 0 ? Math.round(((caMonthVal - caLastMonthVal) / caLastMonthVal) * 100) : 0
-  // CA contracté ce mois = valeur totale des contrats signés ce mois (mensualité × durée)
-  const contractedThisMonth = contractedRetainers.reduce((s, r) => s + r.monthlyAmount * r.durationMonths, 0)
+  // CA contracté ce mois = valeur totale des signatures du mois (MRR × durée + ponctuel)
+  const contractedThisMonth = (contractedEvents as any[]).reduce((s, e) => s + contractedValue(e), 0)
   const inThisMonth = (d: Date | null) => !!d && d >= startOfMonth && d <= endOfMonth
   const salesSnapshot = {
     leads: (salesLeads as any[]).filter(l => inThisMonth(l.createdAt)).length,
     rdv: (salesLeads as any[]).filter(l => inThisMonth(l.rdvBookedAt)).length,
     signes: (salesLeads as any[]).filter(l => inThisMonth(l.wonAt)).length,
   }
-  const contractedRows = contractedRetainers
-    .map(r => ({ date: r.createdAt.toISOString(), clientName: r.client?.name ?? '—', monthlyAmount: r.monthlyAmount, durationMonths: r.durationMonths, total: r.monthlyAmount * r.durationMonths }))
+  const contractedRows = (contractedEvents as any[])
+    .map(e => ({ date: new Date(e.date).toISOString(), clientName: e.clientName ?? '—', monthlyAmount: e.amount ?? 0, durationMonths: e.missionType === 'PONCTUEL' ? 1 : (e.durationMonths ?? 1), total: contractedValue(e) }))
     .sort((a, b) => b.total - a.total)
   const totalCalls = leadCalls.length
   const showedUp = leadCalls.filter(c => c.showedUp).length

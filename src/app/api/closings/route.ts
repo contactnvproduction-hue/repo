@@ -60,6 +60,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const durationMonths = body.durationMonths != null && body.durationMonths !== '' ? Number(body.durationMonths) : (missionType === 'PONCTUEL' ? 1 : 12)
+
+    // ClosingEvent = registre du contracté (lu par le dashboard). Porte la durée.
     const closing = await db.closingEvent.create({
       data: {
         leadId: body.leadId ?? null,
@@ -68,17 +71,16 @@ export async function POST(req: NextRequest) {
         type: ['NEW', 'UPSELL', 'RENEWAL'].includes(body.type) ? body.type : 'NEW',
         missionType,
         amount,
+        durationMonths,
         commercialId: body.commercialId ?? null,
         notes: body.notes?.trim() || null,
         date: body.date ? new Date(body.date) : new Date(),
       },
     })
 
-    // ── Matérialise le contrat MRR : retainer (→ contracté du mois) + N factures ──
-    // (Le PONCTUEL n'ouvre pas de retainer récurrent pour ne pas gonfler le MRR.)
-    if (clientId && amount && amount > 0 && missionType !== 'PONCTUEL') {
-      const durationMonths = body.durationMonths != null && body.durationMonths !== '' ? Number(body.durationMonths) : 12
-      await materializeContract({ clientId, monthlyAmount: amount, durationMonths }).catch(e => console.error('[closings/materialize]', e))
+    // ── Matérialise les factures : MRR → retainer + N factures ; PONCTUEL → 1 facture ──
+    if (clientId && amount && amount > 0) {
+      await materializeContract({ clientId, monthlyAmount: amount, totalAmount: amount, durationMonths, missionType }).catch(e => console.error('[closings/materialize]', e))
     }
 
     return NextResponse.json(closing, { status: 201 })

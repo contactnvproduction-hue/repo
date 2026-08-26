@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db'
 import { auth } from '@/lib/auth'
 import { findMatchingClient } from '@/lib/client-matching'
+import { ensureClosingEvent } from '@/lib/signature'
 import { NextResponse } from 'next/server'
 
 function corsHeaders() {
@@ -253,6 +254,18 @@ export async function PATCH(
         data: { invoiceCounter: counter },
       })
     }
+
+    // ── Registre du contracté (ClosingEvent) : compte la signature au dashboard ──
+    await ensureClosingEvent({
+      clientId: client.id,
+      clientName: contract.clientName,
+      leadId: contract.leadId ?? null,
+      missionType: contract.missionType,
+      amount: contract.missionType === 'MRR' ? contract.monthlyAmount : contract.totalAmount,
+      durationMonths: contract.missionType === 'MRR' ? (contract.durationMonths ?? 1) : 1,
+      type: 'NEW',
+      date: contract.signedAt ?? new Date(),
+    }).catch(e => console.error('[contract/closingEvent]', e))
 
     // NB : plus de génération des mensualités par durée d'engagement. La récurrence
     // est portée par le flag « mensualisé » du client (facture générée chaque mois).

@@ -1,6 +1,7 @@
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { findMatchingClient } from '@/lib/client-matching'
+import { ensureClosingEvent } from '@/lib/signature'
 import { NextResponse } from 'next/server'
 
 export async function POST(req: Request) {
@@ -201,6 +202,17 @@ export async function POST(req: Request) {
         data: { invoiceCounter: counter },
       })
     }
+
+    // ── 7b. Registre du contracté (ClosingEvent) ──────────────────────────────
+    await ensureClosingEvent({
+      clientId: client.id,
+      clientName: client.name,
+      leadId: leadId ?? null,
+      missionType: deal.missionType,
+      amount: deal.missionType === 'MRR' ? deal.monthlyAmount : deal.totalAmount,
+      durationMonths: deal.missionType === 'MRR' ? (deal.durationMonths ?? 1) : 1,
+      type: 'NEW',
+    }).catch(e => console.error('[deals/close] closingEvent', e))
 
     // ── 8. Enregistrer les produits vendus (répartition CA par produit) ───────
     if (Array.isArray(products) && products.length > 0) {

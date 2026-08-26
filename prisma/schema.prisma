@@ -1012,10 +1012,11 @@ model ClosingEvent {
   leadId       String?
   clientId     String?
   clientName   String
-  type         String   @default("NEW") // NEW | UPSELL | RENEWAL
-  missionType  String?  // MRR | PONCTUEL
-  amount       Float?   // montant mensuel (MRR) ou total (ponctuel)
-  commercialId String?  // commercial qui a réalisé le close (attribution + conversion)
+  type           String   @default("NEW") // NEW | UPSELL | RENEWAL
+  missionType    String?  // MRR | PONCTUEL
+  amount         Float?   // montant mensuel (MRR) ou total (ponctuel)
+  durationMonths Int?     // nb de mensualités engagées (MRR) → contracté = amount × durée
+  commercialId   String?  // commercial qui a réalisé le close (attribution + conversion)
   notes        String?
   date         DateTime @default(now())
   createdAt    DateTime @default(now())
