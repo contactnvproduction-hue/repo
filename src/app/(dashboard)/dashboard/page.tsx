@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import {
   TrendingUp, Users, FolderKanban, Receipt, Clock,
   AlertTriangle, CheckCircle2, ArrowRight, Bell, Crosshair, PhoneCall, UserCheck, RepeatIcon, Briefcase, Calendar,
-  AlertCircle, Phone, Zap, Award,
+  Phone, Zap, Award,
 } from 'lucide-react'
 
 import Link from 'next/link'
@@ -401,7 +401,7 @@ export default async function DashboardPage() {
   const signedToLabel = isAdmin ? await getNewSignedClients() : { clients: [], products: [] }
 
   const today = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })
-  const alertCount = data.prospectsToRelance.length + data.leadsFollowUp.length + data.retainersEndingSoon.length
+  const alertCount = data.prospectsToRelance.length + data.leadsFollowUp.length
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -493,7 +493,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* ── Alertes groupées ── */}
-      {(data.prospectsToRelance.length > 0 || data.leadsFollowUp.length > 0 || data.retainersEndingSoon.length > 0) && (
+      {(data.prospectsToRelance.length > 0 || data.leadsFollowUp.length > 0) && (
         <div className="space-y-3">
           {/* Relances prospects */}
           {data.prospectsToRelance.length > 0 && (
@@ -568,41 +568,6 @@ export default async function DashboardPage() {
                     </Link>
                   )
                 })}
-              </div>
-            </div>
-          )}
-
-          {/* Contrats MRR expirant */}
-          {data.retainersEndingSoon.length > 0 && (
-            <div className="rounded-2xl border border-amber-400/25 bg-amber-400/5 p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-6 h-6 rounded-lg bg-amber-400/20 flex items-center justify-center shrink-0">
-                  <AlertCircle size={12} className="text-amber-400" />
-                </div>
-                <p className="text-sm font-semibold text-amber-300">
-                  {data.retainersEndingSoon.length} contrat{data.retainersEndingSoon.length > 1 ? 's' : ''} MRR expirent bientôt
-                </p>
-                <Link href="/finance" className="ml-auto text-xs text-nv-text-muted hover:text-white flex items-center gap-1 transition-colors">
-                  Finance <ArrowRight size={11} />
-                </Link>
-              </div>
-              <div className="space-y-1.5">
-                {data.retainersEndingSoon.map(r => (
-                  <Link key={r.id} href={`/clients/${r.clientId}`}
-                    className="flex items-center justify-between px-3 py-2 rounded-xl bg-amber-400/5 border border-amber-400/10 hover:border-amber-400/30 transition-colors group">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-6 h-6 rounded-lg bg-amber-400/20 flex items-center justify-center text-xs font-bold text-amber-300 shrink-0">{r.clientName.charAt(0)}</div>
-                      <div>
-                        <p className="text-sm font-medium text-white">{r.clientName}</p>
-                        {r.clientCompany && <p className="text-xs text-nv-text-muted">{r.clientCompany}</p>}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-xs font-semibold text-amber-300">{new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(r.monthlyAmount)}/m</span>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${r.daysLeft <= 7 ? 'bg-red-500/20 text-red-300' : 'bg-amber-400/15 text-amber-300'}`}>J-{r.daysLeft}</span>
-                    </div>
-                  </Link>
-                ))}
               </div>
             </div>
           )}

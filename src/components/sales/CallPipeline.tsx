@@ -456,6 +456,7 @@ function LeadDetail({ lead, commercials, onClose, onAddCall, onPatchCall, onDele
   const [signing, setSigning] = useState(false)
   const [closerId, setCloserId] = useState('')
   const [monthlyAmount, setMonthlyAmount] = useState('')
+  const [duration, setDuration] = useState('12')
   const markSigned = async () => {
     setSigning(true)
     try {
@@ -470,8 +471,9 @@ function LeadDetail({ lead, commercials, onClose, onAddCall, onPatchCall, onDele
           ...(monthlyAmount && { saleMonthlyAmount: Number(monthlyAmount) }),
         }),
       }).catch(() => {})
-      await fetch('/api/closings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leadId: lead.id, clientName: lead.name, type: 'NEW', commercialId: closerId || null, amount: monthlyAmount || null, missionType: 'MRR' }) })
-      toast.success(`${lead.name} signé — closing enregistré 🎉`); onSigned(); onClose()
+      // /api/closings crée le retainer (→ contracté du mois) + les N factures.
+      await fetch('/api/closings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leadId: lead.id, clientId: lead.convertedClientId || undefined, clientName: lead.name, type: 'NEW', commercialId: closerId || null, amount: monthlyAmount || null, durationMonths: duration || 12, missionType: 'MRR' }) })
+      toast.success(`${lead.name} signé — contracté + facture générés 🎉`); onSigned(); onClose()
     } catch { toast.error('Erreur') } finally { setSigning(false) }
   }
   const unsign = async () => {
@@ -515,14 +517,15 @@ function LeadDetail({ lead, commercials, onClose, onAddCall, onPatchCall, onDele
           ) : (
             <div className="space-y-2 rounded-xl border border-emerald-500/25 p-3">
               <p className="text-[11px] uppercase tracking-wider text-nv-text-faint font-semibold">Ça a closé ? — attribution</p>
+              <select value={closerId} onChange={e => setCloserId(e.target.value)} className="w-full bg-nv-black border border-nv-border rounded-lg px-2.5 py-2 text-sm text-white focus:outline-none focus:border-primary/60">
+                <option value="">— Commercial —</option>
+                {commercials.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
               <div className="grid grid-cols-2 gap-2">
-                <select value={closerId} onChange={e => setCloserId(e.target.value)} className="w-full bg-nv-black border border-nv-border rounded-lg px-2.5 py-2 text-sm text-white focus:outline-none focus:border-primary/60">
-                  <option value="">— Commercial —</option>
-                  {commercials.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
                 <input type="number" value={monthlyAmount} onChange={e => setMonthlyAmount(e.target.value)} placeholder="Mensualité € (net)" className="w-full bg-nv-black border border-nv-border rounded-lg px-2.5 py-2 text-sm text-white placeholder-nv-text-faint focus:outline-none focus:border-primary/60" />
+                <input type="number" value={duration} onChange={e => setDuration(e.target.value)} placeholder="Durée (mois)" className="w-full bg-nv-black border border-nv-border rounded-lg px-2.5 py-2 text-sm text-white placeholder-nv-text-faint focus:outline-none focus:border-primary/60" />
               </div>
-              <p className="text-[10px] text-nv-text-faint">Le commercial choisi voit ce close comptabilisé dans son taux de conversion.</p>
+              <p className="text-[10px] text-nv-text-faint">Contracté = {monthlyAmount && duration ? `${(Number(monthlyAmount) * Number(duration)).toLocaleString('fr-FR')} €` : '—'} (mensualité × durée) → reporté ce mois + {duration || '—'} facture(s) créée(s). Le commercial voit ce close dans son taux.</p>
               <button onClick={markSigned} disabled={signing} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 font-semibold hover:bg-emerald-500/25 transition-colors disabled:opacity-60">
                 {signing ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />} Marquer comme signé
               </button>
@@ -602,6 +605,7 @@ function RecloseModal({ clients, onClose, onDone }: { clients: ClientLite[]; onC
   const [type, setType] = useState<'UPSELL' | 'RENEWAL'>('UPSELL')
   const [missionType, setMissionType] = useState<'MRR' | 'PONCTUEL'>('MRR')
   const [amount, setAmount] = useState('')
+  const [duration, setDuration] = useState('12')
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
   const matches = query.trim() ? clients.filter(c => (c.name + ' ' + (c.company ?? '')).toLowerCase().includes(query.toLowerCase())).slice(0, 6) : []
@@ -610,7 +614,7 @@ function RecloseModal({ clients, onClose, onDone }: { clients: ClientLite[]; onC
     if (!selected) { toast.error('Choisissez un client'); return }
     setSaving(true)
     try {
-      const res = await fetch('/api/closings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId: selected.id, clientName: selected.name, type, missionType, amount: amount ? parseFloat(amount) : null, notes }) })
+      const res = await fetch('/api/closings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId: selected.id, clientName: selected.name, type, missionType, amount: amount ? parseFloat(amount) : null, durationMonths: missionType === 'MRR' ? (duration || 12) : 1, notes }) })
       if (!res.ok) throw new Error(); toast.success(`Re-close ${selected.name} enregistré 🎉`); onDone(); onClose()
     } catch { toast.error('Erreur') } finally { setSaving(false) }
   }
@@ -631,7 +635,11 @@ function RecloseModal({ clients, onClose, onDone }: { clients: ClientLite[]; onC
         )}
         <div className="grid grid-cols-2 gap-2">{(['UPSELL', 'RENEWAL'] as const).map(t => <button key={t} onClick={() => setType(t)} className={`py-2 rounded-lg text-sm font-medium border transition-colors ${type === t ? 'border-primary bg-primary/10 text-primary' : 'border-nv-border text-nv-text-muted'}`}>{t === 'UPSELL' ? 'Upsell' : 'Renouvellement'}</button>)}</div>
         <div className="grid grid-cols-2 gap-2">{(['MRR', 'PONCTUEL'] as const).map(t => <button key={t} onClick={() => setMissionType(t)} className={`py-2 rounded-lg text-sm font-medium border transition-colors ${missionType === t ? 'border-primary bg-primary/10 text-primary' : 'border-nv-border text-nv-text-muted'}`}>{t === 'MRR' ? 'Récurrent (MRR)' : 'Ponctuel'}</button>)}</div>
-        <input className={inp} type="number" placeholder={missionType === 'MRR' ? 'Montant mensuel €' : 'Montant total €'} value={amount} onChange={e => setAmount(e.target.value)} />
+        <div className={`grid ${missionType === 'MRR' ? 'grid-cols-2' : 'grid-cols-1'} gap-2`}>
+          <input className={inp} type="number" placeholder={missionType === 'MRR' ? 'Montant mensuel €' : 'Montant total €'} value={amount} onChange={e => setAmount(e.target.value)} />
+          {missionType === 'MRR' && <input className={inp} type="number" placeholder="Durée (mois)" value={duration} onChange={e => setDuration(e.target.value)} />}
+        </div>
+        {missionType === 'MRR' && amount && duration && <p className="text-[10px] text-nv-text-faint">Contracté = {(Number(amount) * Number(duration)).toLocaleString('fr-FR')} € → reporté ce mois + {duration} facture(s).</p>}
         <input className={inp} placeholder="Notes (optionnel)" value={notes} onChange={e => setNotes(e.target.value)} />
         <button onClick={save} disabled={saving || !selected} className="w-full flex items-center justify-center gap-1.5 py-2 bg-primary text-nv-black rounded-lg font-medium disabled:opacity-40">{saving ? <Loader2 size={15} className="animate-spin" /> : <RotateCw size={15} />} Enregistrer</button>
       </div>

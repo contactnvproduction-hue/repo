@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { materializeContract } from '@/lib/contract-materialize'
+import { findMatchingClient } from '@/lib/client-matching'
 
 const db = prisma as any
 
@@ -33,19 +35,52 @@ export async function POST(req: NextRequest) {
     if (!body.clientName?.trim()) {
       return NextResponse.json({ error: 'clientName requis' }, { status: 400 })
     }
+    const amount = body.amount != null && body.amount !== '' ? Number(body.amount) : null
+    const missionType = body.missionType ?? 'MRR'
+
+    // ── Résoudre le client : fourni, sinon via le lead, sinon créé à la volée ──
+    let clientId: string | null = body.clientId ?? null
+    let lead: any = null
+    if (!clientId && body.leadId) {
+      lead = await prisma.lead.findUnique({ where: { id: body.leadId } }).catch(() => null)
+      clientId = lead?.convertedClientId ?? null
+      if (!clientId && lead) {
+        const match = await findMatchingClient(prisma as any, { email: lead.email, fullName: lead.name, company: lead.company })
+        if (match) clientId = match.id
+      }
+    }
+    // Aucun client mais montant présent → on crée une fiche (contracté + facture garantis)
+    if (!clientId && amount && amount > 0) {
+      const created = await prisma.client.create({
+        data: { name: (lead?.name || body.clientName).trim(), company: lead?.company || null, email: lead?.email || null, type: 'PARTICULIER', status: 'ACTIF', source: 'AUTRE' } as any,
+      }).catch(() => null)
+      if (created) {
+        clientId = created.id
+        if (body.leadId) await prisma.lead.update({ where: { id: body.leadId }, data: { convertedClientId: created.id } as any }).catch(() => {})
+      }
+    }
+
     const closing = await db.closingEvent.create({
       data: {
         leadId: body.leadId ?? null,
-        clientId: body.clientId ?? null,
+        clientId,
         clientName: body.clientName.trim(),
         type: ['NEW', 'UPSELL', 'RENEWAL'].includes(body.type) ? body.type : 'NEW',
-        missionType: body.missionType ?? null,
-        amount: body.amount != null && body.amount !== '' ? Number(body.amount) : null,
+        missionType,
+        amount,
         commercialId: body.commercialId ?? null,
         notes: body.notes?.trim() || null,
         date: body.date ? new Date(body.date) : new Date(),
       },
     })
+
+    // ── Matérialise le contrat MRR : retainer (→ contracté du mois) + N factures ──
+    // (Le PONCTUEL n'ouvre pas de retainer récurrent pour ne pas gonfler le MRR.)
+    if (clientId && amount && amount > 0 && missionType !== 'PONCTUEL') {
+      const durationMonths = body.durationMonths != null && body.durationMonths !== '' ? Number(body.durationMonths) : 12
+      await materializeContract({ clientId, monthlyAmount: amount, durationMonths }).catch(e => console.error('[closings/materialize]', e))
+    }
+
     return NextResponse.json(closing, { status: 201 })
   } catch (e) {
     console.error('[closings POST]', e)

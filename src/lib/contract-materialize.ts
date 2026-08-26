@@ -21,9 +21,14 @@ export async function materializeContract(opts: {
   const description = opts.description?.trim() || 'Retainer mensuel'
   if (!clientId || !monthlyAmount || monthlyAmount <= 0) return { retainer: null, invoices: [] }
 
-  // ── 1. Retainer (idempotent : client + montant + desc) ──────────────────────
+  const now = new Date()
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+
+  // ── 1. Retainer (idempotent DANS LE MOIS : client + montant + desc + ce mois).
+  // Un re-signature un autre mois recrée un retainer → recompté dans le contracté
+  // de ce mois-là ; deux soumissions le même mois ne créent qu'un seul retainer.
   let retainer = await db.clientRetainer.findFirst({
-    where: { clientId, monthlyAmount, description },
+    where: { clientId, monthlyAmount, description, createdAt: { gte: monthStart } },
   }).catch(() => null)
   if (!retainer) {
     retainer = await db.clientRetainer.create({
@@ -37,15 +42,14 @@ export async function materializeContract(opts: {
   let counter = settings?.invoiceCounter ?? 1
   const ttc = monthlyAmount
   const ht = Math.round((ttc / 1.2) * 100) / 100
-  const now = new Date()
   const invoices: any[] = []
   for (let i = 0; i < durationMonths; i++) {
     const issue = new Date(now.getFullYear(), now.getMonth() + i, Math.min(now.getDate(), 28))
-    const monthStart = new Date(issue.getFullYear(), issue.getMonth(), 1)
-    const monthEnd = new Date(issue.getFullYear(), issue.getMonth() + 1, 0, 23, 59, 59)
+    const mStart = new Date(issue.getFullYear(), issue.getMonth(), 1)
+    const mEnd = new Date(issue.getFullYear(), issue.getMonth() + 1, 0, 23, 59, 59)
     // Idempotent : on ne recrée pas une facture du même client/montant sur ce mois
     const existing = await prisma.invoice.findFirst({
-      where: { clientId, totalTTC: monthlyAmount, issueDate: { gte: monthStart, lte: monthEnd } },
+      where: { clientId, totalTTC: monthlyAmount, issueDate: { gte: mStart, lte: mEnd } },
     }).catch(() => null)
     if (existing) { invoices.push(existing); continue }
     const inv = await prisma.invoice.create({
