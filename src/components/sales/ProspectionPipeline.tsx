@@ -735,7 +735,7 @@ function CloseModal({ lead, admins, commercials, onClose, onDone }: { lead: Lead
         <div className="col-span-2"><label className="text-[11px] text-nv-text-muted block mb-1">Montant mensuel contracté (€)</label><input className={inp} type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="ex 1000" /></div>
         <div><label className="text-[11px] text-nv-text-muted block mb-1">Durée (mois)</label><input className={inp} type="number" value={duration} onChange={e => setDuration(e.target.value)} placeholder="12" /></div>
       </div>
-      <p className="text-[10px] text-nv-text-faint -mt-1">Contracté du mois = <b className="text-nv-text-muted">{amount && duration ? (Number(amount) * Number(duration)).toLocaleString('fr-FR') : '—'} €</b> (mensualité × durée). Une 1ʳᵉ facture est pré-créée dans la facturation. La commission se calcule sur la mensualité.</p>
+      <p className="text-[10px] text-nv-text-faint -mt-1">Contracté du mois = <b className="text-nv-text-muted">{amount && duration ? (Number(amount) * Number(duration)).toLocaleString('fr-FR') : '—'} €</b> (mensualité × durée). Les factures s'ajoutent à la main (seule la plateforme de contrat les génère automatiquement). La commission se calcule sur la mensualité.</p>
       <div><label className="text-[11px] text-nv-text-muted block mb-1">Infos à transmettre</label><textarea className={inp} rows={3} placeholder="Contexte client, attentes, deadlines, accès…" value={message} onChange={e => setMessage(e.target.value)} /></div>
       <div className="space-y-1.5">
         <label className="text-[11px] text-nv-text-muted flex items-center gap-1.5"><Link2 size={11} /> Ressources / liens</label>

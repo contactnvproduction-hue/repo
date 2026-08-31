@@ -9,6 +9,7 @@ const updateSchema = z.object({
   email: z.string().email().optional(),
   password: z.string().min(6).optional(),
   role: z.enum(['ADMIN', 'MANAGER', 'MONTEUR', 'VIDÉASTE', 'PHOTOGRAPHE', 'COMMERCIAL']).optional(),
+  roles: z.array(z.enum(['ADMIN', 'MANAGER', 'MONTEUR', 'VIDÉASTE', 'PHOTOGRAPHE', 'COMMERCIAL'])).optional(),
   phone: z.string().optional().nullable(),
   specialty: z.string().optional().nullable(),
   includeInSuivi: z.boolean().optional(),
@@ -37,7 +38,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     where: { id },
     data,
     select: {
-      id: true, name: true, email: true, role: true,
+      id: true, name: true, email: true, role: true, roles: true,
       phone: true, specialty: true, disponible: true, avatar: true, createdAt: true,
     },
   })

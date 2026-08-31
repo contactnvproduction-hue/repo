@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
-import { materializeContract } from '@/lib/contract-materialize'
 import { findMatchingClient } from '@/lib/client-matching'
 
 const db = prisma as any
@@ -78,10 +77,9 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    // ── Matérialise les factures : MRR → retainer + N factures ; PONCTUEL → 1 facture ──
-    if (clientId && amount && amount > 0) {
-      await materializeContract({ clientId, monthlyAmount: amount, totalAmount: amount, durationMonths, missionType }).catch(e => console.error('[closings/materialize]', e))
-    }
+    // NB : pas de facture créée automatiquement ici. Seule la signature via la
+    // plateforme (contrats en ligne) génère les mensualités ; les closings du
+    // pipeline alimentent le contracté, les factures s'ajoutent à la main.
 
     return NextResponse.json(closing, { status: 201 })
   } catch (e) {

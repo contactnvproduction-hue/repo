@@ -12,7 +12,7 @@ export async function POST() {
     return NextResponse.json({ error: 'Permission refusée' }, { status: 403 })
   }
   try {
-    const res = await backfillSignatures(prisma as any)
+    const res = await backfillSignatures(prisma as any, { createInvoices: true })
     return NextResponse.json(res)
   } catch (e) {
     console.error('[contracts/resync]', e)

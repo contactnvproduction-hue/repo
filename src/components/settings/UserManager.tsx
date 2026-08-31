@@ -23,6 +23,7 @@ interface User {
   name: string
   email: string
   role: string
+  roles?: string[]
   phone?: string | null
   specialty?: string | null
   disponible: boolean
@@ -50,6 +51,7 @@ export function UserManager({ initialUsers, currentUserId, isAdmin }: Props) {
   })
   const [editForm, setEditForm] = useState({
     name: '', email: '', password: '', role: 'COMMERCIAL',
+    roles: [] as string[],
     phone: '', specialty: '', avatar: null as string | null,
   })
 
@@ -90,6 +92,7 @@ export function UserManager({ initialUsers, currentUserId, isAdmin }: Props) {
         name: editForm.name,
         email: editForm.email,
         role: editForm.role,
+        roles: editForm.roles.filter(r => r !== editForm.role),
         phone: editForm.phone || null,
         specialty: editForm.specialty || null,
         avatar: editForm.avatar,
@@ -135,6 +138,7 @@ export function UserManager({ initialUsers, currentUserId, isAdmin }: Props) {
       email: user.email,
       password: '',
       role: user.role,
+      roles: user.roles ?? [],
       phone: user.phone || '',
       specialty: user.specialty || '',
       avatar: user.avatar ?? null,
@@ -319,15 +323,15 @@ export function UserManager({ initialUsers, currentUserId, isAdmin }: Props) {
             </button>
           </div>
 
-          {/* Rôle */}
+          {/* Rôle principal */}
           <div>
-            <label className="block text-sm font-medium text-nv-text-muted mb-1.5">Rôle</label>
+            <label className="block text-sm font-medium text-nv-text-muted mb-1.5">Rôle principal <span className="text-nv-text-faint font-normal">(privilège le plus haut)</span></label>
             <div className="grid grid-cols-3 gap-2">
               {ROLES.map(r => (
                 <button
                   key={r.value}
                   type="button"
-                  onClick={() => setEditForm({ ...editForm, role: r.value })}
+                  onClick={() => setEditForm({ ...editForm, role: r.value, roles: editForm.roles.filter(x => x !== r.value) })}
                   className={`py-2 px-2 rounded-lg border text-xs transition-colors ${
                     editForm.role === r.value
                       ? 'border-primary bg-primary/10 text-primary font-medium'
@@ -337,6 +341,23 @@ export function UserManager({ initialUsers, currentUserId, isAdmin }: Props) {
                   {r.label}
                 </button>
               ))}
+            </div>
+          </div>
+
+          {/* Rôles additionnels (multi-rôles) */}
+          <div>
+            <label className="block text-sm font-medium text-nv-text-muted mb-1.5">Rôles additionnels <span className="text-nv-text-faint font-normal">(cumulables, ex : commercial en plus d&apos;admin)</span></label>
+            <div className="flex flex-wrap gap-1.5">
+              {ROLES.filter(r => r.value !== editForm.role).map(r => {
+                const active = editForm.roles.includes(r.value)
+                return (
+                  <button key={r.value} type="button"
+                    onClick={() => setEditForm({ ...editForm, roles: active ? editForm.roles.filter(x => x !== r.value) : [...editForm.roles, r.value] })}
+                    className={`px-2.5 py-1 rounded-full border text-xs transition-colors ${active ? 'border-primary bg-primary/10 text-primary font-medium' : 'border-nv-border text-nv-text-muted hover:border-nv-border-light'}`}>
+                    {active ? '✓ ' : ''}{r.label}
+                  </button>
+                )
+              })}
             </div>
           </div>
 

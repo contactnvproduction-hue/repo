@@ -18,8 +18,24 @@ export default async function SettingsPage() {
   }
 
   const taskCategories = await prisma.taskCategory.findMany({ orderBy: { order: 'asc' } })
+
+  // Noah Rapharin : admin + commercial (rattrapage idempotent des rôles)
+  await (async () => {
+    try {
+      const noah = await (prisma as any).user.findFirst({ where: { OR: [{ email: 'nrapharin@gmail.com' }, { name: { contains: 'rapharin', mode: 'insensitive' } }] } })
+      if (noah) {
+        const roles: string[] = Array.isArray(noah.roles) ? noah.roles : []
+        const wantCommercial = noah.role !== 'COMMERCIAL' && !roles.includes('COMMERCIAL')
+        if (noah.role !== 'ADMIN' || wantCommercial) {
+          const nextRoles = Array.from(new Set([...roles, ...(noah.role !== 'ADMIN' && noah.role !== 'COMMERCIAL' ? [noah.role] : []), 'COMMERCIAL'])).filter(r => r !== 'ADMIN')
+          await (prisma as any).user.update({ where: { id: noah.id }, data: { role: 'ADMIN', roles: nextRoles } })
+        }
+      }
+    } catch { /* champ roles pas encore migré : ignoré */ }
+  })()
+
   const users = await prisma.user.findMany({
-    select: { id: true, name: true, email: true, role: true, phone: true, specialty: true, disponible: true, avatar: true, createdAt: true },
+    select: { id: true, name: true, email: true, role: true, roles: true, phone: true, specialty: true, disponible: true, avatar: true, createdAt: true },
     orderBy: { createdAt: 'asc' },
   })
 

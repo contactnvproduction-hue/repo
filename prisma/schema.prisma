@@ -25,7 +25,8 @@ model User {
   name         String
   email        String    @unique
   password     String
-  role         UserRole  @default(COMMERCIAL)
+  role         UserRole  @default(COMMERCIAL) // rôle principal (privilège le plus haut)
+  roles        String[]  @default([]) // rôles additionnels (ex : COMMERCIAL en plus d'ADMIN)
   avatar       String?
   specialty    String?
   disponible      Boolean   @default(true)

@@ -525,7 +525,7 @@ function LeadDetail({ lead, commercials, onClose, onAddCall, onPatchCall, onDele
                 <input type="number" value={monthlyAmount} onChange={e => setMonthlyAmount(e.target.value)} placeholder="Mensualité € (net)" className="w-full bg-nv-black border border-nv-border rounded-lg px-2.5 py-2 text-sm text-white placeholder-nv-text-faint focus:outline-none focus:border-primary/60" />
                 <input type="number" value={duration} onChange={e => setDuration(e.target.value)} placeholder="Durée (mois)" className="w-full bg-nv-black border border-nv-border rounded-lg px-2.5 py-2 text-sm text-white placeholder-nv-text-faint focus:outline-none focus:border-primary/60" />
               </div>
-              <p className="text-[10px] text-nv-text-faint">Contracté = {monthlyAmount && duration ? `${(Number(monthlyAmount) * Number(duration)).toLocaleString('fr-FR')} €` : '—'} (mensualité × durée) → reporté ce mois + {duration || '—'} facture(s) créée(s). Le commercial voit ce close dans son taux.</p>
+              <p className="text-[10px] text-nv-text-faint">Contracté = {monthlyAmount && duration ? `${(Number(monthlyAmount) * Number(duration)).toLocaleString('fr-FR')} €` : '—'} (mensualité × durée) → reporté au contracté du mois. Factures à ajouter à la main. Le commercial voit ce close dans son taux.</p>
               <button onClick={markSigned} disabled={signing} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 font-semibold hover:bg-emerald-500/25 transition-colors disabled:opacity-60">
                 {signing ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />} Marquer comme signé
               </button>
@@ -639,7 +639,7 @@ function RecloseModal({ clients, onClose, onDone }: { clients: ClientLite[]; onC
           <input className={inp} type="number" placeholder={missionType === 'MRR' ? 'Montant mensuel €' : 'Montant total €'} value={amount} onChange={e => setAmount(e.target.value)} />
           {missionType === 'MRR' && <input className={inp} type="number" placeholder="Durée (mois)" value={duration} onChange={e => setDuration(e.target.value)} />}
         </div>
-        {missionType === 'MRR' && amount && duration && <p className="text-[10px] text-nv-text-faint">Contracté = {(Number(amount) * Number(duration)).toLocaleString('fr-FR')} € → reporté ce mois + {duration} facture(s).</p>}
+        {missionType === 'MRR' && amount && duration && <p className="text-[10px] text-nv-text-faint">Contracté = {(Number(amount) * Number(duration)).toLocaleString('fr-FR')} € → reporté au contracté. Factures à ajouter à la main.</p>}
         <input className={inp} placeholder="Notes (optionnel)" value={notes} onChange={e => setNotes(e.target.value)} />
         <button onClick={save} disabled={saving || !selected} className="w-full flex items-center justify-center gap-1.5 py-2 bg-primary text-nv-black rounded-lg font-medium disabled:opacity-40">{saving ? <Loader2 size={15} className="animate-spin" /> : <RotateCw size={15} />} Enregistrer</button>
       </div>

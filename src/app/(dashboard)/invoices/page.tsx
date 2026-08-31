@@ -7,7 +7,6 @@ import Link from 'next/link'
 import { Receipt, Plus, AlertTriangle, Clock, CheckCircle2 } from 'lucide-react'
 import { InvoicePdfButton } from '@/components/billing/InvoicePdfButton'
 import { InvoiceRowDelete } from '@/components/billing/InvoiceRowDelete'
-import { ensureMonthlyInvoices } from '@/lib/monthly-invoices'
 import { backfillSignatures } from '@/lib/backfill-signatures'
 
 const statusBadge: Record<string, 'success' | 'warning' | 'danger' | 'info' | 'muted'> = {
@@ -23,10 +22,9 @@ export default async function InvoicesPage() {
   const session = await auth()
   if (!session?.user) return null
 
-  // Génère la facture récurrente du mois pour les clients « mensualisés » (idempotent)
-  await ensureMonthlyInvoices(prisma as any)
-  // Rattrape toute signature (contrat/closing) sans facture ni contracté (idempotent)
-  await backfillSignatures(prisma as any).catch(() => {})
+  // Seules les mensualités contractées via la PLATEFORME sont créées automatiquement.
+  // Les clients récurrents cochés : factures ajoutées à la main (plus d'auto-génération).
+  await backfillSignatures(prisma as any, { createInvoices: true }).catch(() => {})
 
   const invoices = await prisma.invoice.findMany({
     include: {

@@ -2,14 +2,19 @@ import { findMatchingClient } from '@/lib/client-matching'
 import { ensureClosingEvent } from '@/lib/signature'
 import { materializeContract } from '@/lib/contract-materialize'
 
-// Rattrapage GLOBAL des signatures : pour chaque contrat signé (plateforme en
-// ligne) et chaque closing (pipeline), on garantit le client, l'inscription au
-// registre du contracté (ClosingEvent) et les factures (MRR : N mensualités ;
-// PONCTUEL : facture unique). 100 % idempotent — peut tourner à chaque chargement.
-export async function backfillSignatures(db: any): Promise<{ contracts: number; closings: number; clientsCreated: number; eventsCreated: number; invoices: number }> {
+// Rattrapage des signatures de la PLATEFORME (SignedContract) uniquement :
+// - inscrit chaque contrat signé au registre du contracté (ClosingEvent) ;
+// - avec `createInvoices`, crée aussi les mensualités (MRR : N ; PONCTUEL : 1).
+// Les autres sources (pipeline closing, prospection, clients récurrents cochés)
+// ne génèrent PAS de factures automatiquement — elles sont ajoutées à la main.
+// 100 % idempotent.
+export async function backfillSignatures(
+  db: any,
+  opts: { createInvoices?: boolean } = {},
+): Promise<{ contracts: number; clientsCreated: number; eventsCreated: number; invoices: number }> {
+  const createInvoices = opts.createInvoices ?? false
   let clientsCreated = 0, eventsCreated = 0, invoices = 0
 
-  // ── 1. Contrats signés via la plateforme (SignedContract) ───────────────────
   const contracts = await db.signedContract.findMany({
     where: { OR: [{ status: 'SIGNED' }, { signedAt: { not: null } }, { signeeName: { not: null } }] },
   }).catch(() => [])
@@ -34,20 +39,13 @@ export async function backfillSignatures(db: any): Promise<{ contracts: number; 
 
     const ev = await ensureClosingEvent({ clientId: client.id, clientName: c.clientName, leadId: c.leadId ?? null, missionType: c.missionType, amount, durationMonths, type: 'NEW', date: c.signedAt ?? c.createdAt })
     if (ev) eventsCreated++
-    const r = await materializeContract({ clientId: client.id, monthlyAmount: c.monthlyAmount ?? amount, totalAmount: c.totalAmount ?? amount, durationMonths, missionType: c.missionType }).catch(() => ({ invoices: [] as any[] }))
-    invoices += r.invoices.length
+
+    // Factures : uniquement pour la plateforme (mensualités contractées)
+    if (createInvoices) {
+      const r = await materializeContract({ clientId: client.id, monthlyAmount: c.monthlyAmount ?? amount, totalAmount: c.totalAmount ?? amount, durationMonths, missionType: c.missionType }).catch(() => ({ invoices: [] as any[] }))
+      invoices += r.invoices.length
+    }
   }
 
-  // ── 2. Closings du pipeline (ClosingEvent) restés sans facture ──────────────
-  const events = await db.closingEvent.findMany({ where: { clientId: { not: null }, amount: { gt: 0 } } }).catch(() => [])
-  for (const e of events) {
-    const r = await materializeContract({
-      clientId: e.clientId, monthlyAmount: e.amount, totalAmount: e.amount,
-      durationMonths: e.durationMonths ?? (e.missionType === 'PONCTUEL' ? 1 : 12),
-      missionType: e.missionType ?? 'MRR',
-    }).catch(() => ({ invoices: [] as any[] }))
-    invoices += r.invoices.length
-  }
-
-  return { contracts: contracts.length, closings: events.length, clientsCreated, eventsCreated, invoices }
+  return { contracts: contracts.length, clientsCreated, eventsCreated, invoices }
 }

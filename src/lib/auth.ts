@@ -42,6 +42,7 @@ const { auth: _auth, handlers, signIn, signOut } = NextAuth({
           name: user.name,
           email: user.email,
           role: user.role,
+          roles: (user as any).roles ?? [],
           avatar: user.avatar,
         }
       },
@@ -52,6 +53,7 @@ const { auth: _auth, handlers, signIn, signOut } = NextAuth({
       if (user) {
         token.id = user.id ?? ''
         token.role = (user as any).role
+        token.roles = (user as any).roles ?? []
         // Avatar NOT stored in JWT — base64 images make the token too large,
         // causing NextAuth to chunk it across multiple cookies (.0, .1, ...),
         // which breaks getToken() in the middleware. Fetched from DB in layout instead.
@@ -62,6 +64,7 @@ const { auth: _auth, handlers, signIn, signOut } = NextAuth({
       if (token && session.user) {
         session.user.id = token.id as string
         session.user.role = token.role as UserRole
+        session.user.roles = (token.roles as string[]) ?? []
         session.user.avatar = null
       }
       return session

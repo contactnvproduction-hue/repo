@@ -43,7 +43,7 @@ export default async function ClosingPage() {
   }))
   const pipelineStatuses = statuses.map(s => ({ id: s.id, name: s.name, color: s.color, isClosed: s.isClosed, order: s.order }))
   const pipelineClients = await prisma.client.findMany({ where: { status: { not: 'ARCHIVÉ' } }, select: { id: true, name: true, company: true }, orderBy: { name: 'asc' } })
-  const commercials = (await prisma.user.findMany({ where: { role: 'COMMERCIAL' }, select: { id: true, name: true }, orderBy: { name: 'asc' } }).catch(() => []))
+  const commercials = (await prisma.user.findMany({ where: { OR: [{ role: 'COMMERCIAL' }, { roles: { has: 'COMMERCIAL' } }] } as any, select: { id: true, name: true }, orderBy: { name: 'asc' } }).catch(() => []))
     .map(u => ({ id: u.id, name: u.name }))
 
   const nowDate = new Date()

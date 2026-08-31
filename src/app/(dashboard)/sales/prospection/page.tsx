@@ -41,7 +41,7 @@ export default async function ProspectionPage() {
       include: { status: true, prospectStatus: true, prospectNotes: { orderBy: { createdAt: 'desc' } }, calls: { select: { id: true, date: true, showedUp: true, qualified: true, notes: true, round: true }, orderBy: { date: 'asc' } } },
       orderBy: { createdAt: 'desc' },
     }).catch(() => []),
-    prisma.user.findMany({ select: { id: true, name: true, avatar: true, role: true }, orderBy: { name: 'asc' } }),
+    prisma.user.findMany({ select: { id: true, name: true, avatar: true, role: true, roles: true }, orderBy: { name: 'asc' } }),
   ])
   const settings = await prisma.agencySetting.findFirst()
 
@@ -67,8 +67,9 @@ export default async function ProspectionPage() {
     createdAt: new Date(l.createdAt).toISOString(),
   }))
 
-  const commercials = users.filter(u => u.role === 'COMMERCIAL').map(u => ({ id: u.id, name: u.name, avatar: u.avatar }))
-  const admins = users.filter(u => ['ADMIN', 'MANAGER'].includes(u.role)).map(u => ({ id: u.id, name: u.name }))
+  const roleSet = (u: any) => [u.role, ...((u.roles as string[]) ?? [])]
+  const commercials = users.filter((u: any) => roleSet(u).includes('COMMERCIAL')).map(u => ({ id: u.id, name: u.name, avatar: u.avatar }))
+  const admins = users.filter((u: any) => roleSet(u).some((r: string) => ['ADMIN', 'MANAGER'].includes(r))).map(u => ({ id: u.id, name: u.name }))
 
   return (
     <div className="animate-fade-in">
