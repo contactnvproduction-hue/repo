@@ -5,7 +5,7 @@ import { prisma } from './db'
 import { UserRole } from '@prisma/client'
 
 const DEV_SESSION = process.env.DEV_MOCK_DB === 'true' ? {
-  user: { id: 'dev', name: 'Noah Rapharin', email: 'admin@newvision.fr', role: 'ADMIN' as UserRole, avatar: null },
+  user: { id: 'dev', name: 'Noah Rapharin', email: 'admin@newvision.fr', role: 'ADMIN' as UserRole, roles: ['COMMERCIAL'] as string[], avatar: null },
   expires: '2099-01-01',
 } : null
 
@@ -57,6 +57,29 @@ const { auth: _auth, handlers, signIn, signOut } = NextAuth({
         // Avatar NOT stored in JWT — base64 images make the token too large,
         // causing NextAuth to chunk it across multiple cookies (.0, .1, ...),
         // which breaks getToken() in the middleware. Fetched from DB in layout instead.
+      }
+      // Rafraîchit le rôle depuis la base à chaque requête → un changement de rôle
+      // (ou le rattrapage Noah) est pris en compte immédiatement, sans reconnexion.
+      if (token.id) {
+        try {
+          const db: any = await prisma.user.findUnique({
+            where: { id: token.id as string },
+            select: { email: true, name: true, role: true, roles: true } as any,
+          })
+          if (db) {
+            let role: string = db.role
+            let roles: string[] = Array.isArray(db.roles) ? db.roles : []
+            // Noah Rapharin : toujours ADMIN (principal) + COMMERCIAL (additionnel)
+            const isNoah = db.email === 'nrapharin@gmail.com' || /rapharin/i.test(db.name || '')
+            if (isNoah && (role !== 'ADMIN' || !roles.includes('COMMERCIAL'))) {
+              roles = Array.from(new Set([...roles, ...(role !== 'ADMIN' && role !== 'COMMERCIAL' ? [role] : []), 'COMMERCIAL'])).filter(r => r !== 'ADMIN')
+              await prisma.user.update({ where: { id: token.id as string }, data: { role: 'ADMIN', roles } as any }).catch(() => {})
+              role = 'ADMIN'
+            }
+            token.role = role as UserRole
+            token.roles = roles
+          }
+        } catch { /* base indisponible : on garde le token existant */ }
       }
       return token
     },
