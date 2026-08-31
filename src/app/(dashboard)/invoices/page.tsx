@@ -7,7 +7,7 @@ import Link from 'next/link'
 import { Receipt, Plus, AlertTriangle, Clock, CheckCircle2 } from 'lucide-react'
 import { InvoicePdfButton } from '@/components/billing/InvoicePdfButton'
 import { InvoiceRowDelete } from '@/components/billing/InvoiceRowDelete'
-import { backfillSignatures } from '@/lib/backfill-signatures'
+import { PlatformSyncButton } from '@/components/billing/PlatformSyncButton'
 
 const statusBadge: Record<string, 'success' | 'warning' | 'danger' | 'info' | 'muted'> = {
   PAYÉE: 'success', EN_ATTENTE: 'warning', EN_RETARD: 'danger',
@@ -22,9 +22,9 @@ export default async function InvoicesPage() {
   const session = await auth()
   if (!session?.user) return null
 
-  // Seules les mensualités contractées via la PLATEFORME sont créées automatiquement.
-  // Les clients récurrents cochés : factures ajoutées à la main (plus d'auto-génération).
-  await backfillSignatures(prisma as any, { createInvoices: true }).catch(() => {})
+  // Aucune génération automatique ici : les factures sont créées uniquement à la
+  // signature d'un contrat via la plateforme, ou à la main. Un bouton « Synchroniser »
+  // permet un rattrapage manuel ponctuel des contrats plateforme (voir en-tête).
 
   const invoices = await prisma.invoice.findMany({
     include: {
@@ -72,11 +72,14 @@ export default async function InvoicesPage() {
             )}
           </div>
         </div>
-        <Link href="/invoices/new"
-          className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white text-sm font-medium rounded-lg transition-colors">
-          <Plus size={16} />
-          Nouvelle facture
-        </Link>
+        <div className="flex items-center gap-2">
+          <PlatformSyncButton />
+          <Link href="/invoices/new"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white text-sm font-medium rounded-lg transition-colors">
+            <Plus size={16} />
+            Nouvelle facture
+          </Link>
+        </div>
       </div>
 
       <Card>

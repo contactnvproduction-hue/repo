@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { Plus, Trash2, TrendingUp, Calendar, Clock, Repeat } from 'lucide-react'
+import { Plus, Trash2, TrendingUp, Calendar, Clock } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 interface Retainer {
@@ -17,9 +17,6 @@ interface Retainer {
 interface Props {
   clientId: string
   initialRetainers: Retainer[]
-  initialMensualise?: boolean
-  initialMensualiteAmount?: number | null
-  initialMensualiteFrequency?: string
   initialVatExempt?: boolean
 }
 
@@ -36,7 +33,7 @@ function isActive(r: Retainer): boolean {
   return now >= start && now < end
 }
 
-export function ClientRetainerManager({ clientId, initialRetainers, initialMensualise = false, initialMensualiteAmount = null, initialMensualiteFrequency = 'MENSUEL', initialVatExempt = false }: Props) {
+export function ClientRetainerManager({ clientId, initialRetainers, initialVatExempt = false }: Props) {
   const [retainers, setRetainers] = useState<Retainer[]>(initialRetainers)
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -68,34 +65,6 @@ export function ClientRetainerManager({ clientId, initialRetainers, initialMensu
       setVatExempt(!next)
     } finally {
       setSavingVat(false)
-    }
-  }
-
-  // Mensualisation sans engagement : prévoit les paiements dans le prévisionnel Sales
-  const [mensualise, setMensualise] = useState(initialMensualise)
-  const [mensualiteAmount, setMensualiteAmount] = useState(initialMensualiteAmount != null ? String(initialMensualiteAmount) : '')
-  const [frequency, setFrequency] = useState(initialMensualiteFrequency === 'TRIMESTRIEL' ? 'TRIMESTRIEL' : 'MENSUEL')
-  const [savingMensualise, setSavingMensualise] = useState(false)
-
-  const saveMensualisation = async (nextMensualise: boolean, amountStr: string, freq: string = frequency) => {
-    setSavingMensualise(true)
-    try {
-      const res = await fetch(`/api/clients/${clientId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mensualise: nextMensualise,
-          mensualiteAmount: amountStr ? parseFloat(amountStr) : null,
-          mensualiteFrequency: freq,
-        }),
-      })
-      if (!res.ok) throw new Error()
-      toast.success(nextMensualise ? 'Mensualisation activée — visible dans le prévisionnel Sales' : 'Mensualisation désactivée')
-    } catch {
-      toast.error('Erreur de sauvegarde')
-      setMensualise(!nextMensualise)
-    } finally {
-      setSavingMensualise(false)
     }
   }
 
@@ -141,60 +110,6 @@ export function ClientRetainerManager({ clientId, initialRetainers, initialMensu
           </div>
           <p className="text-lg font-bold text-emerald-400">{formatCurrency(totalLTV)}</p>
         </div>
-      </div>
-
-      {/* Mensualisation sans engagement — alternative légère au retainer */}
-      <div className={`rounded-xl border p-3 transition-colors ${mensualise ? 'border-primary/30 bg-primary/5' : 'border-nv-border bg-nv-bg'}`}>
-        <div className="flex items-center gap-3 flex-wrap">
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={mensualise}
-              disabled={savingMensualise}
-              onChange={e => {
-                setMensualise(e.target.checked)
-                saveMensualisation(e.target.checked, mensualiteAmount)
-              }}
-              className="w-4 h-4 accent-[#e8b84b]"
-            />
-            <span className="text-sm font-medium text-white flex items-center gap-1.5">
-              <Repeat size={13} className="text-primary" />
-              Mensualiser
-            </span>
-          </label>
-          {mensualise && (
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="flex items-center gap-1.5">
-                <input
-                  type="number"
-                  placeholder="Montant"
-                  value={mensualiteAmount}
-                  onChange={e => setMensualiteAmount(e.target.value)}
-                  onBlur={() => saveMensualisation(mensualise, mensualiteAmount)}
-                  className="w-24 bg-nv-black border border-nv-border rounded-lg px-3 py-1.5 text-sm text-white text-right focus:outline-none focus:border-primary/60"
-                />
-                <span className="text-xs text-nv-text-muted">€/{frequency === 'TRIMESTRIEL' ? 'trim.' : 'mois'}</span>
-              </div>
-              {/* Fréquence */}
-              <div className="flex gap-0.5 bg-nv-black border border-nv-border rounded-lg p-0.5">
-                {(['MENSUEL', 'TRIMESTRIEL'] as const).map(f => (
-                  <button
-                    key={f}
-                    type="button"
-                    disabled={savingMensualise}
-                    onClick={() => { setFrequency(f); saveMensualisation(mensualise, mensualiteAmount, f) }}
-                    className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${frequency === f ? 'bg-primary text-nv-black' : 'text-nv-text-muted hover:text-white'}`}
-                  >
-                    {f === 'MENSUEL' ? 'Mensuel' : 'Trimestriel'}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-        <p className="text-[11px] text-nv-text-faint mt-1.5">
-          Sans engagement : prévoit les prochains paiements du client dans le prévisionnel Sales ({frequency === 'TRIMESTRIEL' ? 'tous les trimestres' : 'tous les mois'}), tant que la case est cochée. Indépendant des contrats signés — les retainers priment sur les mois qu&apos;ils couvrent (pas de double comptage).
-        </p>
       </div>
 
       {/* Exonération TVA — client étranger (art. 259-1 CGI) */}
